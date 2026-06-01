@@ -1,0 +1,20 @@
+[DEBUG CategoriasPage RENDER] dataLoading: false dataError: null categorias.length: 2
+CategoriasPage.tsx:453 [DEBUG CategoriasPage RENDER] dataLoading: false dataError: null categorias.length: 2
+ServiciosPage.tsx:296 [DEBUG ServiciosPage EFFECT] authLoading: true salonId: null user: undefined
+ServiciosPage.tsx:296 [DEBUG ServiciosPage EFFECT] authLoading: true salonId: null user: undefined
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: true dataError: null hasData: false servicios.length: 0 categorias.length: 0 sinCategoria: 0
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: true dataError: null hasData: false servicios.length: 0 categorias.length: 0 sinCategoria: 0
+ServiciosPage.tsx:296 [DEBUG ServiciosPage EFFECT] authLoading: false salonId: 1 user: duena@test.com
+ServiciosPage.tsx:298 [DEBUG ServiciosPage] Calling fetchData
+ServiciosPage.tsx:268 [DEBUG ServiciosPage] fetchData START, salonId: 1
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: true dataError: null hasData: false servicios.length: 0 categorias.length: 0 sinCategoria: 0
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: true dataError: null hasData: false servicios.length: 0 categorias.length: 0 sinCategoria: 0
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: true dataError: null hasData: false servicios.length: 0 categorias.length: 0 sinCategoria: 0
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: true dataError: null hasData: false servicios.length: 0 categorias.length: 0 sinCategoria: 0
+ServiciosPage.tsx:276 [DEBUG ServiciosPage] svcRes: 200 object true
+ServiciosPage.tsx:277 [DEBUG ServiciosPage] catRes: 200 object true
+ServiciosPage.tsx:280 [DEBUG ServiciosPage] svcData.length: 4 catData.length: 2
+ServiciosPage.tsx:281 [DEBUG ServiciosPage] svcData: (4) [{…}, {…}, {…}, {…}]
+ServiciosPage.tsx:290 [DEBUG ServiciosPage] fetchData DONE, dataLoading -> false
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: false dataError: null hasData: true servicios.length: 4 categorias.length: 2 sinCategoria: 0
+ServiciosPage.tsx:505 [DEBUG ServiciosPage RENDER] dataLoading: false dataError: null hasData: true servicios.length: 4 categorias.length: 2 sinCategoria: 0

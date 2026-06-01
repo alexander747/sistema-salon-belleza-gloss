@@ -1,0 +1,152 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  line-height: 1.25rem;
+  cursor: pointer;
+  transition: all 200ms var(--ease-out);
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Primary — gold gradient */
+.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: var(--bg-root);
+  box-shadow: var(--shadow-sm), 0 0 0 0 var(--accent-glow);
+}
+
+.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
+  box-shadow: var(--shadow-md), 0 0 20px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Secondary — glass style */
+.secondary {
+  background: linear-gradient(135deg, rgba(30, 30, 40, 0.6), rgba(22, 22, 30, 0.8));
+  backdrop-filter: blur(12px);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.secondary:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(40, 40, 54, 0.7), rgba(30, 30, 40, 0.9));
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--border-glow);
+}
+
+/* Danger — warm red gradient */
+.danger {
+  background: linear-gradient(135deg, var(--danger), var(--danger-dark));
+  color: var(--bg-root);
+  box-shadow: var(--shadow-sm);
+}
+
+.danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--danger-light), var(--danger));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Ghost — transparent */
+.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid transparent;
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--accent-subtle);
+  border-color: var(--border-glow);
+}
+
+/* Sizes */
+.sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+.md {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+}
+
+.lg {
+  padding: 0.75rem 1.75rem;
+  font-size: 1rem;
+}
+
+/* Loading state */
+.loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinnerDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.spinnerDot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.spinnerDot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.7);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.spinnerDot + .spinnerDot {
+  margin-left: 4px;
+}
+
+/* Focus */
+.button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-root), 0 0 0 3px var(--accent);
+}
+
+.primary:focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-root), 0 0 0 3px var(--accent-dark);
+}

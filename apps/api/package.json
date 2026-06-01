@@ -1,0 +1,45 @@
+{
+  "name": "@pos-final/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "typeorm": "typeorm-ts-node-commonjs"
+  },
+  "dependencies": {
+    "@pos-final/types": "*",
+    "@pos-final/validation": "*",
+    "@swc/core": "^1.15.40",
+    "bcrypt": "^5.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.0",
+    "mysql2": "^3.9.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "reflect-metadata": "^0.2.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.22.3",
+    "tsyringe": "^4.8.0",
+    "typeorm": "^0.3.20",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

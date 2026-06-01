@@ -1,0 +1,16 @@
+# SDD State — crud-personas
+# Updated: 2026-05-29
+
+phase: explore
+completed:
+  - explore
+pending:
+  - proposal
+  - spec
+  - design
+  - tasks
+  - apply
+  - verify
+  - archive
+artifacts:
+  explore: openspec/changes/crud-personas/exploration.md

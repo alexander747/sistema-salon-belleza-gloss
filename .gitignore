@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+n8n_data/
+mysql_data/
+.DS_Store
+*.tsbuildinfo
+.playwright-mcp/
+.tmp/
