@@ -46,7 +46,10 @@ export class NominaPendienteUseCase {
         (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada,
       );
 
-      if (pendingRegistros.length === 0) continue;
+      if (pendingRegistros.length === 0) {
+        // Employee has no pending work registros — do not appear in pending list
+        continue;
+      }
 
       const totalComisionesPendientes = pendingRegistros.reduce(
         (sum, r) => sum + Number(r.comisionCalculada),

@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Layout, Skeleton, Button } from '@pos-final/ui';
+import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
-import type { SidebarItem } from '@pos-final/ui';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 
@@ -35,17 +34,7 @@ interface Producto {
 
 /* ── Constants ── */
 
-const sidebarItems: SidebarItem[] = [
-  { label: 'Inicio', href: '/', icon: '🏠' },
-  { label: 'Citas', href: '/agenda', icon: '📅' },
-  { label: 'Empleadas', href: '/empleadas', icon: '👩‍💼' },
-  { label: 'Servicios', href: '/servicios', icon: '💅' },
-  { label: 'Productos', href: '/productos', icon: '🧴' },
-  { label: 'Categorías', href: '/categorias', icon: '📂' },
-  { label: 'Clientes', href: '/clientes', icon: '👤' },
-  { label: 'Ventas', href: '/ventas', icon: '🛒' },
-  { label: 'Finanzas', href: '/finanzas', icon: '💰' },
-];
+
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -152,7 +141,7 @@ const modalOverlayStyle: React.CSSProperties = {
 };
 
 const modalContentStyle: React.CSSProperties = {
-  background: 'linear-gradient(150deg, rgba(22,22,30,0.97), rgba(14,14,20,0.97))',
+  background: 'var(--bg-surface)',
   backdropFilter: 'blur(24px) saturate(180%)',
   WebkitBackdropFilter: 'blur(24px) saturate(180%)',
   border: '1px solid var(--border)',
@@ -407,13 +396,6 @@ const ProductosPage: React.FC = () => {
     }
   };
 
-  /* ── Logout ── */
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    navigate('/login');
-  };
-
   /* ── Animation variants ── */
   const itemVariants = {
     hidden: { opacity: 0, y: 16 },
@@ -430,24 +412,15 @@ const ProductosPage: React.FC = () => {
 
   if (authLoading) {
     return (
-      <Layout sidebarItems={sidebarItems} onLogout={handleLogout} title="Productos">
+      <>
         <Skeleton height="36px" width="220px" variant="rect" style={{ marginBottom: '1.5rem' }} />
         <Skeleton height="300px" variant="rect" />
-      </Layout>
+      </>
     );
   }
 
-  /* ================================================================ */
-  /*  RENDER: Content                                                   */
-  /* ================================================================ */
-
   return (
-    <Layout
-      sidebarItems={sidebarItems}
-      onLogout={handleLogout}
-      title="Productos"
-      userName={user?.nombre}
-    >
+    <>
       <AnimatePresence mode="wait">
         <motion.div
           key="productos-content"
@@ -1249,7 +1222,7 @@ const ProductosPage: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </Layout>
+    </>
   );
 };
 

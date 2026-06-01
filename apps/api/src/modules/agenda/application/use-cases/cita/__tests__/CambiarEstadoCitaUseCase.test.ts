@@ -43,21 +43,21 @@ describe('CambiarEstadoCitaUseCase', () => {
 
   describe('valid transitions', () => {
     it.each([
-      [EstadoCita.PENDIENTE, EstadoCita.CONFIRMADA],
-      [EstadoCita.PENDIENTE, EstadoCita.CANCELADA],
-      [EstadoCita.CONFIRMADA, EstadoCita.COMPLETADA],
-      [EstadoCita.CONFIRMADA, EstadoCita.NO_LLEGO],
-      [EstadoCita.CONFIRMADA, EstadoCita.CANCELADA],
-    ])('should allow %s → %s', async (actual, nuevo) => {
+      [EstadoCita.PENDIENTE, EstadoCita.CONFIRMADA, { confirmadoPorId: 1 }],
+      [EstadoCita.PENDIENTE, EstadoCita.CANCELADA, { canceladoPorId: 1 }],
+      [EstadoCita.CONFIRMADA, EstadoCita.COMPLETADA, {}],
+      [EstadoCita.CONFIRMADA, EstadoCita.NO_LLEGO, {}],
+      [EstadoCita.CONFIRMADA, EstadoCita.CANCELADA, { canceladoPorId: 1 }],
+    ])('should allow %s → %s', async (actual, nuevo, extraData) => {
       const mocks = createMocks();
       mocks.citaRepo.findById.mockResolvedValue(makeMockCita(actual));
       mocks.citaRepo.cambiarEstado.mockResolvedValue(makeMockCita(nuevo));
 
       const useCase = new CambiarEstadoCitaUseCase(mocks.citaRepo as any);
 
-      const result = await useCase.execute({ id: 1, estado: nuevo });
+      const result = await useCase.execute({ id: 1, estado: nuevo, usuarioId: 1 });
 
-      expect(mocks.citaRepo.cambiarEstado).toHaveBeenCalledWith(1, nuevo);
+      expect(mocks.citaRepo.cambiarEstado).toHaveBeenCalledWith(1, nuevo, extraData);
       expect(result.estado).toBe(nuevo);
     });
   });

@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Layout, Button, Skeleton } from '@pos-final/ui';
+import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
-import type { SidebarItem } from '@pos-final/ui';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import styles from './EmpleadasPage.module.css';
@@ -43,17 +42,7 @@ interface EmpleadaForm {
 
 /* ── Constants ── */
 
-const sidebarItems: SidebarItem[] = [
-  { label: 'Inicio', href: '/', icon: '🏠' },
-  { label: 'Citas', href: '/agenda', icon: '📅' },
-  { label: 'Empleadas', href: '/empleadas', icon: '👩‍💼' },
-  { label: 'Servicios', href: '/servicios', icon: '💅' },
-  { label: 'Productos', href: '/productos', icon: '🧴' },
-  { label: 'Categorías', href: '/categorias', icon: '📂' },
-  { label: 'Clientes', href: '/clientes', icon: '👤' },
-  { label: 'Ventas', href: '/ventas', icon: '🛒' },
-  { label: 'Finanzas', href: '/finanzas', icon: '💰' },
-];
+
 
 const ROL_OPTIONS = [
   { value: '', label: 'Seleccionar rol...' },
@@ -315,13 +304,6 @@ const EmpleadasPage: React.FC = () => {
     }
   };
 
-  /* ── Logout ── */
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    navigate('/login');
-  };
-
   /* ── Animation variants ── */
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -359,11 +341,7 @@ const EmpleadasPage: React.FC = () => {
 
   if (authLoading) {
     return (
-      <Layout
-        sidebarItems={sidebarItems}
-        onLogout={handleLogout}
-        title="Empleadas"
-      >
+      <>
         <Skeleton
           height="36px"
           width="220px"
@@ -371,17 +349,12 @@ const EmpleadasPage: React.FC = () => {
           style={{ marginBottom: '1.5rem' }}
         />
         <Skeleton height="300px" variant="rect" />
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout
-      sidebarItems={sidebarItems}
-      onLogout={handleLogout}
-      title="Empleadas"
-      userName={user?.nombre}
-    >
+    <>
       <AnimatePresence mode="wait">
         <motion.div
           key="empleadas-content"
@@ -483,7 +456,7 @@ const EmpleadasPage: React.FC = () => {
           />
         )}
       </AnimatePresence>
-    </Layout>
+    </>
   );
 };
 

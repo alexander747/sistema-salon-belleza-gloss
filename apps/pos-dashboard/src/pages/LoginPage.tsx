@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Button, Input, Card } from '@pos-final/ui';
+import { Box, Paper, Typography, TextField, Button } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import api from '../services/api.js';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -38,20 +40,20 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
+    <Box
+      sx={{
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--bg-root)',
+        bgcolor: 'background.default',
         position: 'relative',
         overflow: 'hidden',
       }}
     >
       {/* Decorative gradient orbs */}
-      <div
-        style={{
+      <Box
+        sx={{
           position: 'absolute',
           top: '-20%',
           right: '-10%',
@@ -62,8 +64,8 @@ const LoginPage: React.FC = () => {
           pointerEvents: 'none',
         }}
       />
-      <div
-        style={{
+      <Box
+        sx={{
           position: 'absolute',
           bottom: '-20%',
           left: '-10%',
@@ -74,13 +76,13 @@ const LoginPage: React.FC = () => {
           pointerEvents: 'none',
         }}
       />
-      <div
-        style={{
+      <Box
+        sx={{
           position: 'absolute',
           inset: 0,
           backgroundImage: `
-            linear-gradient(rgba(212,168,83,0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(212,168,83,0.02) 1px, transparent 1px)
+            linear-gradient(rgba(212,168,83,0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(212,168,83,0.015) 1px, transparent 1px)
           `,
           backgroundSize: '60px 60px',
           pointerEvents: 'none',
@@ -92,59 +94,49 @@ const LoginPage: React.FC = () => {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4, ease: [0.22, 0.61, 0.36, 1] as const }}
       >
-        <Card
-          style={{
+        <Paper
+          elevation={8}
+          sx={{
             width: 400,
-            padding: 0,
             position: 'relative',
             zIndex: 1,
-            animation: 'none',
+            borderRadius: 3,
+            overflow: 'hidden',
           }}
         >
-          <Card.Body
-            style={{
-              padding: '2.5rem 2rem',
-              textAlign: 'center',
-            }}
-          >
+          <Box sx={{ p: '2.5rem 2rem', textAlign: 'center' }}>
             {/* Logo area */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h1
-                style={{
+            <Box sx={{ mb: '1.5rem' }}>
+              <Typography
+                sx={{
                   fontFamily: "'Playfair Display', serif",
                   fontSize: '2.5rem',
                   fontWeight: 700,
                   letterSpacing: '-0.02em',
-                  color: 'var(--text-primary)',
-                  margin: 0,
+                  color: 'text.primary',
                 }}
               >
-                <span style={{ color: 'var(--text-primary)' }}>POS</span>
-                <span style={{ color: 'var(--accent)' }}>·</span>Final
-              </h1>
-            </div>
+                POS<span style={{ color: theme.palette.primary.main }}>·</span>Final
+              </Typography>
+            </Box>
 
             {/* Decorative line */}
-            <div
-              style={{
+            <Box
+              sx={{
                 width: '40px',
                 height: '2px',
-                background: 'linear-gradient(90deg, var(--accent), transparent)',
+                background: `linear-gradient(90deg, ${theme.palette.primary.main}, transparent)`,
                 margin: '0 auto 0.75rem',
                 borderRadius: '1px',
               }}
             />
 
-            <p
-              style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.8125rem',
-                color: 'var(--text-secondary)',
-                marginBottom: '2rem',
-              }}
+            <Typography
+              variant="body2"
+              sx={{ color: 'text.secondary', mb: '2rem' }}
             >
               Acceso al dashboard del salón
-            </p>
+            </Typography>
 
             <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
               <motion.div
@@ -153,14 +145,16 @@ const LoginPage: React.FC = () => {
                 transition={{ delay: 0.1, duration: 0.3 }}
                 style={{ marginBottom: '1rem' }}
               >
-                <Input
+                <TextField
                   label="Email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   placeholder="tucorreo@salon.com"
-                  icon="✉"
+                  fullWidth
+                  variant="outlined"
+                  size="medium"
                 />
               </motion.div>
               <motion.div
@@ -169,14 +163,16 @@ const LoginPage: React.FC = () => {
                 transition={{ delay: 0.15, duration: 0.3 }}
                 style={{ marginBottom: '1.25rem' }}
               >
-                <Input
+                <TextField
                   label="Contraseña"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  icon="🔒"
+                  fullWidth
+                  variant="outlined"
+                  size="medium"
                 />
               </motion.div>
               {error && (
@@ -185,7 +181,7 @@ const LoginPage: React.FC = () => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ type: 'spring', stiffness: 200, damping: 12 }}
                   style={{
-                    color: 'var(--danger)',
+                    color: theme.palette.error.main,
                     marginBottom: '1rem',
                     fontSize: '0.8125rem',
                     textAlign: 'center',
@@ -199,15 +195,22 @@ const LoginPage: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.3 }}
               >
-                <Button type="submit" loading={loading} size="lg" style={{ width: '100%' }}>
-                  Ingresar
+                <Button
+                  type="submit"
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  disabled={loading}
+                  sx={{ py: 1.25 }}
+                >
+                  {loading ? 'Ingresando...' : 'Ingresar'}
                 </Button>
               </motion.div>
             </form>
-          </Card.Body>
-        </Card>
+          </Box>
+        </Paper>
       </motion.div>
-    </div>
+    </Box>
   );
 };
 

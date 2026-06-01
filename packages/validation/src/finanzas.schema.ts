@@ -31,6 +31,7 @@ export const createRegistroSchema = z.object({
   pagos: z.array(pagoTransaccionSchema).optional().default([]),
   divisiones: z.array(divisionRegistroSchema).optional().default([]),
   notas: z.string().max(500).optional(),
+  registradoPorId: z.number().int().optional(),
   productosVendidos: z.array(z.object({
     productoId: z.number().int().positive(),
     cantidad: z.number().int().positive(),

@@ -80,6 +80,7 @@ export class CreateRegistroUseCase {
           descripcionServicio: input.descripcionServicio,
           montoPendiente,
           notas: input.notas,
+          registradoPorId: input.registradoPorId,
         },
         queryRunner,
       );

@@ -7,6 +7,7 @@ import { NotFoundError } from '../../../../../shared/errors';
 
 export interface CancelCitaInput {
   id: number;
+  usuarioId?: number;
 }
 
 @injectable()
@@ -25,7 +26,9 @@ export class CancelCitaUseCase {
     cambiarEstado(cita, EstadoCita.CANCELADA);
 
     // Persist
-    const updated = await this.citaRepo.cambiarEstado(input.id, EstadoCita.CANCELADA);
+    const updated = await this.citaRepo.cambiarEstado(input.id, EstadoCita.CANCELADA, {
+      canceladoPorId: input.usuarioId,
+    });
     return CitaDTO.fromEntity(updated!);
   }
 }

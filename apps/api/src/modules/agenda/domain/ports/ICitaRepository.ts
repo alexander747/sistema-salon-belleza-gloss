@@ -6,5 +6,5 @@ export interface ICitaRepository {
   findActiveByUsuario(usuarioId: number, fecha: Date): Promise<CitaEntity[]>;
   create(data: Partial<CitaEntity>): Promise<CitaEntity>;
   update(id: number, data: Partial<CitaEntity>): Promise<CitaEntity | null>;
-  cambiarEstado(id: number, estado: EstadoCita): Promise<CitaEntity | null>;
+  cambiarEstado(id: number, estado: EstadoCita, extraData?: Partial<CitaEntity>): Promise<CitaEntity | null>;
 }

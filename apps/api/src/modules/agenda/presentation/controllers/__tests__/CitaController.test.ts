@@ -160,6 +160,7 @@ describe('CitaController', () => {
       const req = {
         params: { id: '1' },
         body: { estado: 'CONFIRMADA' },
+        user: { id: 1 },
       } as unknown as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
@@ -171,6 +172,7 @@ describe('CitaController', () => {
       expect(mockCambiarEstadoUseCase.execute).toHaveBeenCalledWith({
         id: 1,
         estado: 'CONFIRMADA',
+        usuarioId: 1,
       });
     });
   });
@@ -182,7 +184,7 @@ describe('CitaController', () => {
         estado: 'CANCELADA',
       });
 
-      const req = { params: { id: '1' } } as unknown as Request;
+      const req = { params: { id: '1' }, user: { id: 1 } } as unknown as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
       await controller.cancelar(req, res, next);
@@ -190,7 +192,7 @@ describe('CitaController', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ estado: 'CANCELADA' }),
       );
-      expect(mockCancelUseCase.execute).toHaveBeenCalledWith({ id: 1 });
+      expect(mockCancelUseCase.execute).toHaveBeenCalledWith({ id: 1, usuarioId: 1 });
     });
   });
 
@@ -201,7 +203,7 @@ describe('CitaController', () => {
         estado: 'COMPLETADA',
       });
 
-      const req = { params: { id: '1' } } as unknown as Request;
+      const req = { params: { id: '1' }, user: { id: 1 } } as unknown as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
       await controller.completar(req, res, next);
@@ -209,7 +211,7 @@ describe('CitaController', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ estado: 'COMPLETADA' }),
       );
-      expect(mockCompletarUseCase.execute).toHaveBeenCalledWith({ id: 1 });
+      expect(mockCompletarUseCase.execute).toHaveBeenCalledWith({ id: 1, usuarioId: 1 });
     });
   });
 });

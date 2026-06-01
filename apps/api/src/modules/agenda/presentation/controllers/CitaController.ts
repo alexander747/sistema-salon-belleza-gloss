@@ -67,6 +67,7 @@ export class CitaController {
       const result = await this.cambiarEstadoUseCase.execute({
         id: Number(req.params.id),
         estado: req.body.estado,
+        usuarioId: req.user?.id,
       });
       res.json(result);
     } catch (error) {
@@ -78,6 +79,7 @@ export class CitaController {
     try {
       const result = await this.cancelUseCase.execute({
         id: Number(req.params.id),
+        usuarioId: req.user?.id,
       });
       res.json(result);
     } catch (error) {
@@ -89,6 +91,7 @@ export class CitaController {
     try {
       const result = await this.completarUseCase.execute({
         id: Number(req.params.id),
+        usuarioId: req.user?.id,
       });
       res.json(result);
     } catch (error) {

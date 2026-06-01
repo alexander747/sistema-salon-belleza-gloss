@@ -58,8 +58,8 @@ export class TypeORMCitaRepository implements ICitaRepository {
     return this.findById(id);
   }
 
-  async cambiarEstado(id: number, estado: EstadoCita): Promise<CitaEntity | null> {
-    await this.getRepo().update(id, { estado });
+  async cambiarEstado(id: number, estado: EstadoCita, extraData?: Partial<CitaEntity>): Promise<CitaEntity | null> {
+    await this.getRepo().update(id, { estado, ...extraData });
     return this.findById(id);
   }
 }

@@ -262,11 +262,7 @@
 }
 
 .modalContent {
-  background: linear-gradient(
-    150deg,
-    rgba(22, 22, 30, 0.97),
-    rgba(14, 14, 20, 0.97)
-  );
+  background: var(--bg-surface);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--border);

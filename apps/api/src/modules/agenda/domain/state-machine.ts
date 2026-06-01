@@ -6,7 +6,7 @@ import { EstadoCita } from '../../../infrastructure/persistence/entities/CitaEnt
  * Terminales: COMPLETADA, CANCELADA, NO_LLEGO — no permiten transiciones de salida.
  */
 export const ESTADO_TRANSICIONES_VALIDAS: Record<EstadoCita, EstadoCita[]> = {
-  [EstadoCita.PENDIENTE]: [EstadoCita.CONFIRMADA, EstadoCita.CANCELADA],
+  [EstadoCita.PENDIENTE]: [EstadoCita.CONFIRMADA, EstadoCita.COMPLETADA, EstadoCita.CANCELADA],
   [EstadoCita.CONFIRMADA]: [EstadoCita.COMPLETADA, EstadoCita.NO_LLEGO, EstadoCita.CANCELADA],
   [EstadoCita.COMPLETADA]: [],
   [EstadoCita.CANCELADA]: [],

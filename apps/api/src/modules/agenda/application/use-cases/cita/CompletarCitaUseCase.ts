@@ -7,6 +7,7 @@ import { NotFoundError } from '../../../../../shared/errors';
 
 export interface CompletarCitaInput {
   id: number;
+  usuarioId?: number;
 }
 
 @injectable()
@@ -25,7 +26,9 @@ export class CompletarCitaUseCase {
     cambiarEstado(cita, EstadoCita.COMPLETADA);
 
     // Persist
-    const updated = await this.citaRepo.cambiarEstado(input.id, EstadoCita.COMPLETADA);
+    const updated = await this.citaRepo.cambiarEstado(input.id, EstadoCita.COMPLETADA, {
+      completadoPorId: input.usuarioId,
+    });
     return CitaDTO.fromEntity(updated!);
   }
 }

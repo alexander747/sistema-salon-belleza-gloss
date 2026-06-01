@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Layout, Skeleton } from '@pos-final/ui';
+import { Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
-import type { SidebarItem } from '@pos-final/ui';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 
@@ -43,17 +42,7 @@ interface Empleada {
 
 /* ── Constants ── */
 
-const sidebarItems: SidebarItem[] = [
-  { label: 'Inicio', href: '/', icon: '🏠' },
-  { label: 'Citas', href: '/agenda', icon: '📅' },
-  { label: 'Empleadas', href: '/empleadas', icon: '👩‍💼' },
-  { label: 'Servicios', href: '/servicios', icon: '💅' },
-  { label: 'Productos', href: '/productos', icon: '🧴' },
-  { label: 'Categorías', href: '/categorias', icon: '📂' },
-  { label: 'Clientes', href: '/clientes', icon: '👤' },
-  { label: 'Ventas', href: '/ventas', icon: '🛒' },
-  { label: 'Finanzas', href: '/finanzas', icon: '💰' },
-];
+
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -341,14 +330,6 @@ const VentasPage: React.FC = () => {
     }
   };
 
-  /* ── Logout ── */
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('xSalonId');
-    navigate('/login');
-  };
-
   /* ── Animation variants ── */
   const cardVariants = {
     hidden: { opacity: 0, y: 16 },
@@ -365,24 +346,15 @@ const VentasPage: React.FC = () => {
 
   if (authLoading) {
     return (
-      <Layout sidebarItems={sidebarItems} onLogout={handleLogout} title="Ventas">
+      <>
         <Skeleton height="36px" width="220px" variant="rect" style={{ marginBottom: '1.5rem' }} />
         <Skeleton height="300px" variant="rect" />
-      </Layout>
+      </>
     );
   }
 
-  /* ================================================================ */
-  /*  RENDER: Content                                                   */
-  /* ================================================================ */
-
   return (
-    <Layout
-      sidebarItems={sidebarItems}
-      onLogout={handleLogout}
-      title="Ventas"
-      userName={user?.nombre}
-    >
+    <>
       <AnimatePresence mode="wait">
         <motion.div
           key="ventas-content"
@@ -1189,7 +1161,7 @@ const VentasPage: React.FC = () => {
           </div>
         </motion.div>
       </AnimatePresence>
-    </Layout>
+    </>
   );
 };
 

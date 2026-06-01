@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Layout, Button, Skeleton } from '@pos-final/ui';
+import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
-import type { SidebarItem } from '@pos-final/ui';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import styles from './FinanzasPage.module.css';
@@ -85,20 +84,26 @@ interface Devolucion {
 }
 
 interface NominaEmpleado {
-  empleadoId: number;
+  empleadaId: number;
   nombre: string;
-  serviciosRealizados: number;
-  comisionPendiente: number;
-  total: number;
+  totalComisionesPendientes: number;
+  totalPropinas: number;
+  bonoHorario: number;
+  sueldoFijo: number;
+  totalAPagar: number;
+  cantidadRegistros: number;
 }
 
 interface HistorialLiquidacion {
   id: number;
-  empleadoId: number;
-  empleadoNombre: string;
-  periodoInicio: string;
-  periodoFin: string;
-  monto: number;
+  usuarioId: number;
+  totalComisiones: number;
+  totalPropinas: number;
+  sueldoFijo: number;
+  bonoHorario: number;
+  totalPagado: number;
+  fechaDesde: string;
+  fechaHasta: string;
   creadoEn: string;
 }
 
@@ -117,17 +122,7 @@ type TabKey = 'registros' | 'gastos' | 'devoluciones' | 'nomina' | 'reportes';
 /*  CONSTANTS                                                        */
 /* ================================================================ */
 
-const sidebarItems: SidebarItem[] = [
-  { label: 'Inicio', href: '/', icon: '🏠' },
-  { label: 'Citas', href: '/agenda', icon: '📅' },
-  { label: 'Empleadas', href: '/empleadas', icon: '👩‍💼' },
-  { label: 'Servicios', href: '/servicios', icon: '💅' },
-  { label: 'Productos', href: '/productos', icon: '🧴' },
-  { label: 'Categorías', href: '/categorias', icon: '📂' },
-  { label: 'Clientes', href: '/clientes', icon: '👤' },
-  { label: 'Ventas', href: '/ventas', icon: '🛒' },
-  { label: 'Finanzas', href: '/finanzas', icon: '💰' },
-];
+
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'registros', label: '📋 Registros' },
@@ -162,7 +157,8 @@ const currencyFormatter = new Intl.NumberFormat('es-CO', {
   maximumFractionDigits: 0,
 });
 
-function formatCurrency(n: number): string {
+function formatCurrency(n: number | null | undefined): string {
+  if (n == null) return '$0';
   return currencyFormatter.format(n);
 }
 
@@ -270,28 +266,17 @@ const FinanzasPage: React.FC = () => {
       .finally(() => setAuthLoading(false));
   }, [navigate]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    navigate('/login');
-  };
-
   if (authLoading) {
     return (
-      <Layout sidebarItems={sidebarItems} onLogout={handleLogout} title="Finanzas">
+      <>
         <Skeleton height="36px" width="220px" variant="rect" style={{ marginBottom: '1.5rem' }} />
         <Skeleton height="300px" variant="rect" />
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout
-      sidebarItems={sidebarItems}
-      onLogout={handleLogout}
-      title="Finanzas"
-      userName={user?.nombre}
-    >
+    <>
       {/* SalonSwitcher for superadmin */}
       {user?.rol === Rol.SUPERADMIN && (
         <motion.div
@@ -335,7 +320,7 @@ const FinanzasPage: React.FC = () => {
           <ReportesTab key="reportes" salonId={salonId} />
         )}
       </AnimatePresence>
-    </Layout>
+    </>
   );
 };
 
@@ -1683,9 +1668,81 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [pendientes, setPendientes] = useState<NominaEmpleado[]>([]);
   const [historial, setHistorial] = useState<HistorialLiquidacion[]>([]);
+  const [empleadasMap, setEmpleadasMap] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+
+  // ── Sub-tab state ──
+  const [nominaSubtab, setNominaSubtab] = useState<'pendientes' | 'historial'>('pendientes');
+
+  // ── Historial filters (client-side) ──
+  const [historialDesde, setHistorialDesde] = useState('');
+  const [historialHasta, setHistorialHasta] = useState('');
+  const [historialEmpleadaId, setHistorialEmpleadaId] = useState('');
+  const [historialSearch, setHistorialSearch] = useState('');
+  const [historialPage, setHistorialPage] = useState(1);
+  const HISTORIAL_PAGE_SIZE = 10;
+
+  // ── Pre-liquidation audit modal ──
+  const [auditarOpen, setAuditarOpen] = useState(false);
+  const [selectedEmpleada, setSelectedEmpleada] = useState<NominaEmpleado | null>(null);
+
+  // ── Payment adjustment state ──
+  const [ajustarPago, setAjustarPago] = useState(false);
+  const [pagoAjustado, setPagoAjustado] = useState(0);
+  const [motivoAjuste, setMotivoAjuste] = useState('');
+
+  // ── Derived values ──
+  const totalComisiones = useMemo(
+    () => pendientes.reduce((sum, e) => sum + Number(e.totalComisionesPendientes ?? 0), 0),
+    [pendientes],
+  );
+  const totalProximoPago = useMemo(
+    () => pendientes.reduce((sum, e) => sum + Number(e.totalAPagar ?? 0), 0),
+    [pendientes],
+  );
+
+  const pendientesFiltrados = useMemo(
+    () => pendientes.filter((p) => p.totalAPagar > 0),
+    [pendientes],
+  );
+
+  // ── Filtered historial (client-side) ──
+  const filteredHistorial = useMemo(() => {
+    let result = [...historial];
+    if (historialEmpleadaId) {
+      result = result.filter((h) => h.usuarioId === Number(historialEmpleadaId));
+    }
+    if (historialDesde) {
+      result = result.filter((h) => h.creadoEn >= historialDesde);
+    }
+    if (historialHasta) {
+      result = result.filter((h) => h.creadoEn <= historialHasta + 'T23:59:59');
+    }
+    if (historialSearch.trim()) {
+      const q = historialSearch.trim().toLowerCase();
+      result = result.filter((h) => {
+        const name = empleadasMap.get(h.usuarioId) ?? '';
+        return name.toLowerCase().includes(q) || String(h.id).includes(q);
+      });
+    }
+    return result;
+  }, [historial, historialEmpleadaId, historialDesde, historialHasta, historialSearch, empleadasMap]);
+
+  const historialTotalPages = Math.max(1, Math.ceil(filteredHistorial.length / HISTORIAL_PAGE_SIZE));
+  const paginatedHistorial = useMemo(
+    () => filteredHistorial.slice(
+      (historialPage - 1) * HISTORIAL_PAGE_SIZE,
+      historialPage * HISTORIAL_PAGE_SIZE,
+    ),
+    [filteredHistorial, historialPage],
+  );
+
+  // Reset historial page to 1 when any filter changes
+  useEffect(() => {
+    setHistorialPage(1);
+  }, [historialDesde, historialHasta, historialEmpleadaId, historialSearch]);
 
   const fetchData = useCallback(async () => {
     if (salonId == null) return;
@@ -1695,6 +1752,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       const results = await Promise.allSettled([
         api.get(`/salones/${salonId}/finanzas/nomina`),
         api.get(`/salones/${salonId}/finanzas/nomina/historial`),
+        api.get(`/salones/${salonId}/empleadas`),
       ]);
       if (results[0].status === 'fulfilled') {
         const raw = results[0].value.data;
@@ -1708,6 +1766,14 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       } else {
         setHistorial([]);
       }
+      if (results[2]?.status === 'fulfilled') {
+        const emps = Array.isArray(results[2].value.data) ? results[2].value.data : [];
+        const map = new Map<number, string>();
+        for (const e of emps) {
+          map.set(e.id, e.nombre);
+        }
+        setEmpleadasMap(map);
+      }
     } catch {
       setError('Error al cargar datos de nómina');
     } finally {
@@ -1719,23 +1785,45 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     if (salonId) fetchData();
   }, [salonId, fetchData]);
 
-  const handleLiquidar = async (empleadoId: number) => {
+  const handleLiquidar = async (empleadaId: number, totalPagadoOverride?: number) => {
     if (!salonId) return;
-    setSubmittingId(empleadoId);
+    setSubmittingId(empleadaId);
     try {
       const today = new Date();
       const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      await api.post(`/salones/${salonId}/finanzas/nomina/liquidar`, {
-        empleadoId,
+      const body: Record<string, any> = {
+        usuarioId: empleadaId,
         periodoInicio: toISODate(firstDay),
         periodoFin: toISODate(today),
-      });
+      };
+      if (totalPagadoOverride != null) {
+        body.totalPagado = totalPagadoOverride;
+      }
+      await api.post(`/salones/${salonId}/finanzas/nomina/liquidar`, body);
       fetchData();
     } catch {
       // silent
     } finally {
       setSubmittingId(null);
     }
+  };
+
+  const handleAuditar = (emp: NominaEmpleado) => {
+    setSelectedEmpleada(emp);
+    setPagoAjustado(emp.totalAPagar);
+    setAjustarPago(false);
+    setMotivoAjuste('');
+    setAuditarOpen(true);
+  };
+
+  const handleConfirmLiquidar = async () => {
+    if (!selectedEmpleada) return;
+    const totalPagadoOverride = ajustarPago && motivoAjuste.length >= 10 ? pagoAjustado : undefined;
+    await handleLiquidar(selectedEmpleada.empleadaId, totalPagadoOverride);
+    setAuditarOpen(false);
+    setSelectedEmpleada(null);
+    setAjustarPago(false);
+    setMotivoAjuste('');
   };
 
   if (loading) {
@@ -1761,89 +1849,619 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   return (
     <motion.div key="nomina" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
-      {/* ── Pendientes ── */}
-      <h3 className={styles.sectionTitle}>Comisiones pendientes</h3>
-      {pendientes.length === 0 ? (
-        <div className={styles.emptyState}>
-          <span className={styles.emptyIcon}>✅</span>
-          <h3 className={styles.emptyTitle}>Todo al día</h3>
-          <p className={styles.emptySubtitle}>No hay comisiones pendientes por liquidar.</p>
-        </div>
-      ) : (
-        <>
-          {pendientes.map((emp) => (
-            <motion.div
-              key={emp.empleadoId}
-              className={styles.nominaCard}
-              variants={itemVariants}
-              initial="hidden"
-              animate="show"
-            >
-              <div className={styles.nominaInfo}>
-                <span className={styles.nominaName}>{emp.nombre}</span>
-                <span className={styles.nominaDetail}>
-                  {emp.serviciosRealizados} servicios realizados
-                </span>
-                <span className={styles.nominaDetail}>
-                  Comisión pendiente: <strong>{formatCurrency(emp.comisionPendiente)}</strong>
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-                <span className={styles.nominaAmount}>{formatCurrency(emp.total)}</span>
-                <motion.button
-                  style={{ ...primaryBtnStyle, padding: '0.35rem 0.85rem', fontSize: '0.75rem' }}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  disabled={submittingId === emp.empleadoId}
-                  onClick={() => handleLiquidar(emp.empleadoId)}
-                >
-                  {submittingId === emp.empleadoId ? 'Liquidando...' : 'Liquidar'}
-                </motion.button>
-              </div>
-            </motion.div>
-          ))}
-        </>
-      )}
+      {/* ── Sub-tab Navigation ── */}
+      <div style={{
+        display: 'flex',
+        gap: '0.25rem',
+        marginBottom: '1rem',
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        padding: '0.25rem',
+        width: 'fit-content',
+      }}>
+        <button
+          className={`${styles.tabBtn} ${nominaSubtab === 'pendientes' ? styles.tabActive : ''}`}
+          onClick={() => setNominaSubtab('pendientes')}
+        >
+          Pendientes{' '}
+          {pendientesFiltrados.length > 0 && (
+            <span style={{
+              marginLeft: '0.25rem',
+              background: 'var(--accent)',
+              color: 'var(--bg-root)',
+              borderRadius: '999px',
+              padding: '0.075rem 0.45rem',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+            }}>
+              {pendientesFiltrados.length}
+            </span>
+          )}
+        </button>
+        <button
+          className={`${styles.tabBtn} ${nominaSubtab === 'historial' ? styles.tabActive : ''}`}
+          onClick={() => setNominaSubtab('historial')}
+        >
+          Historial
+        </button>
+      </div>
 
-      {/* ── Historial ── */}
-      <h3 className={styles.sectionTitle}>Historial de liquidaciones</h3>
-      {historial.length === 0 ? (
-        <div className={styles.emptyState}>
-          <span className={styles.emptyIcon}>📜</span>
-          <p className={styles.emptySubtitle}>No hay liquidaciones registradas aún.</p>
-        </div>
-      ) : (
-        <div className={styles.tableWrapper}>
-          <table className={styles.historialTable}>
-            <thead>
-              <tr>
-                <th>Empleada</th>
-                <th>Período</th>
-                <th>Monto</th>
-                <th>Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {historial.map((h, idx) => (
-                <motion.tr
-                  key={h.id}
+      {nominaSubtab === 'pendientes' ? (
+        /* ════════════════════════════════════════════════ */
+        /*  PENDIENTES VIEW                                 */
+        /* ════════════════════════════════════════════════ */
+        <>
+          {/* ── Summary cards ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '0.75rem',
+            marginBottom: '1.25rem',
+          }}>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>👩‍💼 Pendientes</span>
+              <span className={styles.summaryValue}>
+                {pendientesFiltrados.length} {pendientesFiltrados.length === 1 ? 'empleada' : 'empleadas'}
+              </span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>💰 Total comisiones</span>
+              <span className={styles.summaryValueAccent}>{formatCurrency(totalComisiones)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>📅 Próximo pago estimado</span>
+              <span className={styles.summaryValueAccent}>{formatCurrency(totalProximoPago)}</span>
+            </div>
+          </div>
+
+          {/* ── Employee cards grid ── */}
+          {pendientesFiltrados.length === 0 ? (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyIcon}>✅</span>
+              <h3 className={styles.emptyTitle}>Todo al día</h3>
+              <p className={styles.emptySubtitle}>No hay comisiones pendientes por liquidar.</p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '1rem',
+            }}>
+              {pendientesFiltrados.map((emp) => (
+                <motion.div
+                  key={emp.empleadaId}
                   variants={itemVariants}
                   initial="hidden"
                   animate="show"
-                  transition={{ delay: idx * 0.03 }}
+                  whileHover={{ borderColor: 'var(--border-glow)', boxShadow: 'var(--shadow-glow)' }}
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1rem 1.25rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                  }}
                 >
-                  <td style={{ fontWeight: 500 }}>{h.empleadoNombre}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                    {formatDate(h.periodoInicio)} — {formatDate(h.periodoFin)}
-                  </td>
-                  <td style={{ fontWeight: 600, color: 'var(--accent)' }}>{formatCurrency(h.monto)}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(h.creadoEn)}</td>
-                </motion.tr>
+                  {/* Avatar + Name row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      background: 'var(--accent-subtle)',
+                      color: 'var(--accent)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '1rem',
+                      fontFamily: "'DM Sans', sans-serif",
+                      flexShrink: 0,
+                    }}>
+                      {emp.nombre.charAt(0)}
+                    </div>
+                    <div>
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                      }}>
+                        {emp.nombre}
+                      </div>
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                      }}>
+                        {emp.cantidadRegistros} servicios realizados
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Desglose */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif",
+                      color: 'var(--text-secondary)',
+                    }}>
+                      <span>Comisiones</span>
+                      <span style={{ fontWeight: 600 }}>{formatCurrency(emp.totalComisionesPendientes)}</span>
+                    </div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif",
+                      color: 'var(--text-secondary)',
+                    }}>
+                      <span>Propinas</span>
+                      <span style={{ fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(emp.totalPropinas)}</span>
+                    </div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif",
+                      color: 'var(--text-secondary)',
+                    }}>
+                      <span>Bono horario</span>
+                      <span style={{ fontWeight: 600 }}>{formatCurrency(emp.bonoHorario)}</span>
+                    </div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif",
+                      color: 'var(--text-secondary)',
+                    }}>
+                      <span>Sueldo fijo</span>
+                      <span style={{ fontWeight: 600 }}>{formatCurrency(emp.sueldoFijo)}</span>
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '0.15rem 0' }} />
+
+                  {/* Total + Action */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '0.6875rem',
+                        color: 'var(--text-dim)', textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                      }}>
+                        Total a pagar
+                      </div>
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '1.125rem',
+                        fontWeight: 700, color: 'var(--accent)',
+                      }}>
+                        {formatCurrency(emp.totalAPagar)}
+                      </div>
+                    </div>
+                    <motion.button
+                      style={{ ...primaryBtnStyle, padding: '0.4rem 0.85rem', fontSize: '0.75rem' }}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => handleAuditar(emp)}
+                    >
+                      Auditar y Liquidar
+                    </motion.button>
+                  </div>
+                </motion.div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+        </>
+      ) : (
+        /* ════════════════════════════════════════════════ */
+        /*  HISTORIAL VIEW                                  */
+        /* ════════════════════════════════════════════════ */
+        <>
+          {/* ── Filters ── */}
+          <div style={{
+            display: 'flex', gap: '0.75rem', alignItems: 'flex-end',
+            flexWrap: 'wrap', marginBottom: '1rem',
+          }}>
+            <label style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+              color: 'var(--text-secondary)', fontWeight: 500,
+            }}>
+              Desde:
+              <input
+                type="date"
+                className={styles.filterInput}
+                style={{ display: 'block', marginTop: '0.2rem' }}
+                value={historialDesde}
+                onChange={(e) => setHistorialDesde(e.target.value)}
+              />
+            </label>
+            <label style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+              color: 'var(--text-secondary)', fontWeight: 500,
+            }}>
+              Hasta:
+              <input
+                type="date"
+                className={styles.filterInput}
+                style={{ display: 'block', marginTop: '0.2rem' }}
+                value={historialHasta}
+                onChange={(e) => setHistorialHasta(e.target.value)}
+              />
+            </label>
+            <label style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+              color: 'var(--text-secondary)', fontWeight: 500,
+            }}>
+              Empleada:
+              <select
+                className={styles.filterInput}
+                style={{ display: 'block', marginTop: '0.2rem', minWidth: '140px' }}
+                value={historialEmpleadaId}
+                onChange={(e) => setHistorialEmpleadaId(e.target.value)}
+              >
+                <option value="">Todas</option>
+                {Array.from(empleadasMap.entries())
+                  .filter(([id]) => historial.some((h) => h.usuarioId === id))
+                  .map(([id, name]) => (
+                    <option key={id} value={id}>{name}</option>
+                  ))}
+              </select>
+            </label>
+            <label style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+              color: 'var(--text-secondary)', fontWeight: 500,
+            }}>
+              Buscar:
+              <input
+                type="text"
+                className={styles.filterInput}
+                style={{ display: 'block', marginTop: '0.2rem', minWidth: '160px' }}
+                value={historialSearch}
+                onChange={(e) => setHistorialSearch(e.target.value)}
+                placeholder="Nombre o ID..."
+              />
+            </label>
+          </div>
+
+          {/* ── Table with scroll ── */}
+          {filteredHistorial.length === 0 ? (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyIcon}>📜</span>
+              <h3 className={styles.emptyTitle}>Sin resultados</h3>
+              <p className={styles.emptySubtitle}>
+                {historial.length === 0
+                  ? 'No hay liquidaciones registradas aún.'
+                  : 'No se encontraron liquidaciones con esos filtros.'}
+              </p>
+            </div>
+          ) : (
+            <div style={{
+              maxHeight: '400px',
+              overflowY: 'auto',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              <div className={styles.tableWrapper} style={{ border: 'none' }}>
+                <table className={styles.historialTable}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                    <tr>
+                      <th>Empleada</th>
+                      <th>Período</th>
+                      <th>Comisiones</th>
+                      <th>Propinas</th>
+                      <th>Bono horario</th>
+                      <th>Sueldo fijo</th>
+                      <th>Total Pagado</th>
+                      <th>Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedHistorial.map((h, idx) => (
+                      <motion.tr
+                        key={h.id}
+                        variants={itemVariants}
+                        initial="hidden"
+                        animate="show"
+                        transition={{ delay: idx * 0.03 }}
+                      >
+                        <td style={{ fontWeight: 500 }}>
+                          {empleadasMap.get(h.usuarioId) ?? `Empleada #${h.usuarioId}`}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                          {formatDate(h.fechaDesde)} — {formatDate(h.fechaHasta)}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.totalComisiones)}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.totalPropinas)}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.bonoHorario)}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.sueldoFijo)}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--accent)' }}>{formatCurrency(h.totalPagado)}</td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(h.creadoEn)}</td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Pagination controls ── */}
+          {historialTotalPages > 1 && (
+            <div style={{
+              display: 'flex', justifyContent: 'center', gap: '0.5rem',
+              marginTop: '1rem', alignItems: 'center',
+            }}>
+              <button
+                disabled={historialPage <= 1}
+                onClick={() => setHistorialPage((p) => p - 1)}
+                style={{
+                  fontSize: '0.8125rem', padding: '0.35rem 0.85rem',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                  background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                  cursor: historialPage <= 1 ? 'not-allowed' : 'pointer',
+                  opacity: historialPage <= 1 ? 0.5 : 1,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                ← Anterior
+              </button>
+              <span style={{
+                fontSize: '0.8125rem', color: 'var(--text-secondary)',
+                fontFamily: "'DM Sans', sans-serif",
+              }}>
+                Página {historialPage} de {historialTotalPages} ({filteredHistorial.length} registros)
+              </span>
+              <button
+                disabled={historialPage >= historialTotalPages}
+                onClick={() => setHistorialPage((p) => p + 1)}
+                style={{
+                  fontSize: '0.8125rem', padding: '0.35rem 0.85rem',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                  background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                  cursor: historialPage >= historialTotalPages ? 'not-allowed' : 'pointer',
+                  opacity: historialPage >= historialTotalPages ? 0.5 : 1,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                Siguiente →
+              </button>
+            </div>
+          )}
+        </>
       )}
+
+      {/* ── Pre-liquidation Audit Modal ── */}
+      <AnimatePresence>
+        {auditarOpen && selectedEmpleada && (
+          <motion.div
+            className={styles.modalOverlay}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setAuditarOpen(false);
+                setSelectedEmpleada(null);
+              }
+            }}
+          >
+            <motion.div
+              className={styles.modalContent}
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={styles.modalHeader}>
+                <span className={styles.modalTitle}>Auditoría pre-liquidación</span>
+                <button
+                  className={styles.modalCloseBtn}
+                  onClick={() => {
+                    setAuditarOpen(false);
+                    setSelectedEmpleada(null);
+                  }}
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                {/* Employee avatar + name */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <div style={{
+                    width: '44px', height: '44px', borderRadius: '50%',
+                    background: 'var(--accent-subtle)', color: 'var(--accent)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: '1.125rem',
+                    fontFamily: "'DM Sans', sans-serif", flexShrink: 0,
+                  }}>
+                    {selectedEmpleada.nombre.charAt(0)}
+                  </div>
+                  <div>
+                    <div style={{
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '1rem',
+                      fontWeight: 600, color: 'var(--text-primary)',
+                    }}>
+                      {selectedEmpleada.nombre}
+                    </div>
+                    <div style={{
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                      color: 'var(--text-secondary)',
+                    }}>
+                      {selectedEmpleada.cantidadRegistros} servicios realizados
+                    </div>
+                  </div>
+                </div>
+
+                {/* Breakdown */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <div className={styles.infoRow} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span className={styles.infoLabel}>Comisiones</span>
+                    <span className={styles.infoValue} style={{ fontWeight: 600 }}>
+                      {formatCurrency(selectedEmpleada.totalComisionesPendientes)}
+                    </span>
+                  </div>
+                  <div className={styles.infoRow} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span className={styles.infoLabel}>Propinas</span>
+                    <span className={styles.infoValue} style={{ fontWeight: 600, color: 'var(--success)' }}>
+                      {formatCurrency(selectedEmpleada.totalPropinas)}
+                    </span>
+                  </div>
+                  <div className={styles.infoRow} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span className={styles.infoLabel}>Bono horario</span>
+                    <span className={styles.infoValue} style={{ fontWeight: 600 }}>
+                      {formatCurrency(selectedEmpleada.bonoHorario)}
+                    </span>
+                  </div>
+                  <div className={styles.infoRow} style={{ borderBottom: 'none' }}>
+                    <span className={styles.infoLabel}>Sueldo fijo</span>
+                    <span className={styles.infoValue} style={{ fontWeight: 600 }}>
+                      {formatCurrency(selectedEmpleada.sueldoFijo)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Total */}
+                <div style={{
+                  borderTop: '1px solid var(--border)', paddingTop: '0.75rem',
+                  marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}>
+                  <span style={{
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem',
+                    fontWeight: 700, color: 'var(--text-primary)',
+                  }}>
+                    Total a pagar
+                  </span>
+                  <span style={{
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '1.125rem',
+                    fontWeight: 700, color: 'var(--accent)',
+                  }}>
+                    {ajustarPago ? formatCurrency(pagoAjustado) : formatCurrency(selectedEmpleada.totalAPagar)}
+                  </span>
+                </div>
+
+                {/* ── Payment Adjustment toggle ── */}
+                <div style={{
+                  borderTop: '1px solid var(--border)',
+                  marginTop: '0.75rem',
+                  paddingTop: '0.75rem',
+                }}>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                    color: 'var(--text-secondary)', cursor: 'pointer',
+                    marginBottom: '0.5rem',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={ajustarPago}
+                      onChange={(e) => {
+                        setAjustarPago(e.target.checked);
+                        if (e.target.checked) {
+                          setPagoAjustado(selectedEmpleada.totalAPagar);
+                        }
+                      }}
+                    />
+                    Ajustar monto a pagar
+                  </label>
+                  {ajustarPago && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      transition={{ duration: 0.2 }}
+                      style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+                    >
+                      <div>
+                        <label style={{
+                          fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+                          color: 'var(--text-secondary)', fontWeight: 500,
+                          display: 'block', marginBottom: '0.2rem',
+                        }}>
+                          Nuevo monto a pagar
+                        </label>
+                        <input
+                          type="number"
+                          className={styles.formInput}
+                          value={pagoAjustado}
+                          onChange={(e) => setPagoAjustado(Number(e.target.value))}
+                          min="0"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{
+                          fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+                          color: 'var(--text-secondary)', fontWeight: 500,
+                          display: 'block', marginBottom: '0.2rem',
+                        }}>
+                          Motivo del ajuste <span style={{ color: 'var(--danger)' }}>*</span>
+                        </label>
+                        <textarea
+                          className={styles.formTextarea}
+                          value={motivoAjuste}
+                          onChange={(e) => setMotivoAjuste(e.target.value)}
+                          placeholder="Explicá el motivo del ajuste (mín. 10 caracteres)"
+                          rows={2}
+                          style={{ width: '100%' }}
+                        />
+                        {motivoAjuste.length > 0 && motivoAjuste.length < 10 && (
+                          <span style={{
+                            fontFamily: "'DM Sans', sans-serif", fontSize: '0.6875rem',
+                            color: 'var(--danger)',
+                          }}>
+                            Mínimo 10 caracteres ({motivoAjuste.length}/10)
+                          </span>
+                        )}
+                      </div>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                        padding: '0.5rem', background: 'var(--accent-subtle)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}>
+                        <span style={{ fontWeight: 600 }}>Total ajustado</span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
+                          {formatCurrency(pagoAjustado)}
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+
+              <div className={styles.modalFooter}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setAuditarOpen(false);
+                    setSelectedEmpleada(null);
+                    setAjustarPago(false);
+                    setMotivoAjuste('');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <motion.button
+                  style={primaryBtnStyle}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  disabled={submittingId === selectedEmpleada.empleadaId || (ajustarPago && motivoAjuste.length < 10)}
+                  onClick={handleConfirmLiquidar}
+                >
+                  {submittingId === selectedEmpleada.empleadaId
+                    ? 'Liquidando...'
+                    : 'Confirmar liquidación'}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

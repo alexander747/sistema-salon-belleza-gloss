@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Layout, Skeleton, Button } from '@pos-final/ui';
+import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
-import type { SidebarItem } from '@pos-final/ui';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import styles from './AgendaPage.module.css';
@@ -111,17 +110,7 @@ const STATUS_CFG: Record<
   },
 };
 
-const sidebarItems: SidebarItem[] = [
-  { label: 'Inicio', href: '/', icon: '🏠' },
-  { label: 'Citas', href: '/agenda', icon: '📅' },
-  { label: 'Empleadas', href: '/empleadas', icon: '👩‍💼' },
-  { label: 'Servicios', href: '/servicios', icon: '💅' },
-  { label: 'Productos', href: '/productos', icon: '🧴' },
-  { label: 'Categorías', href: '/categorias', icon: '📂' },
-  { label: 'Clientes', href: '/clientes', icon: '👤' },
-  { label: 'Ventas', href: '/ventas', icon: '🛒' },
-  { label: 'Finanzas', href: '/finanzas', icon: '💰' },
-];
+
 
 /* ── Helpers ── */
 
@@ -240,6 +229,20 @@ const AgendaPage: React.FC = () => {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelMotivo, setCancelMotivo] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  /* ── Completar modal state ── */
+  const [showCompletar, setShowCompletar] = useState(false);
+  const [completarForm, setCompletarForm] = useState({
+    serviciosPrecios: {} as Record<number, number>,
+    nuevosServiciosIds: [] as number[],
+    totalProductos: 0,
+    propina: 0,
+    metodoPago: 'EFECTIVO' as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA',
+    aplicarDescuento: false,
+    descuento: 0,
+    motivoDescuento: '',
+  });
+  const [completando, setCompletando] = useState(false);
 
   /* ── Derived ── */
 
@@ -483,19 +486,108 @@ const AgendaPage: React.FC = () => {
     }
   };
 
-  /* ── Completar (POST) ── */
-  const handleCompletar = async () => {
+  /* ── Completar (abrir modal) ── */
+  const handleAbrirCompletar = async () => {
+    if (!selectedCita) return;
+    const precios: Record<number, number> = {};
+    selectedCita.servicios.forEach(s => { precios[s.id] = s.precio; });
+    setCompletarForm({
+      serviciosPrecios: precios,
+      nuevosServiciosIds: [],
+      totalProductos: 0,
+      propina: 0,
+      metodoPago: 'EFECTIVO',
+      aplicarDescuento: false,
+      descuento: 0,
+      motivoDescuento: '',
+    });
+    setShowCompletar(true);
+  };
+
+  /* ── Confirmar completar (POST registro + completar cita) ── */
+  const handleConfirmarCompletar = async () => {
     if (!salonId || !selectedCita) return;
-    setActionLoading(true);
+    setCompletando(true);
     try {
-      await api.post(
-        `/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`,
-      );
+      const serviciosConPrecios = selectedCita.servicios.map(s => ({
+        id: s.id,
+        precio: completarForm.serviciosPrecios[s.id] ?? s.precio,
+      }));
+      let totalServicios = serviciosConPrecios.reduce((sum, s) => sum + s.precio, 0);
+
+      // Apply discount if enabled
+      const descuento = completarForm.aplicarDescuento ? (completarForm.descuento || 0) : 0;
+      const motivoDescuento = completarForm.motivoDescuento.trim();
+      if (descuento > 0) {
+        totalServicios = Math.max(0, totalServicios - descuento);
+      }
+
+      const total = totalServicios + completarForm.totalProductos + completarForm.propina;
+
+      // Build notas with discount info if applied
+      let notas = `Cita completada: ${selectedCita.servicios.map(s => s.nombre).join(', ')}`;
+      if (descuento > 0 && motivoDescuento) {
+        notas += ` | Descuento aplicado: $${descuento} — Motivo: ${motivoDescuento}`;
+      }
+
+      // 1. Create registro financiero
+      await api.post(`/salones/${salonId}/registros`, {
+        salonId,
+        clienteId: selectedCita.cliente.id,
+        usuarioId: selectedCita.empleada.id,
+        totalServicios,
+        totalProductos: completarForm.totalProductos,
+        propina: completarForm.propina,
+        pagos: [{ monto: total, metodoPago: completarForm.metodoPago }],
+        serviciosIds: [...selectedCita.servicios.map(s => s.id), ...completarForm.nuevosServiciosIds],
+        notas,
+        registradoPorId: user?.id,
+      });
+
+      // 2. Mark cita as completed
+      await api.post(`/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`);
+
+      setShowCompletar(false);
       setSelectedCita(null);
       fetchCitas();
+    } catch (err) {
+      console.error('Error al completar cita:', err);
     } finally {
-      setActionLoading(false);
+      setCompletando(false);
     }
+  };
+
+  /* ── Completar form helpers ── */
+  const handleCompletarFormChange = (patch: Partial<typeof completarForm>) => {
+    setCompletarForm(prev => ({ ...prev, ...patch }));
+  };
+
+  const handleToggleServicioCompletar = (servicioId: number) => {
+    if (!selectedCita) return;
+    const isOriginal = selectedCita.servicios.some(s => s.id === servicioId);
+    if (isOriginal) {
+      const originalPrecio = selectedCita.servicios.find(s => s.id === servicioId)?.precio ?? 0;
+      const currentPrice = completarForm.serviciosPrecios[servicioId] ?? originalPrecio;
+      setCompletarForm(prev => ({
+        ...prev,
+        serviciosPrecios: {
+          ...prev.serviciosPrecios,
+          [servicioId]: currentPrice > 0 ? 0 : originalPrecio,
+        },
+      }));
+    } else {
+      setCompletarForm(prev => ({
+        ...prev,
+        nuevosServiciosIds: prev.nuevosServiciosIds.filter(id => id !== servicioId),
+      }));
+    }
+  };
+
+  const handleUpdatePrecioCompletar = (servicioId: number, precio: number) => {
+    setCompletarForm(prev => ({
+      ...prev,
+      serviciosPrecios: { ...prev.serviciosPrecios, [servicioId]: precio },
+    }));
   };
 
   /* ── Cancelar (POST) ── */
@@ -514,13 +606,6 @@ const AgendaPage: React.FC = () => {
     } finally {
       setActionLoading(false);
     }
-  };
-
-  /* ── Logout ── */
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    navigate('/login');
   };
 
   /* ── Animated variants ── */
@@ -547,10 +632,10 @@ const AgendaPage: React.FC = () => {
 
   if (authLoading) {
     return (
-      <Layout sidebarItems={sidebarItems} onLogout={handleLogout} title="Agenda de Citas">
+      <>
         <Skeleton height="36px" width="220px" variant="rect" style={{ marginBottom: '1.5rem' }} />
         <Skeleton height="200px" variant="rect" />
-      </Layout>
+      </>
     );
   }
 
@@ -559,12 +644,7 @@ const AgendaPage: React.FC = () => {
   /* ================================================================ */
 
   return (
-    <Layout
-      sidebarItems={sidebarItems}
-      onLogout={handleLogout}
-      title="Agenda de Citas"
-      userName={user?.nombre}
-    >
+    <>
       <AnimatePresence mode="wait">
         <motion.div
           key="agenda-content"
@@ -814,7 +894,7 @@ const AgendaPage: React.FC = () => {
 
       {/* ── Detail Modal ── */}
       <AnimatePresence>
-        {selectedCita && (
+        {selectedCita && !showCompletar && (
           <RenderDetailModal
             cita={selectedCita}
             showCancelForm={showCancelForm}
@@ -826,14 +906,33 @@ const AgendaPage: React.FC = () => {
               setCancelMotivo('');
             }}
             onChangeEstado={handleChangeEstado}
-            onCompletar={handleCompletar}
+            onCompletar={handleAbrirCompletar}
             onCancelar={handleCancelar}
             onShowCancelForm={() => setShowCancelForm(true)}
             onCancelMotivoChange={setCancelMotivo}
           />
         )}
       </AnimatePresence>
-    </Layout>
+
+      {/* ── Completar Modal ── */}
+      <AnimatePresence>
+        {showCompletar && selectedCita && (
+          <RenderCompletarModal
+            cita={selectedCita}
+            servicios={servicios}
+            completando={completando}
+            form={completarForm}
+            onChangeForm={handleCompletarFormChange}
+            onClose={() => {
+              setShowCompletar(false);
+            }}
+            onConfirmar={handleConfirmarCompletar}
+            onToggleServicio={handleToggleServicioCompletar}
+            onUpdatePrecio={handleUpdatePrecioCompletar}
+          />
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 
@@ -1674,42 +1773,16 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
             <div className={styles.actionGroup} style={{ marginTop: '1rem' }}>
               {cita.estado === 'PENDIENTE' && (
                 <>
-                  <ActionBtn
-                    label="Confirmar"
-                    onClick={() => onChangeEstado('CONFIRMADA')}
-                    loading={actionLoading}
-                  />
-                  <ActionBtn
-                    label="Cancelar"
-                    variant="danger"
-                    onClick={onShowCancelForm}
-                    loading={false}
-                  />
+                  <ActionBtn label="Confirmar" onClick={() => onChangeEstado('CONFIRMADA')} loading={actionLoading} />
+                  <ActionBtn label="Completar" variant="success" onClick={onCompletar} loading={false} />
+                  <ActionBtn label="Cancelar" variant="danger" onClick={onShowCancelForm} loading={false} />
                 </>
               )}
               {cita.estado === 'CONFIRMADA' && (
                 <>
-                  <ActionBtn
-                    label="Completar"
-                    variant="success"
-                    onClick={onCompletar}
-                    loading={actionLoading}
-                  />
-                  <ActionBtn
-                    label="Cancelar"
-                    variant="danger"
-                    onClick={onShowCancelForm}
-                    loading={false}
-                  />
+                  <ActionBtn label="Completar" variant="success" onClick={onCompletar} loading={false} />
+                  <ActionBtn label="Cancelar" variant="danger" onClick={onShowCancelForm} loading={false} />
                 </>
-              )}
-              {cita.estado === 'EN_PROGRESO' && (
-                <ActionBtn
-                  label="Completar"
-                  variant="success"
-                  onClick={onCompletar}
-                  loading={actionLoading}
-                />
               )}
             </div>
           )}
@@ -1762,13 +1835,6 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
           )}
         </div>
 
-        {!showCancelForm && (
-          <div className={styles.modalFooter}>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              Cerrar
-            </Button>
-          </div>
-        )}
       </motion.div>
     </motion.div>
   );
@@ -1821,6 +1887,636 @@ const ActionBtn: React.FC<ActionBtnProps> = ({
     >
       {loading ? '...' : label}
     </motion.button>
+  );
+};
+
+/* ================================================================ */
+/*  SUB-COMPONENT: Completar Modal                                    */
+/* ================================================================ */
+
+interface CompletarModalProps {
+  cita: Cita;
+  servicios: ServicioSimple[];
+  completando: boolean;
+  form: {
+    serviciosPrecios: Record<number, number>;
+    nuevosServiciosIds: number[];
+    totalProductos: number;
+    propina: number;
+    metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
+    aplicarDescuento: boolean;
+    descuento: number;
+    motivoDescuento: string;
+  };
+  onChangeForm: (patch: Partial<CompletarModalProps['form']>) => void;
+  onClose: () => void;
+  onConfirmar: () => Promise<void>;
+  onToggleServicio: (id: number) => void;
+  onUpdatePrecio: (servicioId: number, precio: number) => void;
+}
+
+const RenderCompletarModal: React.FC<CompletarModalProps> = ({
+  cita,
+  servicios,
+  completando,
+  form,
+  onChangeForm,
+  onClose,
+  onConfirmar,
+  onToggleServicio,
+  onUpdatePrecio,
+}) => {
+  const addedServicios = useMemo(
+    () => servicios.filter(s => form.nuevosServiciosIds.includes(s.id)),
+    [servicios, form.nuevosServiciosIds],
+  );
+
+  const availableExtraServicios = useMemo(
+    () => servicios.filter(
+      s => s.activo !== false
+        && !cita.servicios.some(cs => cs.id === s.id)
+        && !form.nuevosServiciosIds.includes(s.id),
+    ),
+    [servicios, cita.servicios, form.nuevosServiciosIds],
+  );
+
+  const totalOriginalServicios = useMemo(
+    () => cita.servicios.reduce((sum, s) => sum + (form.serviciosPrecios[s.id] ?? s.precio), 0),
+    [cita.servicios, form.serviciosPrecios],
+  );
+
+  const totalExtraServicios = useMemo(
+    () => addedServicios.reduce((sum, s) => sum + (s.precioBase ?? 0), 0),
+    [addedServicios],
+  );
+
+  const descuentoAplicado = form.aplicarDescuento ? (form.descuento || 0) : 0;
+  const totalServiciosFinal = totalOriginalServicios + totalExtraServicios - descuentoAplicado;
+  const totalFinal = totalServiciosFinal + form.totalProductos + form.propina;
+
+  const fechaStr = new Date(cita.fecha + 'T' + cita.horaInicio).toLocaleDateString('es-CL', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  return (
+    <motion.div
+      className={styles.modalOverlay}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <motion.div
+        className={styles.modalContent}
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={styles.modalHeader}>
+          <span className={styles.modalTitle}>
+            Completar Cita #{cita.id}
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-dim)',
+              fontSize: '1.25rem',
+              cursor: 'pointer',
+              padding: '0 0.25rem',
+              lineHeight: 1,
+            }}
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          {/* ── Resumen ── */}
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>Cliente</span>
+            <span className={styles.infoValue}>{cita.cliente.nombre}</span>
+          </div>
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>Empleada</span>
+            <span className={styles.infoValue}>{cita.empleada.nombre}</span>
+          </div>
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>Fecha</span>
+            <span className={styles.infoValue}>{fechaStr}</span>
+          </div>
+
+          {/* ── Servicios ── */}
+          <div style={{ marginTop: '1rem', marginBottom: '0.75rem' }}>
+            <div
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                color: 'var(--text-dim)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                marginBottom: '0.35rem',
+              }}
+            >
+              Servicios
+            </div>
+            <div
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.5rem',
+              }}
+            >
+              {/* Original services */}
+              {cita.servicios.map(s => {
+                const currentPrice = form.serviciosPrecios[s.id] ?? s.precio;
+                const isRemoved = currentPrice === 0 && form.serviciosPrecios[s.id] === 0;
+                return (
+                  <div
+                    key={s.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.25rem 0',
+                      opacity: isRemoved ? 0.5 : 1,
+                      textDecoration: isRemoved ? 'line-through' : 'none',
+                    }}
+                  >
+                    <span
+                      style={{
+                        flex: 1,
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      {s.nombre}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={currentPrice}
+                      onChange={(e) => onUpdatePrecio(s.id, Math.max(0, Number(e.target.value)))}
+                      style={{
+                        width: '80px',
+                        height: '28px',
+                        padding: '0 0.4rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-base)',
+                        color: 'var(--text-primary)',
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.75rem',
+                        textAlign: 'right',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => onToggleServicio(s.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-dim)',
+                        cursor: 'pointer',
+                        padding: '0 0.25rem',
+                        fontSize: '0.875rem',
+                        lineHeight: 1,
+                      }}
+                      aria-label="Quitar servicio"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              {/* Added services */}
+              {addedServicios.map(s => (
+                <div
+                  key={s.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.25rem 0',
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.8125rem',
+                      color: 'var(--accent)',
+                    }}
+                  >
+                    + {s.nombre}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.75rem',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {formatCurrency(s.precioBase ?? 0)}
+                  </span>
+                  <button
+                    onClick={() => onToggleServicio(s.id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-dim)',
+                      cursor: 'pointer',
+                      padding: '0 0.25rem',
+                      fontSize: '0.875rem',
+                      lineHeight: 1,
+                    }}
+                    aria-label="Quitar servicio extra"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {/* Add service dropdown */}
+              {availableExtraServicios.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const id = Number(e.target.value);
+                    if (id > 0) {
+                      onChangeForm({ nuevosServiciosIds: [...form.nuevosServiciosIds, id] });
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '30px',
+                    marginTop: '0.35rem',
+                    padding: '0 0.5rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-base)',
+                    color: 'var(--accent)',
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    appearance: 'none',
+                  }}
+                >
+                  <option value="">+ Agregar servicio...</option>
+                  {availableExtraServicios.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre} — {formatCurrency(s.precioBase ?? 0)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {availableExtraServicios.length === 0 && cita.servicios.length > 0 && (
+                <div
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.75rem',
+                    color: 'var(--text-dim)',
+                    padding: '0.25rem 0',
+                  }}
+                >
+                  No hay más servicios disponibles
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Totals + Productos / Propina ── */}
+          <div
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.5rem 0.75rem',
+              marginBottom: '0.75rem',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0.3rem 0',
+                borderBottom: '1px solid var(--border)',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+              }}
+            >
+              <span style={{ color: 'var(--text-secondary)' }}>Total servicios</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                {formatCurrency(totalServiciosFinal + descuentoAplicado)}
+              </span>
+            </div>
+
+            {/* ── Discount toggle ── */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0.3rem 0',
+                borderBottom: '1px solid var(--border)',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+              }}
+            >
+              <span style={{ color: 'var(--text-secondary)' }}>Aplicar descuento</span>
+              <button
+                onClick={() => onChangeForm({
+                  aplicarDescuento: !form.aplicarDescuento,
+                  descuento: form.aplicarDescuento ? 0 : form.descuento,
+                })}
+                style={{
+                  width: '44px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  background: form.aplicarDescuento ? 'var(--accent)' : 'var(--border)',
+                  transition: 'background 0.2s',
+                }}
+                aria-label="Toggle descuento"
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '2px',
+                    left: form.aplicarDescuento ? '22px' : '2px',
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    background: 'var(--bg-root)',
+                    transition: 'left 0.2s',
+                  }}
+                />
+              </button>
+            </div>
+
+            {form.aplicarDescuento && (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.3rem 0',
+                    borderBottom: '1px solid var(--border)',
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  <span style={{ color: 'var(--text-secondary)' }}>Monto descuento</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={totalServiciosFinal + descuentoAplicado}
+                    value={form.descuento}
+                    onChange={(e) => onChangeForm({ descuento: Math.max(0, Number(e.target.value)) })}
+                    style={{
+                      width: '100px',
+                      height: '28px',
+                      padding: '0 0.4rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-base)',
+                      color: 'var(--text-primary)',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.75rem',
+                      textAlign: 'right',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.25rem',
+                    padding: '0.3rem 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <span style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    color: 'var(--text-dim)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}>
+                    Motivo del descuento *
+                  </span>
+                  <textarea
+                    value={form.motivoDescuento}
+                    onChange={(e) => onChangeForm({ motivoDescuento: e.target.value })}
+                    placeholder="Indica el motivo del descuento (mín. 10 caracteres)"
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      padding: '0.4rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: form.motivoDescuento.trim().length > 0 && form.motivoDescuento.trim().length < 10
+                        ? '1px solid var(--danger)'
+                        : '1px solid var(--border)',
+                      background: 'var(--bg-base)',
+                      color: 'var(--text-primary)',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.75rem',
+                      outline: 'none',
+                      resize: 'vertical',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  {form.motivoDescuento.trim().length > 0 && form.motivoDescuento.trim().length < 10 && (
+                    <span style={{
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.65rem',
+                      color: 'var(--danger)',
+                    }}>
+                      Mínimo 10 caracteres
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── Discounted total ── */}
+            {form.aplicarDescuento && descuentoAplicado > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '0.3rem 0',
+                  borderBottom: '1px solid var(--border)',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.8125rem',
+                }}
+              >
+                <span style={{ color: 'var(--success)', fontWeight: 600 }}>Total con descuento</span>
+                <span style={{ color: 'var(--success)', fontWeight: 700 }}>
+                  {formatCurrency(totalServiciosFinal)}
+                </span>
+              </div>
+            )}
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0.3rem 0',
+                borderBottom: '1px solid var(--border)',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+              }}
+            >
+              <span style={{ color: 'var(--text-secondary)' }}>Productos (retail)</span>
+              <input
+                type="number"
+                min="0"
+                value={form.totalProductos}
+                onChange={(e) => onChangeForm({ totalProductos: Math.max(0, Number(e.target.value)) })}
+                style={{
+                  width: '100px',
+                  height: '28px',
+                  padding: '0 0.4rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-base)',
+                  color: 'var(--text-primary)',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.75rem',
+                  textAlign: 'right',
+                  outline: 'none',
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0.3rem 0',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+              }}
+            >
+              <span style={{ color: 'var(--text-secondary)' }}>Propina</span>
+              <input
+                type="number"
+                min="0"
+                value={form.propina}
+                onChange={(e) => onChangeForm({ propina: Math.max(0, Number(e.target.value)) })}
+                style={{
+                  width: '100px',
+                  height: '28px',
+                  padding: '0 0.4rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-base)',
+                  color: 'var(--text-primary)',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.75rem',
+                  textAlign: 'right',
+                  outline: 'none',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* ── Pago ── */}
+          <div>
+            <div
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                color: 'var(--text-dim)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                marginBottom: '0.35rem',
+              }}
+            >
+              Pago
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}
+            >
+              <select
+                value={form.metodoPago}
+                onChange={(e) => onChangeForm({ metodoPago: e.target.value as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' })}
+                style={{
+                  flex: 1,
+                  height: '36px',
+                  padding: '0 0.6rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-base)',
+                  color: 'var(--text-primary)',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  appearance: 'none',
+                }}
+              >
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="TARJETA">Tarjeta</option>
+                <option value="TRANSFERENCIA">Transferencia</option>
+              </select>
+              <span
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Monto: {formatCurrency(totalFinal)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.modalFooter}>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={completando}>
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={completando}
+            onClick={onConfirmar}
+            disabled={
+              form.aplicarDescuento &&
+              (form.descuento || 0) > 0 &&
+              form.motivoDescuento.trim().length < 10
+            }
+          >
+            Confirmar y Registrar
+          </Button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

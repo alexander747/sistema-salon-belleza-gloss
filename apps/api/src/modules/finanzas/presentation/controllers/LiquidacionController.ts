@@ -30,11 +30,7 @@ export class LiquidacionController {
         usuarioId: req.body.usuarioId,
         periodoInicio: new Date(req.body.periodoInicio),
         periodoFin: new Date(req.body.periodoFin),
-        totalComisiones: req.body.totalComisiones,
-        totalPropinas: req.body.totalPropinas,
-        bonoHorario: req.body.bonoHorario,
-        sueldoFijo: req.body.sueldoFijo,
-        totalPagado: req.body.totalPagado,
+        totalPagado: req.body.totalPagado ? Number(req.body.totalPagado) : undefined,
       });
       res.status(201).json(result);
     } catch (error) {

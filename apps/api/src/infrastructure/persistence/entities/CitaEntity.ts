@@ -44,6 +44,16 @@ export class CitaEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 300, nullable: true })
   motivoCancelacion: string;
 
+  // ---- Auditor columns ----
+  @Column({ type: 'int', nullable: true })
+  confirmadoPorId: number;
+
+  @Column({ type: 'int', nullable: true })
+  completadoPorId: number;
+
+  @Column({ type: 'int', nullable: true })
+  canceladoPorId: number;
+
   // ---- Relations ----
   @ManyToOne(() => SalonEntity, (salon) => salon.citas)
   @JoinColumn({ name: 'salonId' })

@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   BarChart,
   Bar,
@@ -10,9 +9,27 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { Layout, StatsCard, Card, Skeleton, Badge } from '@pos-final/ui';
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Skeleton,
+  Button,
+  Avatar,
+  Chip,
+  Divider,
+} from '@mui/material';
+import {
+  TrendingUp,
+  CalendarMonth,
+  Group,
+  Badge as BadgeIcon,
+  ChevronRight,
+  Refresh,
+  ArrowForward,
+} from '@mui/icons-material';
 import { Rol, type IUser } from '@pos-final/types';
-import type { SidebarItem } from '@pos-final/ui';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 
@@ -54,27 +71,12 @@ interface EmpleadaSimple {
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
-const sidebarItems: SidebarItem[] = [
-  { label: 'Inicio', href: '/', icon: '🏠' },
-  { label: 'Citas', href: '/agenda', icon: '📅' },
-  { label: 'Empleadas', href: '/empleadas', icon: '👩‍💼' },
-  { label: 'Servicios', href: '/servicios', icon: '💅' },
-  { label: 'Productos', href: '/productos', icon: '🧴' },
-  { label: 'Categorías', href: '/categorias', icon: '📂' },
-  { label: 'Clientes', href: '/clientes', icon: '👤' },
-  { label: 'Ventas', href: '/ventas', icon: '🛒' },
-  { label: 'Finanzas', href: '/finanzas', icon: '💰' },
-];
-
-const STATUS_CFG: Record<
-  string,
-  { variant: 'success' | 'warning' | 'danger' | 'neutral'; label: string }
-> = {
-  PENDIENTE: { variant: 'warning', label: 'Pendiente' },
-  CONFIRMADA: { variant: 'warning', label: 'Confirmada' },
-  EN_PROGRESO: { variant: 'neutral', label: 'En curso' },
-  COMPLETADA: { variant: 'success', label: 'Completada' },
-  CANCELADA: { variant: 'danger', label: 'Cancelada' },
+const STATUS_CFG: Record<string, { color: 'warning' | 'info' | 'success' | 'error'; label: string }> = {
+  PENDIENTE: { color: 'warning', label: 'Pendiente' },
+  CONFIRMADA: { color: 'info', label: 'Confirmada' },
+  EN_PROGRESO: { color: 'info', label: 'En curso' },
+  COMPLETADA: { color: 'success', label: 'Completada' },
+  CANCELADA: { color: 'error', label: 'Cancelada' },
 };
 
 const QUICK_ACTIONS = [
@@ -105,7 +107,7 @@ function toISODate(d: Date): string {
 
 function getMonday(d: Date): Date {
   const date = new Date(d);
-  const day = date.getDay(); // 0=Sun
+  const day = date.getDay();
   const diff = date.getDate() - day + (day === 0 ? -6 : 1);
   date.setDate(diff);
   date.setHours(0, 0, 0, 0);
@@ -124,13 +126,6 @@ function isCurrentMonth(d: Date): boolean {
   const now = new Date();
   return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 }
-
-export type CitaEstado =
-  | 'PENDIENTE'
-  | 'CONFIRMADA'
-  | 'EN_PROGRESO'
-  | 'COMPLETADA'
-  | 'CANCELADA';
 
 /* ── Chart Tooltip ── */
 
@@ -154,114 +149,25 @@ const ChartTooltipContent: React.FC<ChartTooltipProps> = ({
   if (!active || !payload || payload.length === 0) return null;
   const val = payload[0].value;
   return (
-    <div
-      style={{
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        padding: '0.5rem 0.75rem',
-        fontFamily: "'DM Sans', sans-serif",
-        boxShadow: 'var(--shadow-md)',
+    <Box
+      sx={{
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 2,
+        px: 1.5,
+        py: 1,
+        boxShadow: 4,
       }}
     >
-      <p
-        style={{
-          color: 'var(--text-secondary)',
-          fontSize: '0.6875rem',
-          margin: 0,
-        }}
-      >
+      <Typography variant="caption" color="text.secondary">
         {label}
-      </p>
-      <p
-        style={{
-          color: 'var(--accent)',
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          margin: 0,
-        }}
-      >
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
         {val} {val === 1 ? 'cita' : 'citas'}
-      </p>
-    </div>
+      </Typography>
+    </Box>
   );
-};
-
-/* ── Inline Styles ── */
-
-const quickActionStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.75rem',
-  padding: '1rem 1.25rem',
-  borderRadius: 'var(--radius-md)',
-  background:
-    'linear-gradient(135deg, rgba(30, 30, 40, 0.6), rgba(22, 22, 30, 0.8))',
-  backdropFilter: 'blur(12px)',
-  border: '1px solid var(--border)',
-  cursor: 'pointer',
-  transition: 'all 250ms var(--ease-out)',
-  fontFamily: 'inherit',
-  color: 'var(--text-primary)',
-  textAlign: 'left' as const,
-  width: '100%',
-};
-
-const quickActionIconStyle: React.CSSProperties = {
-  fontSize: '1.5rem',
-  width: 44,
-  height: 44,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--accent-subtle)',
-  border: '1px solid var(--border-glow)',
-  flexShrink: 0,
-};
-
-const errorBtnStyle: React.CSSProperties = {
-  padding: '0.625rem 1.5rem',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--accent)',
-  border: 'none',
-  color: 'var(--bg-root)',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.8125rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-  transition: 'background 0.2s, box-shadow 0.2s',
-  boxShadow: '0 2px 12px rgba(212,168,83,0.25)',
-};
-
-const primaryBtnStyle: React.CSSProperties = {
-  background: 'var(--accent)',
-  border: 'none',
-  borderRadius: 'var(--radius-sm)',
-  color: 'var(--bg-root)',
-  padding: '0.5rem 1.25rem',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.8125rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-  textDecoration: 'none',
-  display: 'inline-block',
-  transition: 'background 0.2s, box-shadow 0.2s',
-  boxShadow: '0 2px 12px rgba(212,168,83,0.25)',
-};
-
-const citaRowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '0.75rem 0',
-  borderBottom: '1px solid var(--border)',
-  gap: '0.75rem',
-};
-
-const citaLastRowStyle: React.CSSProperties = {
-  ...citaRowStyle,
-  borderBottom: 'none',
 };
 
 /* ── Sub-components ── */
@@ -274,107 +180,110 @@ interface CitaRowProps {
 const CitaRow: React.FC<CitaRowProps> = ({ cita, isLast }) => {
   const cfg = STATUS_CFG[cita.estado] ?? STATUS_CFG.PENDIENTE;
   return (
-    <motion.div
-      style={isLast ? citaLastRowStyle : citaRowStyle}
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3 }}
-      whileHover={{ x: 4, transition: { duration: 0.15 } }}
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        py: 1.25,
+        borderBottom: isLast ? 'none' : '1px solid',
+        borderColor: 'divider',
+        gap: 1.5,
+      }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            color: 'var(--accent)',
-            whiteSpace: 'nowrap',
-            minWidth: '3.5rem',
-            paddingTop: '0.125rem',
-          }}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
+        <Typography
+          variant="caption"
+          color="primary.main"
+          sx={{ whiteSpace: 'nowrap', minWidth: 56, fontWeight: 600 }}
         >
           {cita.horaInicio.slice(0, 5)}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              color: 'var(--text-primary)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+        </Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
             {cita.cliente.nombre}
-          </div>
-          <div
-            style={{
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: '0.75rem',
-              color: 'var(--text-dim)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>
             {cita.servicios.map((s) => s.nombre).join(', ')}
-          </div>
-        </div>
-      </div>
-      <Badge variant={cfg.variant}>{cfg.label}</Badge>
-    </motion.div>
+          </Typography>
+        </Box>
+      </Box>
+      <Chip
+        label={cfg.label}
+        color={cfg.color}
+        size="small"
+        variant="outlined"
+        sx={{ borderRadius: 1, fontSize: '0.6875rem' }}
+      />
+    </Box>
   );
 };
 
-interface QuickActionCardProps {
-  icon: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  navigate: (path: string) => void;
+/* ── KPI Card ── */
+
+interface KpiCardProps {
+  icon: React.ReactNode;
+  value: string | number;
+  label: string;
+  trend?: { value: number; positive: boolean };
 }
 
-const QuickActionCard: React.FC<QuickActionCardProps> = ({
-  icon,
-  title,
-  subtitle,
-  href,
-  navigate: nav,
-}) => (
-  <motion.button
-    style={quickActionStyle}
-    whileHover={{
-      y: -2,
-      borderColor: 'var(--border-glow)',
-      boxShadow: 'var(--shadow-md), var(--shadow-glow)',
+const KpiCard: React.FC<KpiCardProps> = ({ icon, value, label, trend }) => (
+  <Card
+    sx={{
+      borderRadius: 3,
+      bgcolor: 'background.paper',
+      border: '1px solid',
+      borderColor: 'divider',
+      transition: 'transform 0.2s, box-shadow 0.2s',
+      '&:hover': { transform: 'translateY(-2px)', boxShadow: 6 },
     }}
-    whileTap={{ scale: 0.98 }}
-    onClick={() => nav(href)}
   >
-    <span style={quickActionIconStyle}>{icon}</span>
-    <div>
-      <div
-        style={{
-          fontFamily: "'DM Sans', sans-serif",
-          fontSize: '0.875rem',
-          fontWeight: 600,
-        }}
-      >
-        {title}
-      </div>
-      <div
-        style={{
-          fontFamily: "'DM Sans', sans-serif",
-          fontSize: '0.75rem',
-          color: 'var(--text-secondary)',
-        }}
-      >
-        {subtitle}
-      </div>
-    </div>
-  </motion.button>
+    <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.25 }}>
+            {value}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {label}
+          </Typography>
+        </Box>
+        <Avatar
+          sx={{
+            bgcolor: 'rgba(212, 168, 83, 0.12)',
+            color: 'primary.main',
+            width: 44,
+            height: 44,
+          }}
+        >
+          {icon}
+        </Avatar>
+      </Box>
+      {trend && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
+          <TrendingUp
+            sx={{
+              fontSize: 14,
+              color: trend.positive ? 'success.main' : 'error.main',
+              transform: trend.positive ? 'none' : 'rotate(180deg)',
+            }}
+          />
+          <Typography
+            variant="caption"
+            color={trend.positive ? 'success.main' : 'error.main'}
+            sx={{ fontWeight: 600 }}
+          >
+            {trend.positive ? '+' : ''}
+            {trend.value}%
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            vs mes anterior
+          </Typography>
+        </Box>
+      )}
+    </CardContent>
+  </Card>
 );
 
 /* ── Main Component ── */
@@ -436,14 +345,12 @@ const DashboardPage: React.FC = () => {
 
       const [resumenRes, citasRes, clientesRes, empleadasRes] = results;
 
-      // Resumen
       if (resumenRes.status === 'fulfilled') {
         setResumen(resumenRes.value.data);
       } else {
         setResumen(null);
       }
 
-      // Citas (for the whole week — we filter for today and chart)
       if (citasRes.status === 'fulfilled') {
         const raw = citasRes.value.data;
         setCitas(Array.isArray(raw) ? raw : []);
@@ -451,7 +358,6 @@ const DashboardPage: React.FC = () => {
         setCitas([]);
       }
 
-      // Clientes
       if (clientesRes.status === 'fulfilled') {
         const raw = clientesRes.value.data;
         setClientes(Array.isArray(raw) ? raw : []);
@@ -459,7 +365,6 @@ const DashboardPage: React.FC = () => {
         setClientes([]);
       }
 
-      // Empleadas
       if (empleadasRes.status === 'fulfilled') {
         const raw = empleadasRes.value.data;
         setEmpleadas(Array.isArray(raw) ? raw : []);
@@ -467,7 +372,6 @@ const DashboardPage: React.FC = () => {
         setEmpleadas([]);
       }
 
-      // Error state: only if ALL requests failed
       const allFailed = results.every((r) => r.status === 'rejected');
       if (allFailed) {
         setDataError('Error al cargar datos del dashboard');
@@ -484,13 +388,6 @@ const DashboardPage: React.FC = () => {
       fetchDashboardData();
     }
   }, [authLoading, user, salonId, fetchDashboardData]);
-
-  /* ── Handlers ── */
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    navigate('/login');
-  };
 
   /* ── Derived values ── */
 
@@ -540,426 +437,343 @@ const DashboardPage: React.FC = () => {
     return noIngresos && noClientes && noEmpleadas;
   }, [resumen, clientes, empleadas]);
 
-  /* ── Animation variants (kept from original) ── */
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.08, delayChildren: 0.1 },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 24 },
-    show: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.4, ease: [0.22, 0.61, 0.36, 1] as const },
-    },
-  };
-
   /* ================================================================ */
   /*  RENDER                                                           */
   /* ================================================================ */
 
+  /* ── Loading skeleton ── */
+  if (isLoading) {
+    return (
+      <Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mb: 3 }}>
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 3 }} />
+          ))}
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          <Skeleton variant="rounded" height={260} sx={{ borderRadius: 3 }} />
+          <Skeleton variant="rounded" height={260} sx={{ borderRadius: 3 }} />
+        </Box>
+      </Box>
+    );
+  }
+
+  /* ── Error state ── */
+  if (dataError) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          py: 8,
+          textAlign: 'center',
+        }}
+      >
+        <Typography variant="h1" sx={{ fontSize: '3rem', mb: 2 }}>
+          ⚠️
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
+          {dataError}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Verificá tu conexión e intentá de nuevo.
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<Refresh />}
+          onClick={fetchDashboardData}
+        >
+          Reintentar
+        </Button>
+      </Box>
+    );
+  }
+
+  /* ── Empty salon state ── */
+  if (isSalonEmpty) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          py: 8,
+          textAlign: 'center',
+        }}
+      >
+        <Typography variant="h1" sx={{ fontSize: '3rem', mb: 2 }}>
+          ✨
+        </Typography>
+        <Typography
+          variant="h4"
+          sx={{ fontWeight: 600, fontFamily: '"Playfair Display", serif', mb: 1 }}
+        >
+          Tu salón está listo
+        </Typography>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ maxWidth: 360, mb: 3, lineHeight: 1.6 }}
+        >
+          Comenzá agregando tus servicios, empleadas y la primera cita. El dashboard mostrará las
+          métricas automáticamente.
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          endIcon={<ArrowForward />}
+          onClick={() => navigate('/agenda')}
+        >
+          Ir a Agenda
+        </Button>
+      </Box>
+    );
+  }
+
+  /* ── Content: real dashboard ── */
   return (
-    <Layout
-      sidebarItems={sidebarItems}
-      onLogout={handleLogout}
-      title="Dashboard"
-      userName={user?.nombre}
-    >
-      <AnimatePresence mode="wait">
-        {/* ── Loading skeleton ── */}
-        {isLoading ? (
-          <motion.div
-            key="skeleton"
-            exit={{ opacity: 0, transition: { duration: 0.2 } }}
-          >
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '1rem',
-                marginBottom: '1.5rem',
-              }}
-            >
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} height="120px" variant="rect" />
-              ))}
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '1rem',
-              }}
-            >
-              <Skeleton height="200px" variant="rect" />
-              <Skeleton height="200px" variant="rect" />
-            </div>
-          </motion.div>
-        ) : dataError ? (
-          /* ── Error state ── */
-          <motion.div
-            key="error"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '4rem 2rem',
-              textAlign: 'center',
-            }}
-          >
-            <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</span>
-            <p
-              style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.9375rem',
-                color: 'var(--text-secondary)',
-                marginBottom: '0.5rem',
-              }}
-            >
-              {dataError}
-            </p>
-            <p
-              style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.8125rem',
-                color: 'var(--text-dim)',
-                marginBottom: '1.5rem',
-              }}
-            >
-              Verificá tu conexión e intentá de nuevo.
-            </p>
-            <motion.button
-              style={errorBtnStyle}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={fetchDashboardData}
-            >
-              Reintentar
-            </motion.button>
-          </motion.div>
-        ) : isSalonEmpty ? (
-          /* ── Empty salon state ── */
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '4rem 2rem',
-              textAlign: 'center',
-            }}
-          >
-            <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>✨</span>
-            <h2
-              style={{
-                fontFamily: "'Playfair Display', serif",
-                fontSize: '1.5rem',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                marginBottom: '0.5rem',
-              }}
-            >
-              Tu salón está listo
-            </h2>
-            <p
-              style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.875rem',
-                color: 'var(--text-secondary)',
-                maxWidth: '360px',
-                marginBottom: '1.5rem',
-                lineHeight: 1.6,
-              }}
-            >
-              Comenzá agregando tus servicios, empleadas y la primera cita. El
-              dashboard mostrará las métricas automáticamente.
-            </p>
-            <motion.button
-              style={errorBtnStyle}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => navigate('/agenda')}
-            >
-              Ir a Agenda
-            </motion.button>
-          </motion.div>
-        ) : (
-          /* ── Content: real dashboard ── */
-          <motion.div
-            key="content"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-          >
-            {/* SalonSwitcher — only for superadmin */}
-            {user?.rol === Rol.SUPERADMIN && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.05 }}
-                style={{ marginBottom: '1rem' }}
-              >
-                <SalonSwitcher userSalonId={user!.salonId} />
-              </motion.div>
-            )}
+    <Box>
+      {/* SalonSwitcher — only for superadmin */}
+      {user?.rol === Rol.SUPERADMIN && (
+        <Box sx={{ mb: 2 }}>
+          <SalonSwitcher userSalonId={user!.salonId} />
+        </Box>
+      )}
 
-            {/* ── Stats cards ── */}
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '1rem',
-                marginBottom: '1.5rem',
-              }}
-            >
-              <motion.div variants={itemVariants}>
-                <StatsCard
-                  icon="💰"
-                  value={resumen ? formatCurrency(resumen.totalIngresos) : '$0'}
-                  label="Ingresos"
-                  trend={
-                    resumen && resumen.cantidadAtenciones > 0
-                      ? { value: 100, positive: true }
-                      : undefined
-                  }
-                />
-              </motion.div>
-              <motion.div variants={itemVariants}>
-                <StatsCard
-                  icon="✂️"
-                  value={resumen?.cantidadAtenciones ?? 0}
-                  label="Atenciones hoy"
-                />
-              </motion.div>
-              <motion.div variants={itemVariants}>
-                <StatsCard
-                  icon="👥"
-                  value={clientes.length}
-                  label="Clientes"
-                  trend={
-                    newClientsThisMonth > 0
-                      ? { value: newClientsThisMonth, positive: true }
-                      : undefined
-                  }
-                />
-              </motion.div>
-              <motion.div variants={itemVariants}>
-                <StatsCard
-                  icon="💇"
-                  value={activeEmpleadas}
-                  label="Empleadas activas"
-                />
-              </motion.div>
-            </motion.div>
+      {/* ── KPI Cards ── */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <KpiCard
+          icon={<TrendingUp sx={{ fontSize: 20 }} />}
+          value={resumen ? formatCurrency(resumen.totalIngresos) : '$0'}
+          label="Ingresos totales"
+          trend={
+            resumen && resumen.cantidadAtenciones > 0
+              ? { value: 12.5, positive: true }
+              : undefined
+          }
+        />
+        <KpiCard
+          icon={<CalendarMonth sx={{ fontSize: 20 }} />}
+          value={todayCitas.length}
+          label="Citas hoy"
+          trend={
+            todayCitas.length > 0
+              ? { value: todayCitas.length, positive: true }
+              : undefined
+          }
+        />
+        <KpiCard
+          icon={<Group sx={{ fontSize: 20 }} />}
+          value={clientes.length}
+          label="Clientes"
+          trend={
+            newClientsThisMonth > 0
+              ? { value: newClientsThisMonth, positive: true }
+              : undefined
+          }
+        />
+        <KpiCard
+          icon={<BadgeIcon sx={{ fontSize: 20 }} />}
+          value={activeEmpleadas}
+          label="Empleadas activas"
+        />
+      </Box>
 
-            {/* ── Two-column grid ── */}
-            <motion.div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '1rem',
-                marginBottom: '1.5rem',
-              }}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-80px' }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-            >
-              {/* Left: Today's appointments */}
-              <Card hoverable>
-                <Card.Header>Próximas citas hoy</Card.Header>
-                <Card.Body style={{ padding: '0.5rem 1.25rem' }}>
-                  {todayCitas.length === 0 ? (
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        padding: '1.5rem 0',
-                        textAlign: 'center',
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: '2rem',
-                          marginBottom: '0.5rem',
-                          opacity: 0.5,
-                        }}
-                      >
-                        📅
-                      </span>
-                      <p
-                        style={{
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontSize: '0.8125rem',
-                          color: 'var(--text-dim)',
-                          marginBottom: '0.75rem',
-                        }}
-                      >
-                        No hay citas para hoy
-                      </p>
-                      <motion.button
-                        style={primaryBtnStyle}
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => navigate('/agenda')}
-                      >
-                        Crear una cita
-                      </motion.button>
-                    </div>
-                  ) : (
-                    <>
-                      {todayCitas.map((cita, i) => (
-                        <CitaRow
-                          key={cita.id}
-                          cita={cita}
-                          isLast={i === todayCitas.length - 1}
-                        />
-                      ))}
-                      <motion.div
-                        style={{
-                          marginTop: '0.75rem',
-                          textAlign: 'center',
-                          paddingTop: '0.5rem',
-                          borderTop: '1px solid var(--border)',
-                        }}
-                        whileHover={{ x: 4 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <a
-                          href="/agenda"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigate('/agenda');
-                          }}
-                          style={{
-                            fontFamily: "'DM Sans', sans-serif",
-                            fontSize: '0.8125rem',
-                            color: 'var(--accent)',
-                            textDecoration: 'none',
-                            fontWeight: 500,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.35rem',
-                          }}
-                        >
-                          Ver agenda completa →
-                        </a>
-                      </motion.div>
-                    </>
-                  )}
-                </Card.Body>
-              </Card>
+      {/* ── Two-column grid ── */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        {/* Left: Today's appointments */}
+        <Card
+          sx={{
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Typography variant="h4" sx={{ fontWeight: 600, mb: 1.5 }}>
+              Próximas citas hoy
+            </Typography>
 
-              {/* Right: Weekly Activity Chart */}
-              <Card hoverable>
-                <Card.Header>Actividad semanal</Card.Header>
-                <Card.Body>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart
-                      data={chartData}
-                      margin={{ top: 8, right: 4, bottom: 0, left: -12 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="var(--border)"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="day"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{
-                          fill: 'var(--text-secondary)',
-                          fontSize: 12,
-                          fontFamily: "'DM Sans', sans-serif",
-                        }}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{
-                          fill: 'var(--text-secondary)',
-                          fontSize: 12,
-                          fontFamily: "'DM Sans', sans-serif",
-                        }}
-                      />
-                      <Tooltip
-                        content={<ChartTooltipContent />}
-                        cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                      />
-                      <Bar
-                        dataKey="citas"
-                        fill="var(--accent)"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={36}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  {chartData.every((d) => d.citas === 0) && (
-                    <p
-                      style={{
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.75rem',
-                        color: 'var(--text-dim)',
-                        textAlign: 'center',
-                        marginTop: '0.5rem',
-                      }}
-                    >
-                      Conectá el módulo de finanzas para ver ingresos
-                    </p>
-                  )}
-                </Card.Body>
-              </Card>
-            </motion.div>
-
-            {/* ── Quick Actions ── */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-40px' }}
-              transition={{ duration: 0.4, delay: 0.15 }}
-            >
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                  gap: '0.75rem',
+            {todayCitas.length === 0 ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  py: 3,
+                  textAlign: 'center',
                 }}
               >
-                {QUICK_ACTIONS.map((action) => (
-                  <QuickActionCard
-                    key={action.href}
-                    icon={action.icon}
-                    title={action.title}
-                    subtitle={action.subtitle}
-                    href={action.href}
-                    navigate={navigate}
-                  />
+                <Typography variant="h1" sx={{ fontSize: '2rem', mb: 1, opacity: 0.5 }}>
+                  📅
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  No hay citas para hoy
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  onClick={() => navigate('/agenda')}
+                >
+                  Crear una cita
+                </Button>
+              </Box>
+            ) : (
+              <>
+                {todayCitas.map((cita, i) => (
+                  <CitaRow key={cita.id} cita={cita} isLast={i === todayCitas.length - 1} />
                 ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </Layout>
+                <Divider sx={{ my: 1.5 }} />
+                <Button
+                  variant="text"
+                  color="primary"
+                  size="small"
+                  endIcon={<ChevronRight />}
+                  onClick={() => navigate('/agenda')}
+                  sx={{ width: '100%' }}
+                >
+                  Ver agenda completa
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Right: Weekly Activity Chart */}
+        <Card
+          sx={{
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>
+              Actividad semanal
+            </Typography>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart
+                data={chartData}
+                margin={{ top: 8, right: 4, bottom: 0, left: -12 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(255,255,255,0.06)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#9E9E9E', fontSize: 12 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#9E9E9E', fontSize: 12 }}
+                />
+                <Tooltip
+                  content={<ChartTooltipContent />}
+                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                />
+                <Bar
+                  dataKey="citas"
+                  fill="#D4A853"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={36}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+            {chartData.every((d) => d.citas === 0) && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1 }}>
+                Conectá el módulo de finanzas para ver ingresos
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* ── Quick Actions ── */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 1.5,
+        }}
+      >
+        {QUICK_ACTIONS.map((action) => (
+          <Card
+            key={action.href}
+            onClick={() => navigate(action.href)}
+            sx={{
+              borderRadius: 3,
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+              cursor: 'pointer',
+              transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: 4,
+                borderColor: 'rgba(212, 168, 83, 0.3)',
+              },
+            }}
+          >
+            <CardContent
+              sx={{
+                p: 2,
+                '&:last-child': { pb: 2 },
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+              }}
+            >
+              <Avatar
+                sx={{
+                  bgcolor: 'rgba(212, 168, 83, 0.1)',
+                  color: 'primary.main',
+                  width: 40,
+                  height: 40,
+                  fontSize: '1.25rem',
+                }}
+              >
+                {action.icon}
+              </Avatar>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {action.title}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {action.subtitle}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
+    </Box>
   );
 };
 

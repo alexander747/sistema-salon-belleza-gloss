@@ -46,6 +46,9 @@ export class RegistroServicioEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   notas: string;
 
+  @Column({ type: 'int', nullable: true })
+  registradoPorId: number;
+
   // ---- Relations ----
   @ManyToOne(() => SalonEntity)
   @JoinColumn({ name: 'salonId' })

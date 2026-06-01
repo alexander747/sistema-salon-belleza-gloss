@@ -2,12 +2,13 @@ import { injectable, inject } from 'tsyringe';
 import type { ICitaRepository } from '../../../domain/ports/ICitaRepository';
 import { CitaDTO } from '../../dtos/CitaDTO';
 import { validarTransicion } from '../../../domain/state-machine';
-import type { EstadoCita } from '../../../../../infrastructure/persistence/entities/CitaEntity';
+import { EstadoCita } from '../../../../../infrastructure/persistence/entities/CitaEntity';
 import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
 
 export interface CambiarEstadoCitaInput {
   id: number;
   estado: EstadoCita;
+  usuarioId?: number;
 }
 
 @injectable()
@@ -28,7 +29,15 @@ export class CambiarEstadoCitaUseCase {
       );
     }
 
-    const updated = await this.citaRepo.cambiarEstado(input.id, input.estado);
+    // Set auditor field based on target estado
+    const extraData: Partial<import('../../../../../infrastructure/persistence/entities/CitaEntity').CitaEntity> = {};
+    if (input.estado === EstadoCita.CONFIRMADA) {
+      extraData.confirmadoPorId = input.usuarioId;
+    } else if (input.estado === EstadoCita.CANCELADA) {
+      extraData.canceladoPorId = input.usuarioId;
+    }
+
+    const updated = await this.citaRepo.cambiarEstado(input.id, input.estado, extraData);
     return CitaDTO.fromEntity(updated!);
   }
 }

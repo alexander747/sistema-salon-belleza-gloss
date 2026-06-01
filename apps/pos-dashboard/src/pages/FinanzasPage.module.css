@@ -52,11 +52,7 @@
 }
 
 .summaryCard {
-  background: linear-gradient(
-    135deg,
-    rgba(30, 30, 40, 0.6),
-    rgba(22, 22, 30, 0.8)
-  );
+  background: var(--bg-elevated);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
@@ -273,11 +269,7 @@
 }
 
 .modalContent {
-  background: linear-gradient(
-    150deg,
-    rgba(22, 22, 30, 0.97),
-    rgba(14, 14, 20, 0.97)
-  );
+  background: var(--bg-surface);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--border);
@@ -589,11 +581,7 @@
 
 /* ── Reporte cards ── */
 .reporteCard {
-  background: linear-gradient(
-    135deg,
-    rgba(30, 30, 40, 0.6),
-    rgba(22, 22, 30, 0.8)
-  );
+  background: var(--bg-elevated);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
