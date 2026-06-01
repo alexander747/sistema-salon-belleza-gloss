@@ -8,3 +8,4 @@ mysql_data/
 *.tsbuildinfo
 .playwright-mcp/
 .tmp/
+tokengithub.txt
