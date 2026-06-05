@@ -22,7 +22,6 @@ export const createRegistroSchema = z.object({
   salonId: z.number().int().positive(),
   clienteId: z.number().int().positive('El clienteId es requerido'),
   usuarioId: z.number().int().positive('El usuarioId es requerido'),
-  serviciosIds: z.array(z.number().int().positive()).optional(),
   totalServicios: z.number().min(0, 'El total de servicios debe ser mayor o igual a 0').default(0),
   totalProductos: z.number().min(0, 'El total de productos debe ser mayor o igual a 0').default(0),
   propina: z.number().min(0).default(0),
@@ -32,6 +31,11 @@ export const createRegistroSchema = z.object({
   divisiones: z.array(divisionRegistroSchema).optional().default([]),
   notas: z.string().max(500).optional(),
   registradoPorId: z.number().int().optional(),
+  // Price adjustment fields (optional — backend calculates defaults)
+  precioAjustado: z.boolean().optional(),
+  porcentajeDescuento: z.number().min(0).max(100).optional().default(0),
+  valorOriginal: z.number().min(0).optional(),
+  valorFinal: z.number().min(0).optional(),
   productosVendidos: z.array(z.object({
     productoId: z.number().int().positive(),
     cantidad: z.number().int().positive(),

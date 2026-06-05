@@ -57,6 +57,21 @@ interface ClienteSimple {
   telefono?: string;
 }
 
+interface ProductoSimple {
+  id: number;
+  nombre: string;
+  marca?: string;
+  precioVenta: number;
+  cantidadStock: number;
+}
+
+interface ProductCartItem {
+  productoId: number;
+  nombre: string;
+  precioVenta: number;
+  cantidad: number;
+}
+
 /* ── Constants ── */
 
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -202,6 +217,7 @@ const AgendaPage: React.FC = () => {
   const [empleadas, setEmpleadas] = useState<EmpleadaSimple[]>([]);
   const [servicios, setServicios] = useState<ServicioSimple[]>([]);
   const [clientes, setClientes] = useState<ClienteSimple[]>([]);
+  const [productos, setProductos] = useState<ProductoSimple[]>([]);
   const [refDataLoading, setRefDataLoading] = useState(true);
 
   /* ── Calendar state ── */
@@ -235,12 +251,14 @@ const AgendaPage: React.FC = () => {
   const [completarForm, setCompletarForm] = useState({
     serviciosPrecios: {} as Record<number, number>,
     nuevosServiciosIds: [] as number[],
-    totalProductos: 0,
+    productosVendidos: [] as ProductCartItem[],
     propina: 0,
     metodoPago: 'EFECTIVO' as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA',
-    aplicarDescuento: false,
-    descuento: 0,
-    motivoDescuento: '',
+    descuento: 0,  // percentage 0–100
+    totalPersonalizado: null as number | null,
+    ajustarTotal: false,
+    notaAjuste: '',
+    montoRecibido: 0,
   });
   const [completando, setCompletando] = useState(false);
 
@@ -354,13 +372,15 @@ const AgendaPage: React.FC = () => {
       api.get(`/salones/${salonId}/empleadas`).catch(() => ({ data: [] })),
       api.get(`/salones/${salonId}/servicios`).catch(() => ({ data: [] })),
       api.get(`/salones/${salonId}/clientes`).catch(() => ({ data: [] })),
+      api.get(`/salones/${salonId}/productos?tipo=RETAIL`).catch(() => ({ data: [] })),
     ])
-      .then(([empRes, svcRes, cliRes]) => {
+      .then(([empRes, svcRes, cliRes, prodRes]) => {
         const normalize = <T,>(d: unknown): T[] =>
           Array.isArray(d) ? d : (d as { data?: T[] })?.data ?? [];
         setEmpleadas(normalize<EmpleadaSimple>(empRes.data));
         setServicios(normalize<ServicioSimple>(svcRes.data));
         setClientes(normalize<ClienteSimple>(cliRes.data));
+        setProductos(normalize<ProductoSimple>(prodRes.data));
       })
       .finally(() => setRefDataLoading(false));
   }, [salonId]);
@@ -494,12 +514,14 @@ const AgendaPage: React.FC = () => {
     setCompletarForm({
       serviciosPrecios: precios,
       nuevosServiciosIds: [],
-      totalProductos: 0,
+      productosVendidos: [],
       propina: 0,
       metodoPago: 'EFECTIVO',
-      aplicarDescuento: false,
       descuento: 0,
-      motivoDescuento: '',
+      totalPersonalizado: null,
+      ajustarTotal: false,
+      notaAjuste: '',
+      montoRecibido: 0,
     });
     setShowCompletar(true);
   };
@@ -513,21 +535,34 @@ const AgendaPage: React.FC = () => {
         id: s.id,
         precio: completarForm.serviciosPrecios[s.id] ?? s.precio,
       }));
-      let totalServicios = serviciosConPrecios.reduce((sum, s) => sum + s.precio, 0);
+      const totalServicios = serviciosConPrecios.reduce((sum, s) => sum + s.precio, 0);
 
-      // Apply discount if enabled
-      const descuento = completarForm.aplicarDescuento ? (completarForm.descuento || 0) : 0;
-      const motivoDescuento = completarForm.motivoDescuento.trim();
-      if (descuento > 0) {
-        totalServicios = Math.max(0, totalServicios - descuento);
-      }
+      // Extra services added in completar
+      const totalExtraServicios = servicios
+        .filter(s => completarForm.nuevosServiciosIds.includes(s.id))
+        .reduce((sum, s) => sum + (s.precioBase ?? 0), 0);
 
-      const total = totalServicios + completarForm.totalProductos + completarForm.propina;
+      const totalServiciosFinal = totalServicios + totalExtraServicios;
+      const totalProductos = completarForm.productosVendidos.reduce(
+        (sum, p) => sum + p.precioVenta * p.cantidad,
+        0,
+      );
 
-      // Build notas with discount info if applied
+      // Percentage discount
+      const descuentoPct = completarForm.descuento || 0;
+      const descuentoMonto = (totalServiciosFinal + totalProductos) * (descuentoPct / 100);
+      const calculatedTotal = totalServiciosFinal + totalProductos + completarForm.propina - descuentoMonto;
+      const finalTotal = completarForm.totalPersonalizado ?? calculatedTotal;
+      const hasAdjustment = descuentoPct > 0 || completarForm.totalPersonalizado !== null;
+
+      // Build notas with adjustment info
       let notas = `Cita completada: ${selectedCita.servicios.map(s => s.nombre).join(', ')}`;
-      if (descuento > 0 && motivoDescuento) {
-        notas += ` | Descuento aplicado: $${descuento} — Motivo: ${motivoDescuento}`;
+      if (hasAdjustment && completarForm.notaAjuste.trim()) {
+        const ajusteParts: string[] = [];
+        if (descuentoPct > 0) ajusteParts.push(`descuento ${descuentoPct}%`);
+        if (completarForm.totalPersonalizado !== null) ajusteParts.push(`total $${completarForm.totalPersonalizado}`);
+        const prefix = `[AJUSTE: ${ajusteParts.join(' | ')}] Razón: ${completarForm.notaAjuste.trim()}`;
+        notas = `${prefix}\n${notas}`;
       }
 
       // 1. Create registro financiero
@@ -535,13 +570,23 @@ const AgendaPage: React.FC = () => {
         salonId,
         clienteId: selectedCita.cliente.id,
         usuarioId: selectedCita.empleada.id,
-        totalServicios,
-        totalProductos: completarForm.totalProductos,
+        totalServicios: totalServiciosFinal,
+        totalProductos,
         propina: completarForm.propina,
-        pagos: [{ monto: total, metodoPago: completarForm.metodoPago }],
+        montoTotal: finalTotal,
+        pagos: [{ monto: finalTotal, metodoPago: completarForm.metodoPago }],
         serviciosIds: [...selectedCita.servicios.map(s => s.id), ...completarForm.nuevosServiciosIds],
         notas,
         registradoPorId: user?.id,
+        productosVendidos: completarForm.productosVendidos.map(p => ({
+          productoId: p.productoId,
+          cantidad: p.cantidad,
+        })),
+        // Price adjustment fields
+        porcentajeDescuento: descuentoPct,
+        precioAjustado: hasAdjustment,
+        valorOriginal: totalServiciosFinal + totalProductos + completarForm.propina,
+        valorFinal: finalTotal,
       });
 
       // 2. Mark cita as completed
@@ -920,6 +965,7 @@ const AgendaPage: React.FC = () => {
           <RenderCompletarModal
             cita={selectedCita}
             servicios={servicios}
+            productos={productos}
             completando={completando}
             form={completarForm}
             onChangeForm={handleCompletarFormChange}
@@ -1897,16 +1943,19 @@ const ActionBtn: React.FC<ActionBtnProps> = ({
 interface CompletarModalProps {
   cita: Cita;
   servicios: ServicioSimple[];
+  productos: ProductoSimple[];
   completando: boolean;
   form: {
     serviciosPrecios: Record<number, number>;
     nuevosServiciosIds: number[];
-    totalProductos: number;
+    productosVendidos: ProductCartItem[];
     propina: number;
     metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
-    aplicarDescuento: boolean;
-    descuento: number;
-    motivoDescuento: string;
+    descuento: number;  // percentage 0–100
+    totalPersonalizado: number | null;
+    ajustarTotal: boolean;
+    notaAjuste: string;
+    montoRecibido: number;
   };
   onChangeForm: (patch: Partial<CompletarModalProps['form']>) => void;
   onClose: () => void;
@@ -1918,6 +1967,7 @@ interface CompletarModalProps {
 const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   cita,
   servicios,
+  productos,
   completando,
   form,
   onChangeForm,
@@ -1926,6 +1976,62 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   onToggleServicio,
   onUpdatePrecio,
 }) => {
+  const [productSearch, setProductSearch] = useState('');
+
+  const filteredProductos = useMemo(() => {
+    let list = productos;
+    if (productSearch.trim()) {
+      const q = productSearch.toLowerCase();
+      list = list.filter((p) => p.nombre.toLowerCase().includes(q));
+    }
+    return list;
+  }, [productos, productSearch]);
+
+  const addProductToCart = (prod: ProductoSimple) => {
+    if (prod.cantidadStock <= 0) return;
+    const prev = form.productosVendidos;
+    const existing = prev.find((item) => item.productoId === prod.id);
+    if (existing) {
+      onChangeForm({
+        productosVendidos: prev.map((item) =>
+          item.productoId === prod.id
+            ? { ...item, cantidad: Math.min(item.cantidad + 1, prod.cantidadStock) }
+            : item,
+        ),
+      });
+    } else {
+      onChangeForm({
+        productosVendidos: [
+          ...prev,
+          { productoId: prod.id, nombre: prod.nombre, precioVenta: prod.precioVenta, cantidad: 1 },
+        ],
+      });
+    }
+  };
+
+  const updateProductQty = (productoId: number, delta: number) => {
+    onChangeForm({
+      productosVendidos: form.productosVendidos
+        .map((item) =>
+          item.productoId === productoId
+            ? { ...item, cantidad: Math.max(0, item.cantidad + delta) }
+            : item,
+        )
+        .filter((item) => item.cantidad > 0),
+    });
+  };
+
+  const removeProductFromCart = (productoId: number) => {
+    onChangeForm({
+      productosVendidos: form.productosVendidos.filter((item) => item.productoId !== productoId),
+    });
+  };
+
+  const totalProductosCalc = useMemo(
+    () => form.productosVendidos.reduce((sum, p) => sum + p.precioVenta * p.cantidad, 0),
+    [form.productosVendidos],
+  );
+
   const addedServicios = useMemo(
     () => servicios.filter(s => form.nuevosServiciosIds.includes(s.id)),
     [servicios, form.nuevosServiciosIds],
@@ -1950,9 +2056,13 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
     [addedServicios],
   );
 
-  const descuentoAplicado = form.aplicarDescuento ? (form.descuento || 0) : 0;
-  const totalServiciosFinal = totalOriginalServicios + totalExtraServicios - descuentoAplicado;
-  const totalFinal = totalServiciosFinal + form.totalProductos + form.propina;
+  const descuentoPct = form.descuento || 0;
+  const subtotalBeforeDiscount = totalOriginalServicios + totalExtraServicios + totalProductosCalc;
+  const descuentoMonto = subtotalBeforeDiscount * (descuentoPct / 100);
+  const calculatedTotal = subtotalBeforeDiscount + form.propina - descuentoMonto;
+  const totalFinal = form.totalPersonalizado ?? calculatedTotal;
+  const hasAdjustment = descuentoPct > 0 || form.totalPersonalizado !== null;
+  const ajusteNoteRequired = hasAdjustment && form.notaAjuste.trim().length === 0;
 
   const fechaStr = new Date(cita.fecha + 'T' + cita.horaInicio).toLocaleDateString('es-CL', {
     day: 'numeric',
@@ -1999,521 +2109,484 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
         </div>
 
         <div className={styles.modalBody}>
-          {/* ── Resumen ── */}
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Cliente</span>
-            <span className={styles.infoValue}>{cita.cliente.nombre}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Empleada</span>
-            <span className={styles.infoValue}>{cita.empleada.nombre}</span>
-          </div>
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Fecha</span>
-            <span className={styles.infoValue}>{fechaStr}</span>
-          </div>
+          <div className={styles.completarGrid}>
+            {/* ── LEFT COLUMN ── */}
+            <div>
+              {/* ── Header Card ── */}
+              <div className={styles.headerCard}>
+                <div className={styles.clientName}>{cita.cliente.nombre}</div>
+                <div className={styles.headerMeta}>
+                  <span>{cita.empleada.nombre}</span>
+                  <span>{fechaStr}</span>
+                  <span>#{cita.id}</span>
+                </div>
+              </div>
 
-          {/* ── Servicios ── */}
-          <div style={{ marginTop: '1rem', marginBottom: '0.75rem' }}>
-            <div
-              style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                color: 'var(--text-dim)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                marginBottom: '0.35rem',
-              }}
-            >
-              Servicios
-            </div>
-            <div
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.5rem',
-              }}
-            >
-              {/* Original services */}
-              {cita.servicios.map(s => {
-                const currentPrice = form.serviciosPrecios[s.id] ?? s.precio;
-                const isRemoved = currentPrice === 0 && form.serviciosPrecios[s.id] === 0;
-                return (
-                  <div
-                    key={s.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.25rem 0',
-                      opacity: isRemoved ? 0.5 : 1,
-                      textDecoration: isRemoved ? 'line-through' : 'none',
-                    }}
-                  >
-                    <span
-                      style={{
-                        flex: 1,
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.8125rem',
-                        color: 'var(--text-primary)',
+              {/* ── Servicios ── */}
+              <div style={{ marginBottom: '1rem' }}>
+                <div className={styles.sectionTitle}>Servicios</div>
+                <div>
+                  {/* Original services */}
+                  {cita.servicios.map(s => {
+                    const currentPrice = form.serviciosPrecios[s.id] ?? s.precio;
+                    const isRemoved = currentPrice === 0 && form.serviciosPrecios[s.id] === 0;
+                    return (
+                      <div
+                        key={s.id}
+                        className={styles.serviceCard}
+                        style={{
+                          opacity: isRemoved ? 0.5 : 1,
+                          textDecoration: isRemoved ? 'line-through' : 'none',
+                        }}
+                      >
+                        <span className={styles.serviceName}>{s.nombre}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={currentPrice}
+                          onChange={(e) => onUpdatePrecio(s.id, Math.max(0, Number(e.target.value)))}
+                          className={`${styles.noSpinner} ${styles.servicePriceInput}`}
+                        />
+                        <button
+                          onClick={() => onToggleServicio(s.id)}
+                          className={styles.serviceRemoveBtn}
+                          aria-label="Quitar servicio"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {/* Added services */}
+                  {addedServicios.map(s => (
+                    <div key={s.id} className={`${styles.serviceCard} ${styles.serviceCardAdded}`}>
+                      <span className={`${styles.serviceName} ${styles.serviceNameAdded}`}>+ {s.nombre}</span>
+                      <span
+                        style={{
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.75rem',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        {formatCurrency(s.precioBase ?? 0)}
+                      </span>
+                      <button
+                        onClick={() => onToggleServicio(s.id)}
+                        className={styles.serviceRemoveBtn}
+                        aria-label="Quitar servicio extra"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {/* Add service dropdown */}
+                  {availableExtraServicios.length > 0 ? (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const id = Number(e.target.value);
+                        if (id > 0) {
+                          onChangeForm({ nuevosServiciosIds: [...form.nuevosServiciosIds, id] });
+                        }
                       }}
+                      className={styles.addServiceSelect}
                     >
-                      {s.nombre}
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={currentPrice}
-                      onChange={(e) => onUpdatePrecio(s.id, Math.max(0, Number(e.target.value)))}
+                      <option value="">+ Agregar servicio</option>
+                      {availableExtraServicios.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.nombre} — {formatCurrency(s.precioBase ?? 0)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : cita.servicios.length > 0 ? (
+                    <div
                       style={{
-                        width: '80px',
-                        height: '28px',
-                        padding: '0 0.4rem',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg-base)',
-                        color: 'var(--text-primary)',
                         fontFamily: "'DM Sans', sans-serif",
                         fontSize: '0.75rem',
-                        textAlign: 'right',
-                        outline: 'none',
-                      }}
-                    />
-                    <button
-                      onClick={() => onToggleServicio(s.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
                         color: 'var(--text-dim)',
-                        cursor: 'pointer',
-                        padding: '0 0.25rem',
-                        fontSize: '0.875rem',
-                        lineHeight: 1,
+                        padding: '0.25rem 0',
                       }}
-                      aria-label="Quitar servicio"
                     >
-                      ✕
-                    </button>
-                  </div>
-                );
-              })}
-              {/* Added services */}
-              {addedServicios.map(s => (
-                <div
-                  key={s.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.25rem 0',
-                  }}
-                >
-                  <span
-                    style={{
-                      flex: 1,
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.8125rem',
-                      color: 'var(--accent)',
-                    }}
-                  >
-                    + {s.nombre}
-                  </span>
-                  <span
+                      No hay más servicios disponibles
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* ── Productos ── */}
+              <div>
+                <div className={styles.sectionTitle}>Productos</div>
+                <input
+                  type="text"
+                  placeholder="Buscar producto…"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  className={styles.productSearchInput}
+                />
+                {filteredProductos.length === 0 ? (
+                  <div
                     style={{
                       fontFamily: "'DM Sans', sans-serif",
                       fontSize: '0.75rem',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    {formatCurrency(s.precioBase ?? 0)}
-                  </span>
-                  <button
-                    onClick={() => onToggleServicio(s.id)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
                       color: 'var(--text-dim)',
-                      cursor: 'pointer',
-                      padding: '0 0.25rem',
-                      fontSize: '0.875rem',
-                      lineHeight: 1,
+                      padding: '0.35rem 0',
                     }}
-                    aria-label="Quitar servicio extra"
                   >
-                    ✕
-                  </button>
+                    {productSearch
+                      ? 'No hay productos que coincidan'
+                      : 'No hay productos disponibles'}
+                  </div>
+                ) : (
+                  <div className={styles.productGrid}>
+                    {filteredProductos.map((prod) => {
+                      const outOfStock = prod.cantidadStock <= 0;
+                      const inCart = form.productosVendidos.some((p) => p.productoId === prod.id);
+                      return (
+                        <div
+                          key={prod.id}
+                          onClick={() => !outOfStock && addProductToCart(prod)}
+                          className={`${styles.productCard} ${outOfStock ? styles.productCardOutOfStock : ''} ${inCart ? styles.productCardInCart : ''}`}
+                        >
+                          <div className={styles.productCardName}>{prod.nombre}</div>
+                          <div className={styles.productCardPrice}>{formatCurrency(prod.precioVenta)}</div>
+                          <div className={`${styles.productCardStock} ${outOfStock ? styles.productCardStockOut : ''}`}>
+                            {outOfStock ? 'Sin stock' : `${prod.cantidadStock} en stock`}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Selected products in cart */}
+                {form.productosVendidos.length > 0 && (
+                  <div className={styles.selectedProductsSection}>
+                    <div className={styles.sectionTitle}>
+                      En carrito ({form.productosVendidos.length})
+                    </div>
+                    {form.productosVendidos.map((item) => (
+                      <div key={item.productoId} className={styles.selectedProductItem}>
+                        <span className={styles.selectedProductName}>{item.nombre}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <button
+                            onClick={() => updateProductQty(item.productoId, -1)}
+                            className={styles.qtyBtn}
+                          >
+                            −
+                          </button>
+                          <span className={styles.qtyValue}>{item.cantidad}</span>
+                          <button
+                            onClick={() => updateProductQty(item.productoId, 1)}
+                            className={styles.qtyBtn}
+                          >
+                            +
+                          </button>
+                        </div>
+                        <span className={styles.selectedProductTotal}>
+                          {formatCurrency(item.precioVenta * item.cantidad)}
+                        </span>
+                        <button
+                          onClick={() => removeProductFromCart(item.productoId)}
+                          className={styles.serviceRemoveBtn}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <div
+                      className={styles.receiptRow}
+                      style={{ padding: '0.25rem 0 0', fontWeight: 600 }}
+                    >
+                      <span className={styles.receiptLabel}>Total productos</span>
+                      <span className={styles.selectedProductTotal}>
+                        {formatCurrency(totalProductosCalc)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── RIGHT COLUMN ── */}
+            <div>
+              <div className={styles.receiptSection}>
+                {/* Totals */}
+                <div className={styles.receiptRow}>
+                  <span className={styles.receiptLabel}>Servicios</span>
+                  <span className={styles.receiptValue}>
+                    {formatCurrency(totalOriginalServicios + totalExtraServicios)}
+                  </span>
                 </div>
-              ))}
-              {/* Add service dropdown */}
-              {availableExtraServicios.length > 0 && (
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const id = Number(e.target.value);
-                    if (id > 0) {
-                      onChangeForm({ nuevosServiciosIds: [...form.nuevosServiciosIds, id] });
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    height: '30px',
-                    marginTop: '0.35rem',
-                    padding: '0 0.5rem',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg-base)',
-                    color: 'var(--accent)',
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.75rem',
-                    cursor: 'pointer',
-                    outline: 'none',
-                    appearance: 'none',
-                  }}
-                >
-                  <option value="">+ Agregar servicio...</option>
-                  {availableExtraServicios.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre} — {formatCurrency(s.precioBase ?? 0)}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {availableExtraServicios.length === 0 && cita.servicios.length > 0 && (
+                {form.productosVendidos.length > 0 && (
+                  <div className={styles.receiptRow}>
+                    <span className={styles.receiptLabel}>Productos</span>
+                    <span className={styles.receiptValue}>{formatCurrency(totalProductosCalc)}</span>
+                  </div>
+                )}
+                <div className={styles.receiptRow}>
+                  <span className={styles.receiptLabel}>Subtotal</span>
+                  <span className={styles.receiptValue}>{formatCurrency(subtotalBeforeDiscount)}</span>
+                </div>
+                <hr className={styles.receiptDivider} />
+
+                {/* Discount */}
+                <div className={styles.receiptRow}>
+                  <span className={styles.receiptLabel}>Descuento (%)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={form.descuento}
+                      onChange={(e) =>
+                        onChangeForm({
+                          descuento: Math.min(100, Math.max(0, Number(e.target.value))),
+                        })
+                      }
+                      className={`${styles.noSpinner} ${styles.propinaInput}`}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>%</span>
+                  </div>
+                </div>
+                {descuentoMonto > 0 && (
+                  <div className={styles.receiptRow}>
+                    <span
+                      style={{
+                        color: 'var(--success)',
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                      }}
+                    >
+                      Descuento
+                    </span>
+                    <span className={styles.receiptDiscountValue}>
+                      -{formatCurrency(descuentoMonto)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Ajustar total toggle */}
                 <div
                   style={{
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.75rem',
-                    color: 'var(--text-dim)',
-                    padding: '0.25rem 0',
-                  }}
-                >
-                  No hay más servicios disponibles
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Totals + Productos / Propina ── */}
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.5rem 0.75rem',
-              marginBottom: '0.75rem',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.3rem 0',
-                borderBottom: '1px solid var(--border)',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.8125rem',
-              }}
-            >
-              <span style={{ color: 'var(--text-secondary)' }}>Total servicios</span>
-              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                {formatCurrency(totalServiciosFinal + descuentoAplicado)}
-              </span>
-            </div>
-
-            {/* ── Discount toggle ── */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.3rem 0',
-                borderBottom: '1px solid var(--border)',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.8125rem',
-              }}
-            >
-              <span style={{ color: 'var(--text-secondary)' }}>Aplicar descuento</span>
-              <button
-                onClick={() => onChangeForm({
-                  aplicarDescuento: !form.aplicarDescuento,
-                  descuento: form.aplicarDescuento ? 0 : form.descuento,
-                })}
-                style={{
-                  width: '44px',
-                  height: '24px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  background: form.aplicarDescuento ? 'var(--accent)' : 'var(--border)',
-                  transition: 'background 0.2s',
-                }}
-                aria-label="Toggle descuento"
-              >
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: '2px',
-                    left: form.aplicarDescuento ? '22px' : '2px',
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    background: 'var(--bg-root)',
-                    transition: 'left 0.2s',
-                  }}
-                />
-              </button>
-            </div>
-
-            {form.aplicarDescuento && (
-              <>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
                     padding: '0.3rem 0',
-                    borderBottom: '1px solid var(--border)',
                     fontFamily: "'DM Sans', sans-serif",
                     fontSize: '0.8125rem',
                   }}
                 >
-                  <span style={{ color: 'var(--text-secondary)' }}>Monto descuento</span>
+                  <label className={styles.toggleLabel}>
+                    <input
+                      type="checkbox"
+                      checked={form.ajustarTotal}
+                      onChange={(e) => {
+                        onChangeForm({
+                          ajustarTotal: e.target.checked,
+                          totalPersonalizado: e.target.checked ? form.totalPersonalizado : null,
+                        });
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    <span
+                      style={{
+                        position: 'relative',
+                        width: '36px',
+                        height: '20px',
+                        background: form.ajustarTotal ? 'var(--accent)' : 'var(--border)',
+                        borderRadius: '10px',
+                        transition: 'background 0.2s',
+                        flexShrink: 0,
+                        display: 'inline-block',
+                      }}
+                    >
+                      <span
+                        style={{
+                          content: '""',
+                          position: 'absolute',
+                          top: '2px',
+                          left: form.ajustarTotal ? '18px' : '2px',
+                          width: '16px',
+                          height: '16px',
+                          background: 'var(--bg-root)',
+                          borderRadius: '50%',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </span>
+                    <span>Ajustar valor total</span>
+                  </label>
+                  {form.ajustarTotal && (
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.totalPersonalizado !== null ? form.totalPersonalizado : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        onChangeForm({ totalPersonalizado: val ? Number(val) : null });
+                      }}
+                      placeholder={formatCurrency(calculatedTotal)}
+                      className={`${styles.noSpinner} ${styles.amountInput}`}
+                      style={{
+                        width: '100%',
+                        marginTop: '0.3rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Custom total warning */}
+                {form.totalPersonalizado !== null &&
+                  form.totalPersonalizado !== calculatedTotal && (
+                    <div className={styles.receiptRow}>
+                      <span
+                        style={{
+                          color: 'var(--warning)',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.8125rem',
+                        }}
+                      >
+                        Ajuste
+                      </span>
+                      <span className={styles.receiptAdjustmentWarning}>
+                        {form.totalPersonalizado > calculatedTotal ? '+' : '-'}
+                        {formatCurrency(Math.abs(form.totalPersonalizado - calculatedTotal))}
+                      </span>
+                    </div>
+                  )}
+
+                <hr className={styles.receiptDivider} />
+
+                {/* Final Total */}
+                <div className={styles.receiptRow}>
+                  <span className={styles.receiptTotalLabel}>Total</span>
+                  <span
+                    className={`${styles.receiptTotalValue} ${form.totalPersonalizado !== null ? styles.receiptCustomTotalValue : ''}`}
+                  >
+                    {formatCurrency(totalFinal)}
+                  </span>
+                </div>
+
+                {/* Propina */}
+                <div className={styles.propinaRow}>
+                  <span className={styles.receiptLabel}>Propina</span>
                   <input
                     type="number"
                     min="0"
-                    max={totalServiciosFinal + descuentoAplicado}
-                    value={form.descuento}
-                    onChange={(e) => onChangeForm({ descuento: Math.max(0, Number(e.target.value)) })}
+                    value={form.propina}
+                    onChange={(e) => onChangeForm({ propina: Math.max(0, Number(e.target.value)) })}
+                    className={`${styles.noSpinner} ${styles.propinaInput}`}
+                  />
+                </div>
+
+                <hr className={styles.receiptDivider} />
+
+                {/* Required adjustment note */}
+                {hasAdjustment && (
+                  <div className={styles.adjustNoteSection}>
+                    <span
+                      className={`${styles.adjustNoteLabel} ${ajusteNoteRequired ? styles.adjustNoteLabelError : styles.adjustNoteLabelOk}`}
+                    >
+                      ¿Por qué se ajustó el precio? *
+                    </span>
+                    <textarea
+                      value={form.notaAjuste}
+                      onChange={(e) => onChangeForm({ notaAjuste: e.target.value })}
+                      placeholder="Indicá el motivo del ajuste..."
+                      rows={2}
+                      className={`${styles.adjustNoteTextarea} ${ajusteNoteRequired ? styles.adjustNoteTextareaError : styles.adjustNoteTextareaOk}`}
+                    />
+                    {ajusteNoteRequired && (
+                      <span className={styles.adjustNoteError}>
+                        Este campo es obligatorio cuando hay descuento o ajuste de total.
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Payment Method */}
+                <div className={styles.sectionTitle}>Método de pago</div>
+                <div className={styles.paymentBtnGroup}>
+                  {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => onChangeForm({ metodoPago: m })}
+                      className={`${styles.paymentBtn} ${form.metodoPago === m ? styles.paymentBtnActive : ''}`}
+                    >
+                      {m === 'EFECTIVO'
+                        ? 'Efectivo'
+                        : m === 'TARJETA'
+                          ? 'Tarjeta'
+                          : 'Transferencia'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Amount received (only for cash) */}
+                {form.metodoPago === 'EFECTIVO' && (
+                  <>
+                    <div className={styles.amountRow}>
+                      <span className={styles.receiptLabel}>Monto recibido</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={form.montoRecibido || ''}
+                        onChange={(e) =>
+                          onChangeForm({ montoRecibido: Math.max(0, Number(e.target.value)) })
+                        }
+                        placeholder={formatCurrency(totalFinal)}
+                        className={`${styles.noSpinner} ${styles.amountInput}`}
+                      />
+                    </div>
+                    {form.montoRecibido > totalFinal && (
+                      <div className={styles.cambioDisplay}>
+                        <span>Vuelto</span>
+                        <span>{formatCurrency(form.montoRecibido - totalFinal)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Action Buttons */}
+                <div className={styles.actionButtons}>
+                  <button
+                    onClick={onClose}
                     style={{
-                      width: '100px',
-                      height: '28px',
-                      padding: '0 0.4rem',
+                      flex: 1,
+                      height: '38px',
                       borderRadius: 'var(--radius-sm)',
                       border: '1px solid var(--border)',
-                      background: 'var(--bg-base)',
-                      color: 'var(--text-primary)',
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
                       fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.75rem',
-                      textAlign: 'right',
-                      outline: 'none',
+                      fontSize: '0.8125rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
                     }}
-                  />
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.25rem',
-                    padding: '0.3rem 0',
-                    borderBottom: '1px solid var(--border)',
-                  }}
-                >
-                  <span style={{
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.7rem',
-                    fontWeight: 600,
-                    color: 'var(--text-dim)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                  }}>
-                    Motivo del descuento *
-                  </span>
-                  <textarea
-                    value={form.motivoDescuento}
-                    onChange={(e) => onChangeForm({ motivoDescuento: e.target.value })}
-                    placeholder="Indica el motivo del descuento (mín. 10 caracteres)"
-                    rows={2}
+                    disabled={completando}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={onConfirmar}
+                    disabled={ajusteNoteRequired || completando}
                     style={{
-                      width: '100%',
-                      padding: '0.4rem',
+                      flex: 2,
+                      height: '38px',
                       borderRadius: 'var(--radius-sm)',
-                      border: form.motivoDescuento.trim().length > 0 && form.motivoDescuento.trim().length < 10
-                        ? '1px solid var(--danger)'
-                        : '1px solid var(--border)',
-                      background: 'var(--bg-base)',
-                      color: 'var(--text-primary)',
+                      border: 'none',
+                      background: ajusteNoteRequired ? 'var(--border)' : 'var(--accent)',
+                      color: ajusteNoteRequired ? 'var(--text-dim)' : 'var(--bg-root)',
                       fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.75rem',
-                      outline: 'none',
-                      resize: 'vertical',
-                      boxSizing: 'border-box',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      cursor: ajusteNoteRequired ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
                     }}
-                  />
-                  {form.motivoDescuento.trim().length > 0 && form.motivoDescuento.trim().length < 10 && (
-                    <span style={{
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.65rem',
-                      color: 'var(--danger)',
-                    }}>
-                      Mínimo 10 caracteres
-                    </span>
-                  )}
+                  >
+                    {completando ? 'Registrando…' : 'Confirmar y Registrar'}
+                  </button>
                 </div>
-              </>
-            )}
-
-            {/* ── Discounted total ── */}
-            {form.aplicarDescuento && descuentoAplicado > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '0.3rem 0',
-                  borderBottom: '1px solid var(--border)',
-                  fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '0.8125rem',
-                }}
-              >
-                <span style={{ color: 'var(--success)', fontWeight: 600 }}>Total con descuento</span>
-                <span style={{ color: 'var(--success)', fontWeight: 700 }}>
-                  {formatCurrency(totalServiciosFinal)}
-                </span>
               </div>
-            )}
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.3rem 0',
-                borderBottom: '1px solid var(--border)',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.8125rem',
-              }}
-            >
-              <span style={{ color: 'var(--text-secondary)' }}>Productos (retail)</span>
-              <input
-                type="number"
-                min="0"
-                value={form.totalProductos}
-                onChange={(e) => onChangeForm({ totalProductos: Math.max(0, Number(e.target.value)) })}
-                style={{
-                  width: '100px',
-                  height: '28px',
-                  padding: '0 0.4rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-primary)',
-                  fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '0.75rem',
-                  textAlign: 'right',
-                  outline: 'none',
-                }}
-              />
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.3rem 0',
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.8125rem',
-              }}
-            >
-              <span style={{ color: 'var(--text-secondary)' }}>Propina</span>
-              <input
-                type="number"
-                min="0"
-                value={form.propina}
-                onChange={(e) => onChangeForm({ propina: Math.max(0, Number(e.target.value)) })}
-                style={{
-                  width: '100px',
-                  height: '28px',
-                  padding: '0 0.4rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-primary)',
-                  fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '0.75rem',
-                  textAlign: 'right',
-                  outline: 'none',
-                }}
-              />
             </div>
           </div>
-
-          {/* ── Pago ── */}
-          <div>
-            <div
-              style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                color: 'var(--text-dim)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                marginBottom: '0.35rem',
-              }}
-            >
-              Pago
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-              }}
-            >
-              <select
-                value={form.metodoPago}
-                onChange={(e) => onChangeForm({ metodoPago: e.target.value as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' })}
-                style={{
-                  flex: 1,
-                  height: '36px',
-                  padding: '0 0.6rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-primary)',
-                  fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '0.8125rem',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  appearance: 'none',
-                }}
-              >
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="TARJETA">Tarjeta</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
-              </select>
-              <span
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Monto: {formatCurrency(totalFinal)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.modalFooter}>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={completando}>
-            Cancelar
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            loading={completando}
-            onClick={onConfirmar}
-            disabled={
-              form.aplicarDescuento &&
-              (form.descuento || 0) > 0 &&
-              form.motivoDescuento.trim().length < 10
-            }
-          >
-            Confirmar y Registrar
-          </Button>
         </div>
       </motion.div>
     </motion.div>

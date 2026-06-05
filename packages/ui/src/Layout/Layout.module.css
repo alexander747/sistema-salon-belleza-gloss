@@ -8,7 +8,8 @@
 .sidebar {
   width: 240px;
   min-width: 240px;
-  background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-root) 100%);
+  background: linear-gradient(180deg, rgba(14,14,20,0.95) 0%, rgba(7,7,9,0.98) 100%);
+  backdrop-filter: blur(24px) saturate(180%);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -18,6 +19,11 @@
   left: 0;
   height: 100vh;
   z-index: 100;
+  transition: background 0.3s var(--ease-out);
+}
+
+[data-theme="light"] .sidebar {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(245,243,240,0.98) 100%);
 }
 
 .sidebarHeader {
@@ -132,10 +138,15 @@
   padding: 1rem 2rem;
   border-bottom: 1px solid var(--border);
   background: rgba(14, 14, 20, 0.8);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(24px) saturate(180%);
   position: sticky;
   top: 0;
   z-index: 50;
+  transition: background 0.3s var(--ease-out);
+}
+
+[data-theme="light"] .topBar {
+  background: rgba(255,255,255,0.85);
 }
 
 .topBarTitle {
@@ -189,3 +200,25 @@
 .delay3 { animation-delay: 150ms; }
 .delay4 { animation-delay: 200ms; }
 .delay5 { animation-delay: 250ms; }
+
+/* Theme Toggle */
+.themeToggle {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 200ms var(--ease-out);
+}
+
+.themeToggle:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--border-glow);
+}

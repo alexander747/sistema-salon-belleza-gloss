@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import styles from './Layout.module.css';
@@ -17,6 +17,18 @@ export interface LayoutProps {
   title: string;
 }
 
+const THEME_KEY = 'superadmin-theme';
+
+function getInitialTheme(): 'dark' | 'light' {
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored === 'light' || stored === 'dark') return stored;
+  return 'dark';
+}
+
+function applyTheme(theme: 'dark' | 'light') {
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
 export const Layout: React.FC<LayoutProps> = ({
   children,
   sidebarItems,
@@ -25,13 +37,26 @@ export const Layout: React.FC<LayoutProps> = ({
   title,
 }) => {
   const location = useLocation();
+  const [theme, setTheme] = useState<'dark' | 'light'>(getInitialTheme);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem(THEME_KEY, next);
+      return next;
+    });
+  };
 
   return (
     <div className={styles.layout}>
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
           <span className={styles.sidebarLogo}>
-            <span className={styles.sidebarLogoAccent}>POS</span>·Final
+            <span className={styles.sidebarLogoAccent}>Sistema</span>Pro
           </span>
         </div>
         <div className={styles.sidebarDivider} />
@@ -40,11 +65,11 @@ export const Layout: React.FC<LayoutProps> = ({
             const isActive = location.pathname === item.href;
             return (
               <motion.div
+                key={item.href}
                 whileHover={{ x: 3 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
                 <Link
-                  key={item.href}
                   to={item.href}
                   className={`${styles.sidebarLink} ${isActive ? styles.sidebarLinkActive : ''}`}
                 >
@@ -65,12 +90,22 @@ export const Layout: React.FC<LayoutProps> = ({
       <div className={styles.main}>
         <header className={styles.topBar}>
           <h1 className={styles.topBarTitle}>{title}</h1>
-          {userName && (
-            <div className={styles.topBarUser}>
-              <span className={styles.topBarUserDot} />
-              {userName}
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button
+              className={styles.themeToggle}
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+              aria-label={theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            {userName && (
+              <div className={styles.topBarUser}>
+                <span className={styles.topBarUserDot} />
+                {userName}
+              </div>
+            )}
+          </div>
         </header>
         <motion.main
           className={styles.content}

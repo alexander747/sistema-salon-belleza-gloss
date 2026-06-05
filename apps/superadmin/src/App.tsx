@@ -7,6 +7,7 @@ import SalonListPage from './pages/SalonListPage.js';
 import CreateSalonPage from './pages/CreateSalonPage.js';
 import EditSalonPage from './pages/EditSalonPage.js';
 import SalonDetailPage from './pages/SalonDetailPage.js';
+import PlanesPage from './pages/PlanesPage.js';
 import ProtectedRoute from './components/ProtectedRoute.js';
 
 const AnimatedRoutes: React.FC = () => {
@@ -29,6 +30,7 @@ const AnimatedRoutes: React.FC = () => {
             <Route path="/salones/:id/editar" element={<EditSalonPage />} />
             <Route path="/salones/:id" element={<SalonDetailPage />} />
             <Route path="/salones" element={<SalonListPage />} />
+            <Route path="/planes" element={<PlanesPage />} />
           </Route>
         </Routes>
       </motion.div>

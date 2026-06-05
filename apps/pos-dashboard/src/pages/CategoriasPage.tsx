@@ -186,10 +186,6 @@ const CategoriasPage: React.FC = () => {
       const svcs = Array.isArray(svcRes.data) ? svcRes.data : svcRes.data?.data ?? [];
       const prods = Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.data ?? [];
 
-      console.log('[DEBUG CategoriasPage] cats:', cats.length, cats);
-      console.log('[DEBUG CategoriasPage] svcs:', svcs.length);
-      console.log('[DEBUG CategoriasPage] prods:', prods.length);
-
       setCategorias(cats);
 
       // Compute counts per category
@@ -217,9 +213,7 @@ const CategoriasPage: React.FC = () => {
   }, [salonId]);
 
   useEffect(() => {
-    console.log('[DEBUG CategoriasPage EFFECT] authLoading:', authLoading, 'salonId:', salonId, 'user:', user);
     if (!authLoading && salonId != null) {
-      console.log('[DEBUG CategoriasPage] Calling fetchData');
       fetchData();
     }
   }, [authLoading, salonId, fetchData]);
@@ -443,7 +437,6 @@ const CategoriasPage: React.FC = () => {
           </div>
 
           {/* ── List ── */}
-          {(() => { console.log('[DEBUG CategoriasPage RENDER] dataLoading:', dataLoading, 'dataError:', dataError, 'categorias.length:', categorias.length); return null; })()}
           {dataLoading ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}>
               {[1, 2, 3].map((i) => (

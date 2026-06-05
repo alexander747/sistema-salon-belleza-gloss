@@ -81,7 +81,12 @@ export class CreateSalonUseCase {
       activo: true,
     });
 
-    return this.toOutput(salon);
+    return {
+      ...this.toOutput(salon),
+      ownerNombre: dueñaNombre,
+      ownerEmail: dueñaEmail,
+      ownerWhatsApp: dueñaWhatsApp,
+    };
   }
 
   private toOutput(entity: SalonEntity): SalonOutput {
@@ -102,6 +107,8 @@ export class CreateSalonUseCase {
       horasCancelacion: entity.horasCancelacion,
       creadoEn: entity.creadoEn,
       ownerEmail: entity.usuarios?.find((u) => u.rol === Rol.DUEÑA)?.email ?? null,
+      ownerNombre: null,
+      ownerWhatsApp: null,
     };
   }
 }

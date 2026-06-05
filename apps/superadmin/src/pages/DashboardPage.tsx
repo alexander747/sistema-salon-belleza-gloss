@@ -9,6 +9,7 @@ import api from '../services/api.js';
 const sidebarItems: SidebarItem[] = [
   { label: 'Inicio', href: '/', icon: '🏠' },
   { label: 'Salones', href: '/salones', icon: '🏪' },
+  { label: 'Planes', href: '/planes', icon: '💎' },
   { label: 'Configuración', href: '/config', icon: '⚙️' },
 ];
 

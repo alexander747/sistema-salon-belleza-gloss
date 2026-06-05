@@ -40,7 +40,11 @@ const LoginPage: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--bg-root)',
+        background: `
+          radial-gradient(ellipse 80% 60% at 20% 80%, rgba(212,168,83,0.08) 0%, transparent 50%),
+          radial-gradient(ellipse 60% 80% at 80% 20%, rgba(212,168,83,0.05) 0%, transparent 50%),
+          var(--bg-root)
+        `,
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -118,7 +122,7 @@ const LoginPage: React.FC = () => {
                   margin: 0,
                 }}
               >
-                SuperGloss
+                Sistema Pro
               </h1>
             </div>
 

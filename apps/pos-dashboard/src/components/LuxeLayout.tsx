@@ -108,10 +108,10 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ userName, onLogout, loading }) 
                 fontWeight: 700,
               }}
             >
-              Luxe
+              Sistema
             </Typography>
             <Typography variant="h6" sx={{ fontWeight: 300, color: 'text.primary' }}>
-              Aura
+              Pro
             </Typography>
           </Box>
           <Divider />

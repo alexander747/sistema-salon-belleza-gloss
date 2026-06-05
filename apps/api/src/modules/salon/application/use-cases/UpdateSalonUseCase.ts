@@ -22,6 +22,9 @@ export interface UpdateSalonInput {
   tema?: string | null;
   horasCancelacion?: number;
   ownerPassword?: string;
+  ownerNombre?: string;
+  ownerEmail?: string;
+  ownerWhatsApp?: string;
 }
 
 @injectable()
@@ -37,22 +40,32 @@ export class UpdateSalonUseCase {
     }
 
     // If password provided, update the DUEÑA user's password
-    if (data.ownerPassword) {
-      const usuarioRepo = AppDataSource.getRepository(UsuarioEntity);
-      const duena = await usuarioRepo.findOneBy({ salonId: id, rol: Rol.DUEÑA });
-      if (duena) {
+    const usuarioRepo = AppDataSource.getRepository(UsuarioEntity);
+    const duena = await usuarioRepo.findOneBy({ salonId: id, rol: Rol.DUEÑA });
+    if (duena) {
+      if (data.ownerPassword) {
         duena.passwordHash = await bcrypt.hash(data.ownerPassword, 12);
-        await usuarioRepo.save(duena);
       }
+      if (data.ownerNombre) {
+        duena.nombre = data.ownerNombre;
+      }
+      if (data.ownerEmail) {
+        duena.email = data.ownerEmail;
+      }
+      if (data.ownerWhatsApp) {
+        duena.numeroWhatsApp = data.ownerWhatsApp;
+      }
+      await usuarioRepo.save(duena);
     }
 
-    // Remove ownerPassword from salon update data
-    const { ownerPassword: _, ...salonData } = data;
+    // Remove owner fields from salon update data
+    const { ownerPassword: _, ownerNombre: __, ownerEmail: ___, ownerWhatsApp: ____, ...salonData } = data;
     const updated = await this.salonRepo.update(id, salonData as Partial<SalonEntity>);
     if (!updated) {
       throw new NotFoundError(`Salón con id ${id} no encontrado después de actualizar`);
     }
 
+    const duena2 = updated.usuarios?.find((u) => u.rol === Rol.DUEÑA);
     return {
       id: updated.id,
       nombre: updated.nombre,
@@ -69,7 +82,9 @@ export class UpdateSalonUseCase {
       tema: updated.tema ?? null,
       horasCancelacion: updated.horasCancelacion,
       creadoEn: updated.creadoEn,
-      ownerEmail: updated.usuarios?.find((u) => u.rol === Rol.DUEÑA)?.email ?? null,
+      ownerEmail: duena2?.email ?? null,
+      ownerNombre: duena2?.nombre ?? null,
+      ownerWhatsApp: duena2?.numeroWhatsApp ?? null,
     };
   }
 }

@@ -59,6 +59,12 @@ export class CreateRegistroUseCase {
       totalPagado,
     );
 
+    // ── 4a. Price adjustment fields ──────────────────────────
+    const porcentajeDescuento = input.porcentajeDescuento ?? 0;
+    const valorOriginal = montoTotal; // sum before any discount
+    const valorFinal = input.valorFinal ?? montoTotal;
+    const precioAjustado = porcentajeDescuento > 0 || (input.valorFinal !== undefined && input.valorFinal !== null);
+
     // ── 5. Transaction ────────────────────────────────────────
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -81,6 +87,11 @@ export class CreateRegistroUseCase {
           montoPendiente,
           notas: input.notas,
           registradoPorId: input.registradoPorId,
+          // Price adjustment fields
+          precioAjustado,
+          porcentajeDescuento,
+          valorOriginal,
+          valorFinal,
         },
         queryRunner,
       );

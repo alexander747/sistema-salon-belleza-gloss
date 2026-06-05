@@ -8,8 +8,8 @@ import api from '../services/api.js';
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('duena@test.com');
+  const [password, setPassword] = useState('duena123');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -27,10 +27,13 @@ const LoginPage: React.FC = () => {
       if (err && typeof err === 'object' && 'response' in err) {
         const axiosErr = err as { response?: { data?: { error?: { message?: string; details?: Record<string, string[]> } } } };
         const errorData = axiosErr.response?.data?.error;
+        const msg = errorData?.message ?? 'Error al iniciar sesión';
+        // Use field-specific validation detail only when it adds value over the generic message
         const firstDetail = errorData?.details
           ? Object.values(errorData.details).flat()[0]
           : undefined;
-        setError(firstDetail ?? errorData?.message ?? 'Error al iniciar sesión');
+        const isGenericMsg = msg === 'Datos inválidos' || msg === 'Error de validación';
+        setError(isGenericMsg && firstDetail ? firstDetail : msg);
       } else {
         setError('Error de conexión');
       }
@@ -46,7 +49,12 @@ const LoginPage: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        bgcolor: 'background.default',
+        background: `
+          radial-gradient(ellipse 80% 60% at 20% 80%, rgba(212,168,83,0.08) 0%, transparent 50%),
+          radial-gradient(ellipse 60% 80% at 80% 20%, rgba(212,168,83,0.05) 0%, transparent 50%),
+          radial-gradient(ellipse 40% 50% at 50% 50%, rgba(180,140,70,0.03) 0%, transparent 70%),
+          #08080d
+        `,
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -57,8 +65,8 @@ const LoginPage: React.FC = () => {
           position: 'absolute',
           top: '-20%',
           right: '-10%',
-          width: '500px',
-          height: '500px',
+          width: '600px',
+          height: '600px',
           borderRadius: '50%',
           background: 'radial-gradient(circle, rgba(212,168,83,0.06) 0%, transparent 70%)',
           pointerEvents: 'none',
@@ -67,22 +75,23 @@ const LoginPage: React.FC = () => {
       <Box
         sx={{
           position: 'absolute',
-          bottom: '-20%',
-          left: '-10%',
-          width: '500px',
-          height: '500px',
+          bottom: '-25%',
+          left: '-15%',
+          width: '550px',
+          height: '550px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(212,168,83,0.04) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(212,168,83,0.06) 0%, transparent 70%)',
           pointerEvents: 'none',
         }}
       />
+      {/* Subtle geometric grid */}
       <Box
         sx={{
           position: 'absolute',
           inset: 0,
           backgroundImage: `
-            linear-gradient(rgba(212,168,83,0.015) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(212,168,83,0.015) 1px, transparent 1px)
+            linear-gradient(rgba(212,168,83,0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(212,168,83,0.02) 1px, transparent 1px)
           `,
           backgroundSize: '60px 60px',
           pointerEvents: 'none',
@@ -116,7 +125,7 @@ const LoginPage: React.FC = () => {
                   color: 'text.primary',
                 }}
               >
-                POS<span style={{ color: theme.palette.primary.main }}>·</span>Final
+                Sistema<span style={{ color: theme.palette.primary.main }}>Pro</span>
               </Typography>
             </Box>
 

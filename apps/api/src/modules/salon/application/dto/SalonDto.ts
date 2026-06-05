@@ -15,6 +15,8 @@ export interface SalonOutput {
   horasCancelacion: number;
   creadoEn: Date;
   ownerEmail: string | null;
+  ownerNombre: string | null;
+  ownerWhatsApp: string | null;
 }
 
 export interface CreateSalonInput {

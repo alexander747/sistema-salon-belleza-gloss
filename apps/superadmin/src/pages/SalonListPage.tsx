@@ -9,6 +9,7 @@ import api from '../services/api.js';
 const sidebarItems: SidebarItem[] = [
   { label: 'Inicio', href: '/', icon: '🏠' },
   { label: 'Salones', href: '/salones', icon: '🏪' },
+  { label: 'Planes', href: '/planes', icon: '💎' },
   { label: 'Configuración', href: '/config', icon: '⚙️' },
 ];
 
@@ -23,6 +24,7 @@ const SalonListPage: React.FC = () => {
   const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
   const [planUpdatingIds, setPlanUpdatingIds] = useState<Set<number>>(new Set());
   const [planFlashIds, setPlanFlashIds] = useState<Set<number>>(new Set());
+  const [planes, setPlanes] = useState<Array<{ id: number; nombre: string }>>([]);
 
   useEffect(() => {
     const fetchSalones = async () => {
@@ -36,6 +38,9 @@ const SalonListPage: React.FC = () => {
       }
     };
     fetchSalones();
+    api.get('/superadmin/planes').then(({ data }) => {
+      setPlanes(Array.isArray(data) ? data : []);
+    }).catch(() => {});
   }, [navigate]);
 
   const handleLogout = () => {
@@ -205,8 +210,10 @@ const SalonListPage: React.FC = () => {
                 outline: 'none',
               }}
             >
-              <option value="BASIC">BASIC</option>
-              <option value="PREMIUM">PREMIUM</option>
+              <option value={currentPlan}>{currentPlan}</option>
+              {planes.filter((p) => p.nombre !== currentPlan).map((p) => (
+                <option key={p.id} value={p.nombre}>{p.nombre}</option>
+              ))}
             </select>
             {isFlashing && (
               <motion.span
@@ -236,6 +243,18 @@ const SalonListPage: React.FC = () => {
           >
             {label}
           </Badge>
+        );
+      },
+    },
+    {
+      key: 'creadoEn',
+      label: 'Creado',
+      render: (_value: unknown, row: Record<string, unknown>) => {
+        const date = row.creadoEn as string;
+        return (
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+            {new Date(date).toLocaleDateString('es-CO')}
+          </span>
         );
       },
     },
@@ -382,18 +401,6 @@ const SalonListPage: React.FC = () => {
               )}
             </AnimatePresence>
           </div>
-        );
-      },
-    },
-    {
-      key: 'creadoEn',
-      label: 'Creado',
-      render: (_value: unknown, row: Record<string, unknown>) => {
-        const date = row.creadoEn as string;
-        return (
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-            {new Date(date).toLocaleDateString('es-CO')}
-          </span>
         );
       },
     },

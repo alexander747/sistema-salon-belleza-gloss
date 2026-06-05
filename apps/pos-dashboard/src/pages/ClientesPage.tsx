@@ -150,7 +150,11 @@ const ClientesPage: React.FC = () => {
     setError(null);
     try {
       const { data } = await api.get(`/salones/${salonId}/clientes`);
-      setClientes(Array.isArray(data) ? data : []);
+      const mapped = (Array.isArray(data) ? data : []).map((c: Record<string, unknown>) => ({
+        ...c,
+        visitas: (c.totalServicios as number) ?? 0,
+      }));
+      setClientes(mapped as Cliente[]);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Error al cargar clientes';

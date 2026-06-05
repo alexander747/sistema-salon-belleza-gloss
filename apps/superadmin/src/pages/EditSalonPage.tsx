@@ -59,8 +59,12 @@ const EditSalonPage: React.FC = () => {
   const [tonoVoz, setTonoVoz] = useState('amigable');
   const [horasCancelacion, setHorasCancelacion] = useState(24);
   const [plan, setPlan] = useState('BASIC');
+  const [planes, setPlanes] = useState<Array<{ id: number; nombre: string }>>([]);
   const [activo, setActivo] = useState(true);
   const [ownerPassword, setOwnerPassword] = useState('');
+  const [ownerNombre, setOwnerNombre] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerWhatsApp, setOwnerWhatsApp] = useState('');
 
   useEffect(() => {
     const fetchSalon = async () => {
@@ -78,6 +82,9 @@ const EditSalonPage: React.FC = () => {
         setHorasCancelacion(salon.horasCancelacion);
         setPlan(salon.plan);
         setActivo(salon.activo);
+        setOwnerNombre((data as Record<string,string>).ownerNombre || '');
+        setOwnerEmail((data as Record<string,string>).ownerEmail || '');
+        setOwnerWhatsApp((data as Record<string,string>).ownerWhatsApp || '');
       } catch {
         navigate('/salones');
       } finally {
@@ -85,6 +92,9 @@ const EditSalonPage: React.FC = () => {
       }
     };
     fetchSalon();
+    api.get('/superadmin/planes').then(({ data }) => {
+      setPlanes(Array.isArray(data) ? data : []);
+    }).catch(() => {});
   }, [id, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,6 +116,9 @@ const EditSalonPage: React.FC = () => {
         plan,
         activo,
         ...(ownerPassword ? { ownerPassword } : {}),
+        ...(ownerNombre ? { ownerNombre } : {}),
+        ...(ownerEmail ? { ownerEmail } : {}),
+        ...(ownerWhatsApp ? { ownerWhatsApp } : {}),
       });
       setSuccess(true);
       setTimeout(() => navigate('/salones'), 1200);
@@ -563,8 +576,9 @@ const EditSalonPage: React.FC = () => {
                               fontSize: '0.875rem',
                             }}
                           >
-                            <option value="BASIC">BASIC</option>
-                            <option value="PREMIUM">PREMIUM</option>
+                            {planes.map((p) => (
+                              <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                            ))}
                           </select>
                         </motion.div>
 
@@ -614,6 +628,54 @@ const EditSalonPage: React.FC = () => {
                           </label>
                         </motion.div>
                       </div>
+
+                      <motion.div variants={fieldItemVariants} style={{ marginTop: '1rem' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '0.8125rem',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          marginBottom: '0.375rem',
+                        }}>Nombre de la dueña</label>
+                        <Input
+                          type="text"
+                          placeholder="Nombre de la dueña"
+                          value={ownerNombre}
+                          onChange={(e) => setOwnerNombre(e.target.value)}
+                        />
+                      </motion.div>
+
+                      <motion.div variants={fieldItemVariants} style={{ marginTop: '1rem' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '0.8125rem',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          marginBottom: '0.375rem',
+                        }}>Email de la dueña</label>
+                        <Input
+                          type="email"
+                          placeholder="Email de la dueña"
+                          value={ownerEmail}
+                          onChange={(e) => setOwnerEmail(e.target.value)}
+                        />
+                      </motion.div>
+
+                      <motion.div variants={fieldItemVariants} style={{ marginTop: '1rem' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '0.8125rem',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          marginBottom: '0.375rem',
+                        }}>WhatsApp de la dueña</label>
+                        <Input
+                          type="tel"
+                          placeholder="WhatsApp de la dueña"
+                          value={ownerWhatsApp}
+                          onChange={(e) => setOwnerWhatsApp(e.target.value)}
+                        />
+                      </motion.div>
 
                       <motion.div variants={fieldItemVariants} style={{ marginTop: '1rem' }}>
                         <label style={{

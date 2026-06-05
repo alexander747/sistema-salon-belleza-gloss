@@ -215,6 +215,14 @@ import { TypeORMDivisionRegistroRepository } from '../modules/finanzas/infrastru
 import { TypeORMLiquidacionRepository } from '../modules/finanzas/infrastructure/persistence/TypeORMLiquidacionRepository';
 import { TypeORMGastoRepository } from '../modules/finanzas/infrastructure/persistence/TypeORMGastoRepository';
 import { TypeORMDevolucionRepository } from '../modules/finanzas/infrastructure/persistence/TypeORMDevolucionRepository';
+
+// Planes Module
+import { TypeORMPlanRepository } from '../modules/planes/infrastructure/repositories/TypeORMPlanRepository';
+import { ListPlanesUseCase } from '../modules/planes/application/use-cases/ListPlanesUseCase';
+import { GetPlanByIdUseCase } from '../modules/planes/application/use-cases/GetPlanByIdUseCase';
+import { CreatePlanUseCase } from '../modules/planes/application/use-cases/CreatePlanUseCase';
+import { UpdatePlanUseCase } from '../modules/planes/application/use-cases/UpdatePlanUseCase';
+import { DeletePlanUseCase } from '../modules/planes/application/use-cases/DeletePlanUseCase';
 import { ComisionService } from '../modules/finanzas/application/services/ComisionService';
 
 // ---- Finanzas Module — Use Cases (Registros) ----
@@ -289,5 +297,13 @@ container.register(GastoController, { useClass: GastoController });
 container.register(DevolucionController, { useClass: DevolucionController });
 container.register(LiquidacionController, { useClass: LiquidacionController });
 container.register(ReporteController, { useClass: ReporteController });
+
+// ---- Planes Module ----
+container.register('IPlanRepository', { useClass: TypeORMPlanRepository });
+container.register(ListPlanesUseCase, { useClass: ListPlanesUseCase });
+container.register(GetPlanByIdUseCase, { useClass: GetPlanByIdUseCase });
+container.register(CreatePlanUseCase, { useClass: CreatePlanUseCase });
+container.register(UpdatePlanUseCase, { useClass: UpdatePlanUseCase });
+container.register(DeletePlanUseCase, { useClass: DeletePlanUseCase });
 
 export { container };

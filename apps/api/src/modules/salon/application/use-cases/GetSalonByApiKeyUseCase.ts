@@ -15,6 +15,7 @@ export class GetSalonByApiKeyUseCase {
     if (!salon) {
       throw new NotFoundError('Salón no encontrado');
     }
+    const duena = salon.usuarios?.find((u) => u.rol === Rol.DUEÑA);
     return {
       id: salon.id,
       nombre: salon.nombre,
@@ -31,7 +32,9 @@ export class GetSalonByApiKeyUseCase {
       tema: salon.tema ?? null,
       horasCancelacion: salon.horasCancelacion,
       creadoEn: salon.creadoEn,
-      ownerEmail: salon.usuarios?.find((u) => u.rol === Rol.DUEÑA)?.email ?? null,
+      ownerEmail: duena?.email ?? null,
+      ownerNombre: duena?.nombre ?? null,
+      ownerWhatsApp: duena?.numeroWhatsApp ?? null,
     };
   }
 }

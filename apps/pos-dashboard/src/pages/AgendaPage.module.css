@@ -174,7 +174,7 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md), 0 0 0 1px rgba(212, 168, 83, 0.06);
   width: 100%;
-  max-width: 640px;
+  max-width: 960px;
   max-height: 90vh;
   overflow-y: auto;
   /* hide scrollbar but keep scrollable */
@@ -415,4 +415,512 @@
 
 .infoValue {
   color: var(--text-primary);
+}
+
+/* ── Hide number input spinners ── */
+.noSpinner::-webkit-inner-spin-button,
+.noSpinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.noSpinner {
+  -moz-appearance: textfield;
+}
+
+
+/* ── Completar Modal Two-Column Layout ── */
+.completarGrid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 767px) {
+  .completarGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.headerCard {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.clientName {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.headerMeta {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 1rem;
+}
+
+.sectionTitle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+}
+
+.serviceCard {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  margin-bottom: 0.35rem;
+  transition: border-color 0.15s;
+}
+
+.serviceCardAdded {
+  border-color: var(--accent-glow);
+  background: var(--accent-subtle);
+}
+
+.serviceName {
+  flex: 1;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.serviceNameAdded {
+  color: var(--accent);
+}
+
+.servicePriceInput {
+  width: 80px;
+  height: 28px;
+  padding: 0 0.4rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  text-align: right;
+  outline: none;
+}
+
+.servicePriceInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.serviceRemoveBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.serviceRemoveBtn:hover {
+  color: var(--danger);
+}
+
+.addServiceSelect {
+  width: 100%;
+  height: 34px;
+  margin-top: 0.35rem;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  text-align: center;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.addServiceSelect:hover {
+  background: var(--accent-subtle);
+  border-style: solid;
+}
+
+.productSearchInput {
+  width: 100%;
+  height: 32px;
+  padding: 0 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  outline: none;
+  box-sizing: border-box;
+  margin-bottom: 0.5rem;
+}
+
+.productSearchInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.productGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.productCard {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.productCard:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.productCardOutOfStock {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.productCardInCart {
+  border-color: var(--accent);
+}
+
+.productCardName {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.15rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.productCardPrice {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.1rem;
+}
+
+.productCardStock {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+}
+
+.productCardStockOut {
+  color: var(--danger);
+}
+
+.selectedProductsSection {
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.4rem;
+}
+
+.selectedProductItem {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0;
+}
+
+.selectedProductName {
+  flex: 1;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qtyBtn {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.qtyValue {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 16px;
+  text-align: center;
+}
+
+.selectedProductTotal {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 55px;
+  text-align: right;
+}
+
+.receiptSection {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1rem 0.75rem;
+}
+
+.receiptRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+}
+
+.receiptLabel {
+  color: var(--text-secondary);
+}
+
+.receiptValue {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.receiptDivider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.4rem 0;
+}
+
+.receiptDiscountValue {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.receiptAdjustmentWarning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.receiptTotalLabel {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.receiptTotalValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.receiptCustomTotalValue {
+  color: var(--warning);
+}
+
+.propinaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+}
+
+.propinaInput {
+  width: 100px;
+  height: 28px;
+  padding: 0 0.4rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  text-align: right;
+  outline: none;
+}
+
+.propinaInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.paymentBtnGroup {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.paymentBtn {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.paymentBtn:hover {
+  border-color: var(--accent-glow);
+}
+
+.paymentBtnActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-root);
+  font-weight: 600;
+}
+
+.amountRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+}
+
+.amountInput {
+  width: 120px;
+  height: 32px;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  text-align: right;
+  outline: none;
+}
+
+.amountInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.cambioDisplay {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0 0.25rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--success);
+}
+
+.adjustNoteSection {
+  padding: 0.4rem 0;
+}
+
+.adjustNoteLabel {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.adjustNoteLabelError {
+  color: var(--danger);
+}
+
+.adjustNoteLabelOk {
+  color: var(--text-dim);
+}
+
+.adjustNoteTextarea {
+  width: 100%;
+  padding: 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.adjustNoteTextareaError {
+  border: 1px solid var(--danger);
+}
+
+.adjustNoteTextareaOk {
+  border: 1px solid var(--border);
+}
+
+.adjustNoteError {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  color: var(--danger);
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.toggleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }

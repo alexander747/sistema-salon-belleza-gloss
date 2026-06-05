@@ -2,7 +2,7 @@
   overflow-x: auto;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: linear-gradient(135deg, rgba(30, 30, 40, 0.4), rgba(22, 22, 30, 0.6));
+  background: linear-gradient(135deg, var(--bg-surface), var(--bg-base));
   backdrop-filter: blur(12px);
 }
 
@@ -24,7 +24,7 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-secondary);
-  background: linear-gradient(135deg, rgba(30, 30, 40, 0.6), rgba(22, 22, 30, 0.8));
+  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
   white-space: nowrap;
 }
 

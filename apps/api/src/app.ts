@@ -15,6 +15,7 @@ import { catalogoRouter } from './modules/catalogo/presentation/routes/catalogo.
 import { personasRouter } from './modules/personas/presentation/routes/personas.routes';
 import { agendaRouter } from './modules/agenda/presentation/routes/agenda.routes';
 import { finanzasRouter } from './modules/finanzas/presentation/routes/finanzas.routes';
+import planRoutes from './modules/planes/presentation/routes/planRoutes';
 import logger from './shared/logger';
 
 export function createApp(): express.Application {
@@ -49,6 +50,7 @@ export function createApp(): express.Application {
   // 6. Protected routes — JWT required (applied AFTER public auth routes)
   app.use('/api', authGuard, tenantGuard);
   app.use('/api/superadmin', superadminRouter);
+  app.use('/api/superadmin/planes', planRoutes);
   app.use('/api/salones/:salonId', catalogoRouter);
   app.use('/api/salones/:salonId', personasRouter);
   app.use('/api/salones/:salonId', agendaRouter);

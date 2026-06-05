@@ -46,6 +46,19 @@ export class RegistroServicioEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   notas: string;
 
+  // ── Price adjustment fields ──
+  @Column({ type: 'boolean', default: false })
+  precioAjustado: boolean;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
+  porcentajeDescuento: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  valorOriginal: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  valorFinal: number;
+
   @Column({ type: 'int', nullable: true })
   registradoPorId: number;
 

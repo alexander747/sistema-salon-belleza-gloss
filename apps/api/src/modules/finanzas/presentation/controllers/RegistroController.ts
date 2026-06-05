@@ -25,8 +25,8 @@ export class RegistroController {
         salonId: req.salonId!,
         page,
         limit,
-        desde: req.query.desde ? new Date(req.query.desde as string) : undefined,
-        hasta: req.query.hasta ? new Date(req.query.hasta as string) : undefined,
+        desde: req.query.desde ? new Date((req.query.desde as string) + 'T00:00:00-05:00') : undefined,
+        hasta: req.query.hasta ? new Date((req.query.hasta as string) + 'T23:59:59-05:00') : undefined,
         usuarioId: req.query.usuarioId ? Number(req.query.usuarioId) : undefined,
         clienteId: req.query.clienteId ? Number(req.query.clienteId) : undefined,
       });

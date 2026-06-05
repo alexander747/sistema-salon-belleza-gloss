@@ -5,6 +5,7 @@ import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import WalkInModal from '../components/WalkInModal.js';
 import styles from './FinanzasPage.module.css';
 
 /* ================================================================ */
@@ -51,6 +52,10 @@ interface Registro {
   descripcionServicio: string | null;
   estaPagadaEmpleada: boolean;
   notas?: string;
+  precioAjustado?: boolean;
+  porcentajeDescuento?: number;
+  valorOriginal?: number;
+  valorFinal?: number;
   creadoEn: string;
   actualizadoEn: string;
   pagos: Pago[];
@@ -337,6 +342,7 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [selectedRegistro, setSelectedRegistro] = useState<Registro | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
+  const [walkInOpen, setWalkInOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const todayStr = useMemo(() => toISODate(new Date()), []);
@@ -461,7 +467,10 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   };
 
   const calcTotal = (r: Registro): number => {
-    return r.montoTotal ?? (r.totalServicios + r.totalProductos);
+    if (r.precioAjustado && r.valorFinal != null) {
+      return r.valorFinal;
+    }
+    return r.montoTotal || (r.totalServicios + r.totalProductos);
   };
 
   /* ── Skeleton ── */
@@ -555,6 +564,19 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         </motion.div>
       </motion.div>
 
+      {/* ── Toolbar ── */}
+      <div className={styles.toolbar}>
+        <span className={styles.toolbarTitle}>Historial de registros</span>
+        <motion.button
+          style={primaryBtnStyle}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => setWalkInOpen(true)}
+        >
+          + Registrar servicio
+        </motion.button>
+      </div>
+
       {/* ── Date Filters + Type Chips ── */}
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <label style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
@@ -577,6 +599,26 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             onChange={(e) => setRegistroHasta(e.target.value)}
           />
         </label>
+        {(registroDesde || registroHasta) && (
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => { setRegistroDesde(''); setRegistroHasta(''); }}
+            style={{
+              background: 'var(--bg-surface)',
+              color: 'var(--text-dim)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.35rem 0.7rem',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.7rem',
+              cursor: 'pointer',
+            }}
+            title="Limpiar filtros de fecha"
+          >
+            ✕ Limpiar
+          </motion.button>
+        )}
         <div style={{ display: 'flex', gap: '0.35rem', marginLeft: 'auto' }}>
           {(['TODOS', 'SERVICIOS', 'PRODUCTOS'] as const).map((t) => {
             const isActive = registroFilter === t;
@@ -736,6 +778,21 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             submitting={submitting}
             onCancel={closeAnular}
             onConfirm={handleAnular}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Walk-In Registration Modal ── */}
+      <AnimatePresence>
+        {walkInOpen && (
+          <WalkInModal
+            salonId={salonId}
+            isOpen={walkInOpen}
+            onClose={() => setWalkInOpen(false)}
+            onSuccess={() => {
+              setWalkInOpen(false);
+              fetchData();
+            }}
           />
         )}
       </AnimatePresence>
@@ -1739,6 +1796,11 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     [filteredHistorial, historialPage],
   );
 
+  const totalFiltrado = useMemo(
+    () => filteredHistorial.reduce((sum, r) => sum + (r.montoTotal || (r.totalServicios + r.totalProductos)), 0),
+    [filteredHistorial],
+  );
+
   // Reset historial page to 1 when any filter changes
   useEffect(() => {
     setHistorialPage(1);
@@ -2122,7 +2184,43 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 placeholder="Nombre o ID..."
               />
             </label>
+            {(historialDesde || historialHasta) && (
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => { setHistorialDesde(''); setHistorialHasta(''); }}
+                style={{
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-dim)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.35rem 0.7rem',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.7rem',
+                  cursor: 'pointer',
+                }}
+                title="Limpiar filtros de fecha"
+              >
+                ✕ Limpiar
+              </motion.button>
+            )}
           </div>
+
+          {/* ── Total filtrado ── */}
+          {filteredHistorial.length > 0 && (
+            <div style={{
+              fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+              color: 'var(--text-dim)', marginBottom: '0.75rem',
+              display: 'flex', gap: '0.5rem', alignItems: 'center',
+            }}>
+              <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.6875rem' }}>
+                Total filtrado:
+              </span>
+              <span style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '0.9375rem' }}>
+                {formatCurrency(totalFiltrado)}
+              </span>
+            </div>
+          )}
 
           {/* ── Table with scroll ── */}
           {filteredHistorial.length === 0 ? (

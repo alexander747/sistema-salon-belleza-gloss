@@ -51,7 +51,7 @@ export class SalonEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 64, unique: true })
   apiKeyN8n: string;
 
-  @Column({ type: 'varchar', length: 500, nullable: true })
+  @Column({ type: 'longtext', nullable: true })
   logoUrl: string;
 
   @Column({ type: 'varchar', length: 7, nullable: true })

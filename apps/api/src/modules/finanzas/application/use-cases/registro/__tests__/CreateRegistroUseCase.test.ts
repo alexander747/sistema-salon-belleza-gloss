@@ -58,6 +58,9 @@ const mockComisionService = {
   calcularMontoTotal: vi.fn(),
   calcularMontoPendiente: vi.fn(),
 };
+const mockProductoRepo = {
+  decrementStock: vi.fn(),
+};
 
 describe('CreateRegistroUseCase', () => {
   let useCase: CreateRegistroUseCase;
@@ -74,6 +77,8 @@ describe('CreateRegistroUseCase', () => {
       { monto: 100000, metodoPago: 'EFECTIVO' },
     ],
     divisiones: [],
+    porcentajeDescuento: 0,
+    productosVendidos: [],
   };
 
   beforeEach(() => {
@@ -85,6 +90,7 @@ describe('CreateRegistroUseCase', () => {
       mockClienteRepo as never,
       mockUsuarioRepo as never,
       mockComisionService as never,
+      mockProductoRepo as never,
     );
   });
 
@@ -139,6 +145,11 @@ describe('CreateRegistroUseCase', () => {
         totalProductos: 50000,
         propina: 10000,
         comisionCalculada: 60000,
+        // Price adjustment fields
+        precioAjustado: false,
+        porcentajeDescuento: 0,
+        valorOriginal: 160000,
+        valorFinal: 160000,
       }),
       expect.anything(),
     );

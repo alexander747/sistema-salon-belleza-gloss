@@ -41,14 +41,14 @@
 
 /* Secondary — glass style */
 .secondary {
-  background: linear-gradient(135deg, rgba(30, 30, 40, 0.6), rgba(22, 22, 30, 0.8));
+  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
   backdrop-filter: blur(12px);
   color: var(--text-primary);
   border: 1px solid var(--border);
 }
 
 .secondary:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(40, 40, 54, 0.7), rgba(30, 30, 40, 0.9));
+  background: linear-gradient(135deg, var(--bg-hover), var(--bg-elevated));
   border-color: var(--accent);
   box-shadow: var(--shadow-md), 0 0 0 1px var(--border-glow);
 }

@@ -20,6 +20,7 @@ async function seed(): Promise<void> {
       { ServicioEntity },
       { ProductoEntity, TipoInventario },
       { ClienteEntity },
+      { PlanEntity },
       { In },
     ] = await Promise.all([
       import('../../shared/database'),
@@ -29,6 +30,7 @@ async function seed(): Promise<void> {
       import('./entities/ServicioEntity'),
       import('./entities/ProductoEntity'),
       import('./entities/ClienteEntity'),
+      import('./entities/PlanEntity'),
       import('typeorm'),
     ]);
 
@@ -321,6 +323,31 @@ async function seed(): Promise<void> {
       }
     }
     console.log(`✅ ${clientCreated} new clients created`);
+
+    // ---- DEFAULT PLANS ----
+    const planRepo = AppDataSource.getRepository(PlanEntity);
+    const existingPlans = await planRepo.count();
+    if (existingPlans === 0) {
+      await planRepo.save([
+        {
+          nombre: 'BASIC',
+          precioMensual: 0,
+          maxEmpleadas: 5,
+          maxSucursales: 1,
+          features: ['Agenda básica', 'Catálogo de servicios', 'Gestión de clientes', 'Dashboard financiero'],
+          activo: true,
+        },
+        {
+          nombre: 'PREMIUM',
+          precioMensual: 29990,
+          maxEmpleadas: 20,
+          maxSucursales: 5,
+          features: ['Todo lo de BASIC', 'Reportes avanzados', 'Nómina y comisiones', 'Ventas POS', 'Marketing WhatsApp', 'API para automatizaciones'],
+          activo: true,
+        },
+      ]);
+      console.log('✅ Default plans created');
+    }
 
     console.log('🎉 Seed completed successfully');
     await AppDataSource.destroy();

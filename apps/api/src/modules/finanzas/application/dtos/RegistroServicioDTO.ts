@@ -30,6 +30,10 @@ export interface RegistroServicioDTO {
   descripcionServicio: string | null;
   estaPagadaEmpleada: boolean;
   notas: string | null;
+  precioAjustado: boolean;
+  porcentajeDescuento: number;
+  valorOriginal: number;
+  valorFinal: number;
   pagos: PagoDTO[];
   divisiones: DivisionDTO[];
   creadoEn: Date;
@@ -52,6 +56,10 @@ export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroS
     descripcionServicio: entity.descripcionServicio ?? null,
     estaPagadaEmpleada: entity.estaPagadaEmpleada,
     notas: entity.notas ?? null,
+    precioAjustado: entity.precioAjustado,
+    porcentajeDescuento: Number(entity.porcentajeDescuento),
+    valorOriginal: Number(entity.valorOriginal),
+    valorFinal: Number(entity.valorFinal),
     pagos: (entity.pagos ?? []).map((p) => ({
       id: p.id,
       monto: Number(p.monto),
