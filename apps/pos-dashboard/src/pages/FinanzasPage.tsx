@@ -18,6 +18,7 @@ interface FinanzasResumen {
   totalPropinas: number;
   totalComisiones: number;
   cantidadAtenciones: number;
+  cantidadProductosVendidos: number;
   totalIngresos: number;
   totalGastos?: number;
 }
@@ -195,28 +196,34 @@ function formatShortDate(dateStr?: string): string {
   }
 }
 
-function formatTime(dateStr?: string): string {
+function formatTimeAMPM(dateStr?: string): string {
   if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    const hours = String(d.getHours()).padStart(2, '0');
+    let hours = d.getHours();
     const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 becomes 12
+    return `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
   } catch {
     return dateStr;
   }
 }
 
-function formatDateTime(dateStr: string): string {
+function formatDateTimeAMPM(dateStr: string): string {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
+  let hours = d.getHours();
   const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${day}/${month}/${year} ${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
 }
 
 function toISODate(d: Date): string {
@@ -404,9 +411,18 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       if (registroDesde) regParams.desde = registroDesde;
       if (registroHasta) regParams.hasta = registroHasta;
 
+      // Build resumen params: use date range if filtered, otherwise use today
+      const resumenParams: Record<string, string> = {};
+      if (registroDesde && registroHasta) {
+        resumenParams.desde = registroDesde;
+        resumenParams.hasta = registroHasta;
+      } else {
+        resumenParams.fecha = todayStr;
+      }
+
       const promises: Promise<any>[] = [
         salonId ? api.get(`/salones/${salonId}/registros`, { params: regParams }) : Promise.reject('No salon'),
-        api.get(`/salones/${salonId}/finanzas/resumen`, { params: { fecha: todayStr } }),
+        api.get(`/salones/${salonId}/finanzas/resumen`, { params: resumenParams }),
       ];
       if (salonId) {
         promises.push(api.get(`/salones/${salonId}/clientes`));
@@ -555,9 +571,13 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     >
       {/* ── Resumen del día ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
-        <h3 className={styles.sectionTitle} style={{ margin: 0 }}>📋 Resumen del día</h3>
-        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-          {formatDate(todayStr)}
+        <h3 className={styles.sectionTitle} style={{ margin: 0 }}>
+          📋 {registroDesde && registroHasta ? 'Resumen del período' : 'Resumen del día'}
+        </h3>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+          {registroDesde && registroHasta
+            ? `${formatDate(registroDesde)} — ${formatDate(registroHasta)}`
+            : formatDate(todayStr)}
         </span>
       </div>
       <motion.div
@@ -576,6 +596,12 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
           <span className={styles.summaryLabel}>✂️ Atenciones</span>
           <span className={styles.summaryValue}>
             {resumen?.cantidadAtenciones ?? 0}
+          </span>
+        </motion.div>
+        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(251,191,36,0.3)' }}>
+          <span className={styles.summaryLabel}>📦 Productos vendidos</span>
+          <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>
+            {resumen?.cantidadProductosVendidos ?? 0}
           </span>
         </motion.div>
         <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(99,102,241,0.3)' }}>
@@ -703,13 +729,13 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             <thead className={styles.tableHead}>
               <tr>
                 <th>#</th>
+                <th>Fecha</th>
+                <th>Hora</th>
                 <th>Cliente</th>
                 <th>Empleada</th>
                 <th>Servicios</th>
                 <th>Productos</th>
                 <th>Total Original</th>
-                <th>Fecha</th>
-                <th>Hora</th>
                 <th>Dto.%</th>
                 <th>Ajustado</th>
                 <th>Total</th>
@@ -731,6 +757,14 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   <td style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
                     {reg.id}
                   </td>
+                  {/* Fecha */}
+                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                    {formatShortDate(reg.creadoEn)}
+                  </td>
+                  {/* Hora */}
+                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                    {formatTimeAMPM(reg.creadoEn)}
+                  </td>
                   <td style={{ fontWeight: 500 }}>
                     {reg._clienteNombre ?? `Cliente #${reg.clienteId}`}
                   </td>
@@ -748,14 +782,6 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     {reg.precioAjustado && reg.valorOriginal != null
                       ? formatCurrency(reg.valorOriginal)
                       : '—'}
-                  </td>
-                  {/* Fecha */}
-                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-                    {formatShortDate(reg.creadoEn)}
-                  </td>
-                  {/* Hora */}
-                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-                    {formatTime(reg.creadoEn)}
                   </td>
                   {/* Descuento */}
                   <td style={{ textAlign: 'center' }}>
@@ -915,7 +941,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
         <div className={styles.modalBody}>
           {/* Header info bar */}
           <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-            Registro #{registro.id} · Creado: {formatDateTime(registro.creadoEn)} · Actualizado: {formatDateTime(registro.actualizadoEn)}
+            Registro #{registro.id} · Creado: {formatDateTimeAMPM(registro.creadoEn)} · Actualizado: {formatDateTimeAMPM(registro.actualizadoEn)}
           </p>
 
           {/* Top badges row */}
@@ -950,11 +976,11 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
             <div>
               <div className={styles.infoRow}>
                 <span className={styles.infoLabel}>Fecha creación</span>
-                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTime(registro.creadoEn)}</span>
+                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTimeAMPM(registro.creadoEn)}</span>
               </div>
               <div className={styles.infoRow}>
                 <span className={styles.infoLabel}>Fecha actualización</span>
-                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTime(registro.actualizadoEn)}</span>
+                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTimeAMPM(registro.actualizadoEn)}</span>
               </div>
               {registro.propina > 0 && (
                 <div className={styles.infoRow}>

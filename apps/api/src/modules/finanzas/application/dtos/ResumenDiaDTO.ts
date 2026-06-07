@@ -4,5 +4,6 @@ export interface ResumenDiaDTO {
   totalPropinas: number;
   totalComisiones: number;
   cantidadAtenciones: number;
+  cantidadProductosVendidos: number;
   totalIngresos: number;
 }

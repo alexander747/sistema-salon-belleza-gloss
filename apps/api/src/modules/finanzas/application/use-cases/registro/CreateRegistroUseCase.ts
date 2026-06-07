@@ -63,7 +63,7 @@ export class CreateRegistroUseCase {
     const porcentajeDescuento = input.porcentajeDescuento ?? 0;
     const valorOriginal = montoTotal; // sum before any discount
     const valorFinal = input.valorFinal ?? montoTotal;
-    const precioAjustado = porcentajeDescuento > 0 || (input.valorFinal !== undefined && input.valorFinal !== null);
+    const precioAjustado = input.valorFinal !== undefined && input.valorFinal !== null;
 
     // ── 5. Transaction ────────────────────────────────────────
     const queryRunner = AppDataSource.createQueryRunner();

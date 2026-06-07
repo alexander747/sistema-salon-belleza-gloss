@@ -3,7 +3,9 @@ import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistr
 
 export interface ResumenDiaInput {
   salonId: number;
-  fecha: string; // YYYY-MM-DD (Colombia date)
+  fecha?: string; // YYYY-MM-DD (Colombia date) — single day
+  desde?: string; // YYYY-MM-DD — period start
+  hasta?: string; // YYYY-MM-DD — period end
 }
 
 export interface ResumenDiaOutput {
@@ -12,6 +14,7 @@ export interface ResumenDiaOutput {
   totalPropinas: number;
   totalComisiones: number;
   cantidadAtenciones: number;
+  cantidadProductosVendidos: number;
   totalIngresos: number;
 }
 
@@ -23,15 +26,28 @@ export class ResumenDiaUseCase {
   ) {}
 
   async execute(input: ResumenDiaInput): Promise<ResumenDiaOutput> {
-    // Colombia is UTC-5, so a day in Colombia runs from 05:00 UTC to 05:00 UTC next day
-    // Parse YYYY-MM-DD
-    const [year, month, day] = input.fecha.split('-').map(Number);
+    let inicio: Date;
+    let fin: Date;
 
-    // Start of day in Colombia = 05:00 UTC
-    const inicio = new Date(Date.UTC(year, month - 1, day, 5, 0, 0, 0));
+    if (input.desde && input.hasta) {
+      // Period mode: desde -> hasta (inclusive)
+      const [desdeYear, desdeMonth, desdeDay] = input.desde.split('-').map(Number);
+      const [hastaYear, hastaMonth, hastaDay] = input.hasta.split('-').map(Number);
 
-    // End of day in Colombia = 05:00 UTC next day
-    const fin = new Date(Date.UTC(year, month - 1, day + 1, 5, 0, 0, 0));
+      // Start of desde day in Colombia = 05:00 UTC
+      inicio = new Date(Date.UTC(desdeYear, desdeMonth - 1, desdeDay, 5, 0, 0, 0));
+      // End of hasta day in Colombia = 05:00 UTC next day
+      fin = new Date(Date.UTC(hastaYear, hastaMonth - 1, hastaDay + 1, 5, 0, 0, 0));
+    } else {
+      // Single day mode (default)
+      const fecha = input.fecha ?? new Date().toISOString().slice(0, 10);
+      const [year, month, day] = fecha.split('-').map(Number);
+
+      // Start of day in Colombia = 05:00 UTC
+      inicio = new Date(Date.UTC(year, month - 1, day, 5, 0, 0, 0));
+      // End of day in Colombia = 05:00 UTC next day
+      fin = new Date(Date.UTC(year, month - 1, day + 1, 5, 0, 0, 0));
+    }
 
     const registros = await this.registroRepo.findBySalonAndDateRange(
       input.salonId,
@@ -51,6 +67,9 @@ export class ResumenDiaUseCase {
     const totalComisiones = registros.reduce(
       (sum, r) => sum + Number(r.comisionCalculada), 0,
     );
+    const cantidadProductosVendidos = registros.filter(
+      (r) => Number(r.totalProductos) > 0,
+    ).length;
 
     return {
       totalServicios,
@@ -58,6 +77,7 @@ export class ResumenDiaUseCase {
       totalPropinas,
       totalComisiones,
       cantidadAtenciones: registros.length,
+      cantidadProductosVendidos,
       totalIngresos: totalServicios + totalProductos,
     };
   }
