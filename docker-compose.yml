@@ -23,6 +23,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - posfinal-network
 
   n8n:
     image: n8nio/n8n:latest
@@ -38,7 +40,90 @@ services:
       N8N_DEFAULT_LOCALE: "es"
     volumes:
       - n8n_data:/home/node/.n8n
+    networks:
+      - posfinal-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    container_name: posfinal-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/api:/app/apps/api:delegated
+      - ./packages:/app/packages:delegated
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USERNAME=posfinal
+      - DB_PASSWORD=posfinal
+      - DB_DATABASE=salon_saas
+      - DB_SYNCHRONIZE=true
+      - JWT_ACCESS_SECRET=dev-access-secret-change-in-production
+      - JWT_REFRESH_SECRET=dev-refresh-secret-change-in-production
+      - API_KEY=dev-api-key-n8n-change-in-production
+      - PORT=3001
+    working_dir: /app/apps/api
+    command: npx tsx watch src/server.ts
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - posfinal-network
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/pos-dashboard/Dockerfile.dev
+    container_name: posfinal-dashboard
+    restart: unless-stopped
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./apps/pos-dashboard:/app/apps/pos-dashboard:delegated
+      - ./packages:/app/packages:delegated
+      - /app/node_modules
+      - /app/apps/pos-dashboard/node_modules
+    working_dir: /app/apps/pos-dashboard
+    command: npm run dev -- --host
+    environment:
+      - VITE_API_URL=/api
+    depends_on:
+      - api
+    networks:
+      - posfinal-network
+
+  superadmin:
+    build:
+      context: .
+      dockerfile: apps/superadmin/Dockerfile.dev
+    container_name: posfinal-superadmin
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/superadmin:/app/apps/superadmin:delegated
+      - ./packages:/app/packages:delegated
+      - /app/node_modules
+      - /app/apps/superadmin/node_modules
+    working_dir: /app/apps/superadmin
+    command: npm run dev -- --host
+    environment:
+      - VITE_API_URL=/api
+    depends_on:
+      - api
+    networks:
+      - posfinal-network
 
 volumes:
   mysql_data:
   n8n_data:
+
+networks:
+  posfinal-network:
+    driver: bridge
