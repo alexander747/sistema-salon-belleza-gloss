@@ -67,9 +67,9 @@ export class ResumenDiaUseCase {
     const totalComisiones = registros.reduce(
       (sum, r) => sum + Number(r.comisionCalculada), 0,
     );
-    const cantidadProductosVendidos = registros.filter(
-      (r) => Number(r.totalProductos) > 0,
-    ).length;
+    const cantidadProductosVendidos = registros.reduce(
+      (sum, r) => sum + Number(r.cantidadProductosVendidos ?? 0), 0,
+    );
 
     return {
       totalServicios,

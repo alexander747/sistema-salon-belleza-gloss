@@ -63,7 +63,8 @@ export class CreateRegistroUseCase {
     const porcentajeDescuento = input.porcentajeDescuento ?? 0;
     const valorOriginal = montoTotal; // sum before any discount
     const valorFinal = input.valorFinal ?? montoTotal;
-    const precioAjustado = input.valorFinal !== undefined && input.valorFinal !== null;
+    // Use frontend's explicit flag; fallback to false if not provided
+    const precioAjustado = input.precioAjustado ?? false;
 
     // ── 5. Transaction ────────────────────────────────────────
     const queryRunner = AppDataSource.createQueryRunner();
@@ -72,6 +73,11 @@ export class CreateRegistroUseCase {
 
     try {
       // ── 6. Create RegistroServicio ──────────────────────────
+      // Calculate total product quantity sold
+      const cantidadProductosVendidos = input.productosVendidos?.reduce(
+        (sum, pv) => sum + (pv.cantidad ?? 1), 0
+      ) ?? 0;
+
       const registro = await this.registroRepo.create(
         {
           salonId: input.salonId,
@@ -79,6 +85,7 @@ export class CreateRegistroUseCase {
           usuarioId: input.usuarioId,
           totalServicios: input.totalServicios,
           totalProductos: input.totalProductos,
+          cantidadProductosVendidos,
           montoTotal,
           propina: input.propina,
           comisionCalculada,

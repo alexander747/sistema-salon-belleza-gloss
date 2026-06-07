@@ -22,6 +22,9 @@ export class RegistroServicioEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   totalProductos: number;
 
+  @Column({ type: 'int', default: 0 })
+  cantidadProductosVendidos: number;
+
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   montoTotal: number;
 
