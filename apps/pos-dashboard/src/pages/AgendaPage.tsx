@@ -5,6 +5,7 @@ import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import styles from './AgendaPage.module.css';
 
 /* ── Types ── */
@@ -91,37 +92,42 @@ const CALENDAR_HEIGHT = TOTAL_HOURS * HOUR_HEIGHT;
 
 const STATUS_CFG: Record<
   CitaEstado,
-  { bg: string; border: string; dot: string; label: string }
+  { bg: string; border: string; dot: string; label: string; text: string }
 > = {
   PENDIENTE: {
-    bg: 'rgba(212,168,83,0.12)',
-    border: 'var(--warning)',
-    dot: 'var(--warning)',
+    bg: 'rgba(234, 179, 8, 0.35)',
+    border: 'rgba(234, 179, 8, 0.85)',
+    dot: '#eab308',
     label: 'Pendiente',
+    text: '#eab308',
   },
   CONFIRMADA: {
-    bg: 'rgba(212,168,83,0.18)',
-    border: 'var(--accent)',
-    dot: 'var(--accent)',
+    bg: 'rgba(59, 130, 246, 0.35)',
+    border: 'rgba(59, 130, 246, 0.85)',
+    dot: '#3b82f6',
     label: 'Confirmada',
+    text: '#3b82f6',
   },
   EN_PROGRESO: {
-    bg: 'rgba(70,130,220,0.14)',
-    border: '#5b8def',
-    dot: '#5b8def',
+    bg: 'rgba(139, 92, 246, 0.35)',
+    border: 'rgba(139, 92, 246, 0.85)',
+    dot: '#8b5cf6',
     label: 'En curso',
+    text: '#8b5cf6',
   },
   COMPLETADA: {
-    bg: 'rgba(92,186,123,0.14)',
-    border: 'var(--success)',
-    dot: 'var(--success)',
+    bg: 'rgba(34, 197, 94, 0.35)',
+    border: 'rgba(34, 197, 94, 0.85)',
+    dot: '#22c55e',
     label: 'Completada',
+    text: '#22c55e',
   },
   CANCELADA: {
-    bg: 'rgba(224,85,106,0.08)',
-    border: 'var(--danger)',
-    dot: 'var(--danger)',
+    bg: 'rgba(239, 68, 68, 0.3)',
+    border: 'rgba(239, 68, 68, 0.75)',
+    dot: '#ef4444',
     label: 'Cancelada',
+    text: '#ef4444',
   },
 };
 
@@ -237,7 +243,6 @@ const AgendaPage: React.FC = () => {
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [clienteSearch, setClienteSearch] = useState('');
   const [servicioSearch, setServicioSearch] = useState('');
 
   /* ── Detail modal state ── */
@@ -462,7 +467,6 @@ const AgendaPage: React.FC = () => {
       notas: '',
     });
     setAvailableSlots([]);
-    setClienteSearch('');
     setServicioSearch('');
   };
 
@@ -911,7 +915,7 @@ const AgendaPage: React.FC = () => {
       <AnimatePresence>
         {showCreate && (
           <RenderCreateModal
-            clientes={clientes}
+            salonId={salonId!}
             servicios={servicios}
             empleadas={empleadas}
             loading={refDataLoading}
@@ -929,8 +933,6 @@ const AgendaPage: React.FC = () => {
               resetCreateForm();
             }}
             onCreate={handleCreate}
-            clienteSearch={clienteSearch}
-            setClienteSearch={setClienteSearch}
             servicioSearch={servicioSearch}
             setServicioSearch={setServicioSearch}
           />
@@ -1250,6 +1252,36 @@ const RenderCalendar: React.FC<RenderCalendarProps> = ({
                       <div className={styles.cardTitle}>
                         {cita.cliente.nombre}
                       </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          marginBottom: '1px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 5,
+                            height: 5,
+                            borderRadius: '50%',
+                            background: cfg.dot,
+                            display: 'inline-block',
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: '0.5rem',
+                            color: cfg.text,
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontWeight: 500,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {cfg.label}
+                        </span>
+                      </div>
                       <div className={styles.cardSub}>
                         {cita.servicios.map((s) => s.nombre).join(', ')}
                       </div>
@@ -1277,7 +1309,7 @@ const RenderCalendar: React.FC<RenderCalendarProps> = ({
 /* ================================================================ */
 
 interface CreateModalProps {
-  clientes: ClienteSimple[];
+  salonId: number;
   servicios: ServicioSimple[];
   empleadas: EmpleadaSimple[];
   loading: boolean;
@@ -1297,14 +1329,20 @@ interface CreateModalProps {
   creating: boolean;
   onCancel: () => void;
   onCreate: () => void;
-  clienteSearch: string;
-  setClienteSearch: (v: string) => void;
   servicioSearch: string;
   setServicioSearch: (v: string) => void;
 }
 
+/* ── Mini-modal inline state ── */
+interface NewClienteForm {
+  nombre: string;
+  telefono: string;
+  cedula: string;
+  email: string;
+}
+
 const RenderCreateModal: React.FC<CreateModalProps> = ({
-  clientes,
+  salonId,
   servicios,
   empleadas,
   loading,
@@ -1317,11 +1355,79 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
   creating,
   onCancel,
   onCreate,
-  clienteSearch,
-  setClienteSearch,
   servicioSearch,
   setServicioSearch,
 }) => {
+  const [showCreateCliente, setShowCreateCliente] = useState(false);
+  const [newClienteForm, setNewClienteForm] = useState<NewClienteForm>({
+    nombre: '',
+    telefono: '',
+    cedula: '',
+    email: '',
+  });
+  const [creatingCliente, setCreatingCliente] = useState(false);
+  const [createClienteError, setCreateClienteError] = useState('');
+  const [selectedClienteName, setSelectedClienteName] = useState('');
+
+  const refreshClientes = async () => {
+    if (salonId == null) return;
+    try {
+      const { data } = await api.get(`/salones/${salonId}/clientes`, { params: { limit: 0 } });
+      const paginatedData = data?.data ?? data;
+      const list = Array.isArray(paginatedData) ? paginatedData : [];
+      setClientes(list.map((c: Record<string, unknown>) => ({
+        id: c.id as number,
+        nombre: c.nombre as string,
+        telefono: c.telefono as string,
+      })));
+    } catch {
+      // Silently fail - clientes will refresh on next page load
+    }
+  };
+
+  const handleCreateCliente = async () => {
+    if (!newClienteForm.nombre.trim() || !newClienteForm.telefono.trim()) {
+      setCreateClienteError('Nombre y teléfono son obligatorios');
+      return;
+    }
+    setCreatingCliente(true);
+    setCreateClienteError('');
+    try {
+      const { data, status } = await api.post(`/salones/${salonId}/clientes`, {
+        nombre: newClienteForm.nombre.trim(),
+        telefono: newClienteForm.telefono.trim(),
+        cedula: newClienteForm.cedula.trim() || undefined,
+        email: newClienteForm.email.trim() || undefined,
+      });
+      const newCliente = data?.cliente ?? data?.data ?? data;
+      if (newCliente?.id) {
+        setSelectedClienteName(newCliente.nombre);
+        onChange({ clienteId: newCliente.id });
+        // Refresh client list so new client appears in search
+        await refreshClientes();
+        setShowCreateCliente(false);
+        setNewClienteForm({ nombre: '', telefono: '', cedula: '', email: '' });
+      } else {
+        setCreateClienteError('Error al crear el cliente. Intenta de nuevo.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al crear el cliente. Intenta de nuevo.';
+      // Check if it's a validation error from the server
+      if (typeof err === 'object' && err !== null && 'response' in err) {
+        const axiosError = err as { response?: { data?: { message?: string } } };
+        const serverMsg = axiosError.response?.data?.message;
+        if (serverMsg) {
+          setCreateClienteError(serverMsg);
+        } else {
+          setCreateClienteError(msg);
+        }
+      } else {
+        setCreateClienteError(msg);
+      }
+    } finally {
+      setCreatingCliente(false);
+    }
+  };
   const canCreate =
     form.clienteId > 0 &&
     form.serviciosIds.length > 0 &&
@@ -1354,6 +1460,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
     >
       <motion.div
         className={styles.modalContent}
+        style={{ maxWidth: 640 }}
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1379,7 +1486,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
           </button>
         </div>
 
-        <div className={styles.modalBody}>
+        <div className={styles.modalBody} style={{ position: 'relative' }}>
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem 0' }}>
               {[1, 2, 3, 4].map((i) => (
@@ -1391,88 +1498,27 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
             </div>
           ) : (
           <>
-          {/* Cliente */}
+          {/* Cliente — Searchable Select */}
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Cliente</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                className={styles.formInput}
-                placeholder="Buscar o escribir nombre..."
-                value={
-                  form.clienteId > 0
-                    ? clientes.find(c => c.id === form.clienteId)?.nombre ?? clienteSearch
-                    : clienteSearch
-                }
-                onChange={(e) => {
-                  setClienteSearch(e.target.value);
-                  if (form.clienteId > 0) onChange({ clienteId: 0 });
-                }}
-                onFocus={() => {
-                  if (form.clienteId > 0) {
-                    setClienteSearch('');
-                    onChange({ clienteId: 0 });
-                  }
-                }}
-                style={{ paddingRight: '28px' }}
-              />
-              {form.clienteId > 0 && (
-                <button
-                  onClick={() => { onChange({ clienteId: 0 }); setClienteSearch(''); }}
-                  style={{
-                    position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
-                    background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer',
-                    fontSize: '0.875rem', padding: 0,
-                  }}
-                  aria-label="Limpiar cliente"
-                >✕</button>
-              )}
-              {!form.clienteId && clienteSearch.length > 0 && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-                  maxHeight: '160px', overflowY: 'auto',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                  background: 'var(--bg-surface)', marginTop: '2px',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                }}>
-                  {clientes
-                    .filter(c => c.nombre.toLowerCase().includes(clienteSearch.toLowerCase()))
-                    .slice(0, 8)
-                    .map(c => (
-                      <div
-                        key={c.id}
-                        onClick={() => { onChange({ clienteId: c.id }); setClienteSearch(''); }}
-                        style={{
-                          padding: '0.5rem 0.75rem', cursor: 'pointer',
-                          fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
-                          color: 'var(--text-primary)',
-                          borderBottom: '1px solid var(--border)',
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                      >
-                        {c.nombre}
-                        {c.telefono && <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem', marginLeft: '0.5rem' }}>{c.telefono}</span>}
-                      </div>
-                    ))
-                  }
-                  {clientes.filter(c => c.nombre.toLowerCase().includes(clienteSearch.toLowerCase())).length === 0 && (
-                    <div style={{
-                      padding: '0.5rem 0.75rem', fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.75rem', color: 'var(--text-dim)',
-                    }}>
-                      No se encontraron clientes
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <label className={styles.formLabel}>
+              Cliente <span className={styles.requiredAsterisk}>*</span>
+            </label>
+            <ClienteSearchableSelect
+              salonId={salonId}
+              value={form.clienteId}
+              selectedName={selectedClienteName}
+              onSelect={(cliente) => {
+                onChange({ clienteId: cliente.id });
+                setSelectedClienteName(cliente.nombre);
+              }}
+              onCreateNew={() => setShowCreateCliente(true)}
+              placeholder="🔍 Buscar cliente por nombre, celular o cédula..."
+            />
           </div>
 
           {/* Servicios */}
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Servicios</label>
+            <label className={styles.formLabel}>Servicios <span className={styles.requiredAsterisk}>*</span></label>
             <input
               type="text"
               className={styles.formInput}
@@ -1508,33 +1554,28 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
               )}
             </div>
             {form.serviciosIds.length > 0 && (
-              <div style={{
-                display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.4rem',
-              }}>
+              <div className={styles.serviceChips}>
                 {selectedServicios.map(svc => (
-                  <span key={svc.id} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                    padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-sm)',
-                    background: 'var(--accent-subtle)', border: '1px solid var(--accent)',
-                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--accent)',
-                  }}>
+                  <span key={svc.id} className={styles.serviceChip}>
                     {svc.nombre}
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleServicio(svc.id); }}
-                      style={{
-                        background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer',
-                        padding: 0, fontSize: '0.7rem', lineHeight: 1,
-                      }}
+                      className={styles.serviceChipRemove}
                     >✕</button>
                   </span>
                 ))}
+              </div>
+            )}
+            {form.serviciosIds.length > 0 && (
+              <div className={styles.totalPriceBadge}>
+                Total: {formatCurrency(totalPrice)}
               </div>
             )}
           </div>
 
           {/* Empleada */}
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Empleada</label>
+            <label className={styles.formLabel}>Empleada <span className={styles.requiredAsterisk}>*</span></label>
             <select
               className={styles.formSelect}
               value={form.empleadaId || ''}
@@ -1554,22 +1595,26 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
             </select>
           </div>
 
-          {/* Fecha */}
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Fecha</label>
-            <input
-              type="date"
-              className={styles.formInput}
-              value={form.fecha}
-              onChange={(e) => onChange({ fecha: e.target.value, horaInicio: '' })}
-              min={toISODate(new Date())}
-            />
-          </div>
+          {/* Fecha + Hora — 2-column grid */}
+          <div className={styles.formRow}>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>
+                Fecha <span className={styles.requiredAsterisk}>*</span>
+              </label>
+              <input
+                type="date"
+                className={styles.formInput}
+                value={form.fecha}
+                onChange={(e) => onChange({ fecha: e.target.value, horaInicio: '' })}
+                min={toISODate(new Date())}
+              />
+            </div>
 
-          {/* Hora / Slots */}
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Hora</label>
-            {!form.fecha || !form.empleadaId || form.serviciosIds.length === 0 ? (
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>
+                Hora <span className={styles.requiredAsterisk}>*</span>
+              </label>
+              {!form.fecha || !form.empleadaId || form.serviciosIds.length === 0 ? (
               <span
                 style={{
                   fontFamily: "'DM Sans', sans-serif",
@@ -1614,6 +1659,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
                 ))}
               </div>
             )}
+            </div>
           </div>
 
           {/* Notas */}
@@ -1652,6 +1698,237 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* ── Mini-modal inline: Crear nuevo cliente ── */}
+          <AnimatePresence>
+            {showCreateCliente && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(4px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 50,
+                  borderRadius: 'var(--radius-lg)',
+                }}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setShowCreateCliente(false);
+                }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  transition={{ duration: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={styles.clienteMiniModal}
+                >
+                  {/* Header */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '1rem 1.25rem 0.75rem',
+                      borderBottom: '1px solid var(--border)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "'Playfair Display', serif",
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      Crear nuevo cliente
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateCliente(false)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-dim)',
+                        fontSize: '1.25rem',
+                        cursor: 'pointer',
+                        padding: '0 0.25rem',
+                        lineHeight: 1,
+                      }}
+                      aria-label="Cerrar"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Body */}
+                  <div
+                    style={{
+                      padding: '1rem 1.25rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    {/* Nombre */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          marginBottom: '0.3rem',
+                        }}
+                      >
+                        Nombre completo <span style={{ color: 'var(--danger)' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className={styles.formInput}
+                        value={newClienteForm.nombre}
+                        onChange={(e) =>
+                          setNewClienteForm((prev) => ({ ...prev, nombre: e.target.value }))
+                        }
+                        placeholder="Nombre del cliente"
+                      />
+                    </div>
+
+                    {/* Teléfono */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          marginBottom: '0.3rem',
+                        }}
+                      >
+                        Teléfono <span style={{ color: 'var(--danger)' }}>*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        className={styles.formInput}
+                        value={newClienteForm.telefono}
+                        onChange={(e) =>
+                          setNewClienteForm((prev) => ({ ...prev, telefono: e.target.value }))
+                        }
+                        placeholder="Número de teléfono"
+                      />
+                    </div>
+
+                    {/* Cédula */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          marginBottom: '0.3rem',
+                        }}
+                      >
+                        Cédula
+                      </label>
+                      <input
+                        type="text"
+                        className={styles.formInput}
+                        value={newClienteForm.cedula}
+                        onChange={(e) =>
+                          setNewClienteForm((prev) => ({ ...prev, cedula: e.target.value }))
+                        }
+                        placeholder="Opcional"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          color: 'var(--text-secondary)',
+                          marginBottom: '0.3rem',
+                        }}
+                      >
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        className={styles.formInput}
+                        value={newClienteForm.email}
+                        onChange={(e) =>
+                          setNewClienteForm((prev) => ({ ...prev, email: e.target.value }))
+                        }
+                        placeholder="Opcional"
+                      />
+                    </div>
+
+                    {/* Error */}
+                    {createClienteError && (
+                      <p
+                        style={{
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.75rem',
+                          color: 'var(--danger)',
+                          margin: 0,
+                        }}
+                      >
+                        {createClienteError}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div
+                    style={{
+                      padding: '0.75rem 1.25rem 1rem',
+                      borderTop: '1px solid var(--border)',
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowCreateCliente(false);
+                        setCreateClienteError('');
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={
+                        !newClienteForm.nombre.trim() ||
+                        !newClienteForm.telefono.trim()
+                      }
+                      loading={creatingCliente}
+                      onClick={handleCreateCliente}
+                    >
+                      Crear y seleccionar
+                    </Button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           </>
           )}
         </div>
@@ -1816,18 +2093,18 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
 
           {/* ── Action buttons ── */}
           {!isTerminal && (
-            <div className={styles.actionGroup} style={{ marginTop: '1rem' }}>
+            <div className={styles.actionGroup} style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
               {cita.estado === 'PENDIENTE' && (
                 <>
                   <ActionBtn label="Confirmar" onClick={() => onChangeEstado('CONFIRMADA')} loading={actionLoading} />
                   <ActionBtn label="Completar" variant="success" onClick={onCompletar} loading={false} />
-                  <ActionBtn label="Cancelar" variant="danger" onClick={onShowCancelForm} loading={false} />
+                  <ActionBtn label="Cancelar Cita" variant="danger" onClick={onShowCancelForm} loading={false} />
                 </>
               )}
               {cita.estado === 'CONFIRMADA' && (
                 <>
                   <ActionBtn label="Completar" variant="success" onClick={onCompletar} loading={false} />
-                  <ActionBtn label="Cancelar" variant="danger" onClick={onShowCancelForm} loading={false} />
+                  <ActionBtn label="Cancelar Cita" variant="danger" onClick={onShowCancelForm} loading={false} />
                 </>
               )}
             </div>

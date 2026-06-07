@@ -1,10 +1,12 @@
 import { injectable, inject } from 'tsyringe';
 import type { IClienteRepository } from '../../../domain/ports/IClienteRepository';
 import { ClienteDTO } from '../../dtos/ClienteDTO';
+import type { PaginationParams, PaginatedResult } from '../../../../../shared/pagination';
+import { paginate } from '../../../../../shared/pagination';
 
-interface ListClientesInput {
+interface ListClientesInput extends PaginationParams {
   salonId: number;
-  telefono?: string;
+  q?: string;
 }
 
 @injectable()
@@ -13,12 +15,19 @@ export class ListClientesUseCase {
     @inject('IClienteRepository') private readonly clienteRepo: IClienteRepository,
   ) {}
 
-  async execute(input: ListClientesInput): Promise<ClienteDTO[]> {
-    const clientes = await this.clienteRepo.findBySalon(
-      input.salonId,
-      input.telefono,
-    );
+  async execute(input: ListClientesInput): Promise<PaginatedResult<ClienteDTO>> {
+    const skip = input.limit > 0 ? (input.page - 1) * input.limit : undefined;
 
-    return clientes.map((cli) => ClienteDTO.fromEntity(cli));
+    const [clientes, total] = await Promise.all([
+      this.clienteRepo.findBySalonPaginated(input.salonId, {
+        skip,
+        take: input.limit > 0 ? input.limit : undefined,
+        q: input.q,
+      }),
+      this.clienteRepo.countBySalon(input.salonId, input.q),
+    ]);
+
+    const dtos = clientes.map((cli) => ClienteDTO.fromEntity(cli));
+    return paginate(dtos, total, { page: input.page, limit: input.limit });
   }
 }

@@ -291,32 +291,63 @@ async function seed(): Promise<void> {
     console.log(`✅ ${prodCreated} new products created`);
 
     // ========================================================================
-    // 5. CLIENTS
+    // 5. CLIENTS (30 clientes de prueba con datos realistas)
     // ========================================================================
     const clientRepo = AppDataSource.getRepository(ClienteEntity);
 
+    // Distribuir entre varios salones si existen
+    const allSalones = await salonRepo.find();
+    const salonIds = allSalones.map((s) => s.id);
+
     const clients = [
-      { nombre: 'María Fernanda García', telefono: '3001234567', email: 'maria.garcia@email.com' },
-      { nombre: 'Ana Lucía Martínez', telefono: '3002345678', email: 'ana.martinez@email.com' },
-      { nombre: 'Sofía Patricia Rodríguez', telefono: '3003456789', email: 'sofia.rodriguez@email.com' },
-      { nombre: 'Carmen Elena López', telefono: '3004567890' },
-      { nombre: 'Diana Marcela Hernández', telefono: '3005678901', email: 'diana.hernandez@email.com' },
-      { nombre: 'Laura Cristina Sánchez', telefono: '3006789012' },
-      { nombre: 'Andrea del Pilar Ramírez', telefono: '3007890123', email: 'andrea.ramirez@email.com' },
-      { nombre: 'Natalia Jimena Torres', telefono: '3008901234' },
-      { nombre: 'Paola Andrea Morales', telefono: '3009012345', email: 'paola.morales@email.com' },
-      { nombre: 'Verónica del Carmen Castro', telefono: '3000123456' },
+      // Salon 1 (o el único salón)
+      { nombre: 'María Fernanda García',     telefono: '3001234567', cedula: '1012345678', email: 'maria.garcia@email.com' },
+      { nombre: 'Ana Lucía Martínez',        telefono: '3002345678', cedula: '1023456789', email: 'ana.martinez@email.com' },
+      { nombre: 'Sofía Patricia Rodríguez',  telefono: '3003456789', cedula: '1034567890', email: 'sofia.rodriguez@email.com' },
+      { nombre: 'Carmen Elena López',        telefono: '3004567890', cedula: '1045678901' },
+      { nombre: 'Diana Marcela Hernández',   telefono: '3005678901', cedula: '1056789012', email: 'diana.hernandez@email.com' },
+      { nombre: 'Laura Cristina Sánchez',    telefono: '3006789012', cedula: '1067890123' },
+      { nombre: 'Andrea del Pilar Ramírez',  telefono: '3007890123', cedula: '1078901234', email: 'andrea.ramirez@email.com' },
+      { nombre: 'Natalia Jimena Torres',     telefono: '3008901234', cedula: '1089012345' },
+      { nombre: 'Paola Andrea Morales',      telefono: '3009012345', cedula: '1090123456', email: 'paola.morales@email.com' },
+      { nombre: 'Verónica del Carmen Castro', telefono: '3000123456', cedula: '1101234567' },
+      // Más clientes
+      { nombre: 'Gabriela Alexandra Ríos',   telefono: '3011234567', cedula: '1112345678', email: 'gabriela.rios@email.com' },
+      { nombre: 'Luisa Fernanda Vargas',     telefono: '3012345678', cedula: '1123456789' },
+      { nombre: 'Carolina de los Ángeles Peña', telefono: '3013456789', cedula: '1134567890', email: 'carolina.pena@email.com' },
+      { nombre: 'Valentina María Castro',    telefono: '3014567890', cedula: '1145678901' },
+      { nombre: 'Isabel Cristina Mejía',     telefono: '3015678901', cedula: '1156789012', email: 'isabel.mejia@email.com' },
+      { nombre: 'Ximena Patricia Rojas',     telefono: '3016789012' },
+      { nombre: 'Daniela Alejandra Silva',   telefono: '3017890123', cedula: '1167890123' },
+      { nombre: 'Manuela José Herrera',      telefono: '3018901234', cedula: '1178901234', email: 'manuela.herrera@email.com' },
+      { nombre: 'Fernanda Lucía Ortiz',      telefono: '3019012345' },
+      { nombre: 'Catalina Andrea Pardo',     telefono: '3020123456', cedula: '1189012345', email: 'catalina.pardo@email.com' },
+      // Clientes sin cédula (algunos)
+      { nombre: 'Johanna Patricia Reyes',    telefono: '3021234567', email: 'johanna.reyes@email.com' },
+      { nombre: 'Angela María Figueroa',     telefono: '3022345678' },
+      { nombre: 'Rosa Elena Quintero',       telefono: '3023456789', cedula: '1190123456' },
+      { nombre: 'Beatriz Adriana Mora',      telefono: '3024567890', email: 'beatriz.mora@email.com' },
+      { nombre: 'Claudia Marcela Duarte',    telefono: '3025678901', cedula: '1201234567' },
+      { nombre: 'Liliana del Socorro Vega',  telefono: '3026789012' },
+      { nombre: 'Martha Cecilia Guzmán',     telefono: '3027890123', cedula: '1212345678', email: 'martha.guzman@email.com' },
+      { nombre: 'Patricia Elena Navarro',    telefono: '3028901234' },
+      { nombre: 'Adriana Milena Cortés',     telefono: '3029012345', cedula: '1223456789' },
+      { nombre: 'Luz Marina Espinoza',       telefono: '3030123456', email: 'luz.espinoza@email.com' },
     ];
 
     let clientCreated = 0;
-    for (const cli of clients) {
-      const exists = await clientRepo.findOneBy({ telefono: cli.telefono, salonId });
+    for (let i = 0; i < clients.length; i++) {
+      const cli = clients[i];
+      // Distribute among existing salons
+      const sId = salonIds[i % salonIds.length] ?? salonId;
+      const exists = await clientRepo.findOneBy({ telefono: cli.telefono, salonId: sId });
       if (!exists) {
         await clientRepo.save({
           nombre: cli.nombre,
           telefono: cli.telefono,
-          email: cli.email ?? null,
-          salonId,
+          cedula: (cli as Record<string, string | undefined>).cedula ?? undefined,
+          email: cli.email ?? undefined,
+          salonId: sId,
           activo: true,
         });
         clientCreated++;

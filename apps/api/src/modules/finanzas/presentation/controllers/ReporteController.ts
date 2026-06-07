@@ -14,13 +14,12 @@ export class ReporteController {
 
   resumenDia = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const fecha = req.query.fecha
-        ? new Date(req.query.fecha as string)
-        : new Date();
+      // fecha format: YYYY-MM-DD (Colombia date)
+      const fecha = req.query.fecha as string | undefined;
 
       const result = await this.resumenDiaUseCase.execute({
         salonId: req.salonId!,
-        fecha,
+        fecha: fecha ?? new Date().toISOString().slice(0, 10),
       });
       res.json(result);
     } catch (error) {

@@ -181,6 +181,44 @@ function formatDate(dateStr?: string): string {
   }
 }
 
+function formatShortDate(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatTime(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
 function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -376,22 +414,24 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       }
       const results = await Promise.allSettled(promises);
 
-      // Build clientes map from API response
+      // Build clientes map from API response (handle both paginated and legacy formats)
       let clientesMap = new Map<number, string>();
       if (results.length > 2 && results[2].status === 'fulfilled') {
         const raw = results[2].value.data;
-        const list = Array.isArray(raw) ? raw : [];
+        const paginatedData = raw?.data ?? raw;
+        const list = Array.isArray(paginatedData) ? paginatedData : [];
         clientesMap = new Map<number, string>();
         for (const c of list) {
           if (c.id != null && c.nombre) clientesMap.set(c.id, c.nombre);
         }
       }
 
-      // Build empleadas map from API response
+      // Build empleadas map from API response (handle both paginated and legacy formats)
       let empleadasMap = new Map<number, string>();
       if (results.length > 3 && results[3].status === 'fulfilled') {
         const raw = results[3].value.data;
-        const list = Array.isArray(raw) ? raw : [];
+        const paginatedData = raw?.data ?? raw;
+        const list = Array.isArray(paginatedData) ? paginatedData : [];
         empleadasMap = new Map<number, string>();
         for (const e of list) {
           if (e.id != null && e.nombre) empleadasMap.set(e.id, e.nombre);
@@ -667,6 +707,11 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 <th>Empleada</th>
                 <th>Servicios</th>
                 <th>Productos</th>
+                <th>Total Original</th>
+                <th>Fecha</th>
+                <th>Hora</th>
+                <th>Dto.%</th>
+                <th>Ajustado</th>
                 <th>Total</th>
                 <th>Método de pago</th>
                 <th>Estado</th>
@@ -697,6 +742,36 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   </td>
                   <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                     {reg.totalProductos > 0 ? formatCurrency(reg.totalProductos) : '---'}
+                  </td>
+                  {/* Total Original */}
+                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                    {reg.precioAjustado && reg.valorOriginal != null
+                      ? formatCurrency(reg.valorOriginal)
+                      : '—'}
+                  </td>
+                  {/* Fecha */}
+                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                    {formatShortDate(reg.creadoEn)}
+                  </td>
+                  {/* Hora */}
+                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                    {formatTime(reg.creadoEn)}
+                  </td>
+                  {/* Descuento */}
+                  <td style={{ textAlign: 'center' }}>
+                    {reg.porcentajeDescuento != null && reg.porcentajeDescuento > 0 ? (
+                      <span style={{ color: 'var(--danger)', fontWeight: 500 }}>{reg.porcentajeDescuento}%</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)' }}>—</span>
+                    )}
+                  </td>
+                  {/* Ajustado */}
+                  <td style={{ textAlign: 'center' }}>
+                    {reg.precioAjustado ? (
+                      <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)', fontSize: '0.65rem', fontWeight: 600 }}>Sí</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>No</span>
+                    )}
                   </td>
                   <td style={{ fontWeight: 600, color: 'var(--accent)' }}>
                     {formatCurrency(calcTotal(reg))}
@@ -808,145 +883,193 @@ interface RegistroDetailProps {
   onClose: () => void;
 }
 
-const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTotal, onClose }) => (
-  <motion.div
-    className={styles.modalOverlay}
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.2 }}
-    onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-  >
+const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTotal, onClose }) => {
+  const totalFinal = calcTotal(registro);
+  const originalTotal = registro.valorOriginal ?? (registro.montoTotal || (registro.totalServicios + registro.totalProductos));
+  const subtotal = registro.totalServicios + registro.totalProductos;
+  const totalPagos = registro.pagos?.reduce((s, p) => s + p.monto, 0) ?? 0;
+  const cambio = totalPagos > totalFinal ? totalPagos - totalFinal : 0;
+
+  return (
     <motion.div
-      className={`${styles.modalContent} ${styles.modalContentWide}`}
-      initial={{ opacity: 0, scale: 0.92, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 10 }}
-      transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
-      onClick={(e) => e.stopPropagation()}
+      className={styles.modalOverlay}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className={styles.modalHeader}>
-        <span className={styles.modalTitle}>Registro #{registro.id}</span>
-        <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Cerrar">✕</button>
-      </div>
-
-      <div className={styles.modalBody}>
-        {/* Cliente */}
-        <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Cliente</span>
-          <span className={styles.infoValue}>{registro._clienteNombre ?? `Cliente #${registro.clienteId}`}</span>
+      <motion.div
+        className={`${styles.modalContent} ${styles.modalContentWide}`}
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={styles.modalHeader}>
+          <span className={styles.modalTitle}>Registro #{registro.id}</span>
+          <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
 
-        {/* Empleada */}
-        <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Empleada</span>
-          <span className={styles.infoValue}>{registro._empleadaNombre ?? `Usuaria #${registro.usuarioId}`}</span>
-        </div>
+        <div className={styles.modalBody}>
+          {/* Header info bar */}
+          <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+            Registro #{registro.id} · Creado: {formatDateTime(registro.creadoEn)} · Actualizado: {formatDateTime(registro.actualizadoEn)}
+          </p>
 
-        {/* Servicios */}
-        <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Servicios</span>
-          <span className={styles.infoValue} style={{ color: 'var(--accent)' }}>
-            {registro.totalServicios > 0 ? formatCurrency(registro.totalServicios) : '---'}
-          </span>
-        </div>
-
-        {/* Productos */}
-        <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Productos</span>
-          <span className={styles.infoValue} style={{ color: 'var(--accent)' }}>
-            {registro.totalProductos > 0 ? formatCurrency(registro.totalProductos) : '---'}
-          </span>
-        </div>
-
-        {/* Propina */}
-        {registro.propina > 0 && (
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Propina</span>
-            <span className={styles.infoValue} style={{ color: 'var(--success)' }}>
-              +{formatCurrency(registro.propina)}
-            </span>
+          {/* Top badges row */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            {registro.esRetoque && (
+              <span style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>🔁 Retoque</span>
+            )}
+            {registro.precioAjustado && (
+              <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>💰 Precio ajustado</span>
+            )}
+            {registro.montoPendiente > 0 && (
+              <span style={{ background: 'rgba(224,85,106,0.12)', color: 'var(--danger)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>⚠️ Pendiente: {formatCurrency(registro.montoPendiente)}</span>
+            )}
           </div>
-        )}
 
-        {/* Método de pago */}
-        <div className={styles.infoRow}>
-          <span className={styles.infoLabel}>Método de pago</span>
-          <span className={styles.infoValue}>
-            {METODO_PAGO_LABELS[registro.pagos?.[0]?.metodoPago ?? '---'] ?? '---'}
-          </span>
-        </div>
-
-        {/* Pagos */}
-        {registro.pagos && registro.pagos.length > 0 && (
-          <>
-            <div className={styles.infoRow} style={{ borderBottom: 'none', paddingBottom: '0.25rem' }}>
-              <span className={styles.infoLabel} style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Pagos</span>
-            </div>
-            {registro.pagos.map((p) => (
-              <div key={p.id} className={styles.infoRow} style={{ paddingLeft: '1.25rem', borderBottom: 'none', paddingTop: '0.15rem', paddingBottom: '0.15rem' }}>
-                <span className={styles.infoValue}>
-                  {METODO_PAGO_LABELS[p.metodoPago] ?? p.metodoPago}
-                  {p.referencia ? ` (${p.referencia})` : ''}
-                </span>
-                <span className={styles.infoValue} style={{ marginLeft: 'auto', color: 'var(--accent)' }}>
-                  {formatCurrency(p.monto)}
-                </span>
+          {/* Two-column info section */}
+          <div className={styles.detailGrid}>
+            <div>
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Cliente</span>
+                <span className={styles.infoValue}>{registro._clienteNombre ?? `Cliente #${registro.clienteId}`}</span>
               </div>
-            ))}
-          </>
-        )}
-
-        {/* Divisiones */}
-        {registro.divisiones && registro.divisiones.length > 0 && (
-          <>
-            <div className={styles.infoRow} style={{ borderBottom: 'none', paddingBottom: '0.25rem' }}>
-              <span className={styles.infoLabel} style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Divisiones</span>
-            </div>
-            {registro.divisiones.map((d) => (
-              <div key={d.id} className={styles.infoRow} style={{ paddingLeft: '1.25rem', borderBottom: 'none', paddingTop: '0.15rem', paddingBottom: '0.15rem' }}>
-                <span className={styles.infoValue}>Empleada #{d.usuarioId}</span>
-                <span className={styles.infoValue} style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                  {d.porcentajeParticipacion}%
-                </span>
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Empleada</span>
+                <span className={styles.infoValue}>{registro._empleadaNombre ?? `Usuaria #${registro.usuarioId}`}</span>
               </div>
-            ))}
-          </>
-        )}
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Método de pago</span>
+                <span className={styles.infoValue}>{METODO_PAGO_LABELS[registro.pagos?.[0]?.metodoPago ?? '---'] ?? '---'}</span>
+              </div>
+            </div>
+            <div>
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Fecha creación</span>
+                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTime(registro.creadoEn)}</span>
+              </div>
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Fecha actualización</span>
+                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTime(registro.actualizadoEn)}</span>
+              </div>
+              {registro.propina > 0 && (
+                <div className={styles.infoRow}>
+                  <span className={styles.infoLabel}>Propina</span>
+                  <span className={styles.infoValue} style={{ color: 'var(--success)' }}>+{formatCurrency(registro.propina)}</span>
+                </div>
+              )}
+            </div>
+          </div>
 
-        {/* Total */}
-        <div className={styles.infoRow} style={{ borderTop: '1px solid var(--border)', marginTop: '0.5rem', paddingTop: '0.75rem' }}>
-          <span className={styles.infoLabel} style={{ fontWeight: 700 }}>Total</span>
-          <span className={styles.infoValue} style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '1rem' }}>
-            {formatCurrency(calcTotal(registro))}
-          </span>
+          {/* Totals section (receipt style) */}
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Servicios</span>
+              <span className={styles.infoValue}>{formatCurrency(registro.totalServicios)}</span>
+            </div>
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Productos</span>
+              <span className={styles.infoValue}>{formatCurrency(registro.totalProductos)}</span>
+            </div>
+            {registro.totalProductos > 0 && (
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Productos vendidos</span>
+                <span className={styles.infoValue} style={{ color: 'var(--accent)' }}>{formatCurrency(registro.totalProductos)}</span>
+              </div>
+            )}
+            <div className={styles.infoRow} style={{ borderTop: '1px dashed var(--border)' }}>
+              <span className={styles.infoLabel}>Subtotal</span>
+              <span className={styles.infoValue}>{formatCurrency(subtotal)}</span>
+            </div>
+            {registro.porcentajeDescuento != null && registro.porcentajeDescuento > 0 && (
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Dto. {registro.porcentajeDescuento}%</span>
+                <span className={styles.infoValue} style={{ color: 'var(--danger)' }}>-{formatCurrency(Math.round(subtotal * registro.porcentajeDescuento / 100))}</span>
+              </div>
+            )}
+            {registro.precioAjustado && (
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Total original</span>
+                <span className={styles.infoValue} style={{ textDecoration: 'line-through', color: 'var(--text-dim)' }}>{formatCurrency(originalTotal)}</span>
+              </div>
+            )}
+            <div className={styles.infoRow} style={{ borderTop: '1px solid var(--border)', marginTop: '0.25rem', paddingTop: '0.5rem' }}>
+              <span className={styles.infoLabel} style={{ fontWeight: 700 }}>Total final</span>
+              <span className={styles.infoValue} style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '1rem' }}>{formatCurrency(totalFinal)}</span>
+            </div>
+            {registro.precioAjustado && registro.notas && (
+              <div className={styles.infoRow} style={{ borderBottom: 'none' }}>
+                <span className={styles.infoLabel}>Nota de ajuste</span>
+                <span className={styles.infoValue} style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontStyle: 'italic' }}>"{registro.notas}"</span>
+              </div>
+            )}
+          </div>
+
+          {/* Payment section */}
+          {registro.pagos && registro.pagos.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <h4 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pagos</h4>
+              {registro.pagos.map((p) => (
+                <div key={p.id} className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: '1px solid var(--border)', paddingTop: '0.3rem', paddingBottom: '0.3rem' }}>
+                  <span className={styles.infoValue}>
+                    {METODO_PAGO_LABELS[p.metodoPago] ?? p.metodoPago}
+                    {p.referencia ? ` (${p.referencia})` : ''}
+                  </span>
+                  <span className={styles.infoValue} style={{ marginLeft: 'auto', color: 'var(--accent)' }}>
+                    {formatCurrency(p.monto)}
+                  </span>
+                </div>
+              ))}
+              <div className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: 'none', paddingTop: '0.4rem' }}>
+                <span className={styles.infoLabel}>Monto recibido</span>
+                <span className={styles.infoValue} style={{ fontWeight: 600 }}>{formatCurrency(totalPagos)}</span>
+              </div>
+              {cambio > 0 && (
+                <div className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: 'none' }}>
+                  <span className={styles.infoLabel}>Cambio</span>
+                  <span className={styles.infoValue} style={{ color: 'var(--success)' }}>{formatCurrency(cambio)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Divisiones */}
+          {registro.divisiones && registro.divisiones.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <h4 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Divisiones</h4>
+              {registro.divisiones.map((d) => (
+                <div key={d.id} className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: '1px solid var(--border)', paddingTop: '0.3rem', paddingBottom: '0.3rem' }}>
+                  <span className={styles.infoValue}>Empleada #{d.usuarioId}</span>
+                  <span className={styles.infoValue} style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    {d.porcentajeParticipacion}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* General Notas (only if not already shown as adjustment note) */}
+          {registro.notas && !registro.precioAjustado && (
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Notas</span>
+              <span className={styles.infoValue}>{registro.notas}</span>
+            </div>
+          )}
         </div>
 
-        {/* Notas */}
-        {registro.notas && (
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Notas</span>
-            <span className={styles.infoValue}>{registro.notas}</span>
-          </div>
-        )}
-
-        {/* Fecha */}
-        {registro.creadoEn && (
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Creado</span>
-            <span className={styles.infoValue}>{formatDate(registro.creadoEn)}</span>
-          </div>
-        )}
-      </div>
-
-      <div className={styles.modalFooter}>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          Cerrar
-        </Button>
-      </div>
+        <div className={styles.modalFooter}>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cerrar
+          </Button>
+        </div>
+      </motion.div>
     </motion.div>
-  </motion.div>
-);
+  );
+};
 
 /* ── Sub-component: Anular Confirmation ── */
 

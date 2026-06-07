@@ -3,11 +3,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { ListClientesUseCase } from '../ListClientesUseCase';
 import type { IClienteRepository } from '../../../../domain/ports/IClienteRepository';
 
-function makeMockCliente(id: number, nombre: string, telefono: string) {
+function makeMockCliente(id: number, nombre: string, telefono: string, cedula: string | null = null) {
   return {
     id,
     nombre,
     telefono,
+    cedula,
     email: null,
     puntajeConfianza: 100,
     cantidadNoShows: 0,
@@ -30,48 +31,57 @@ describe('ListClientesUseCase', () => {
       findBySalon: vi.fn(),
       findBySalonAndId: vi.fn(),
       findBySalonAndTelefono: vi.fn(),
+      findBySalonAndCedula: vi.fn(),
+      findBySalonPaginated: vi.fn(),
+      countBySalon: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     } as unknown as IClienteRepository,
   });
 
-  it('should return all clientes for a salon', async () => {
+  it('should return paginated clientes for a salon', async () => {
     const mocks = createMocks();
     const mockClientes = [
       makeMockCliente(1, 'Juan', '+541112345'),
       makeMockCliente(2, 'Maria', '+541116789'),
     ];
-    mocks.clienteRepo.findBySalon = vi.fn().mockResolvedValue(mockClientes);
+    mocks.clienteRepo.findBySalonPaginated = vi.fn().mockResolvedValue(mockClientes);
+    mocks.clienteRepo.countBySalon = vi.fn().mockResolvedValue(2);
 
     const useCase = new ListClientesUseCase(mocks.clienteRepo);
-    const result = await useCase.execute({ salonId: 1 });
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 12 });
 
-    expect(result).toHaveLength(2);
-    expect(result[0].nombre).toBe('Juan');
-    expect(result[1].nombre).toBe('Maria');
-    expect(mocks.clienteRepo.findBySalon).toHaveBeenCalledWith(1, undefined);
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0].nombre).toBe('Juan');
+    expect(result.data[1].nombre).toBe('Maria');
+    expect(result.meta.total).toBe(2);
+    expect(result.meta.page).toBe(1);
+    expect(result.meta.limit).toBe(12);
+    expect(result.meta.totalPages).toBe(1);
+    expect(mocks.clienteRepo.findBySalonPaginated).toHaveBeenCalledWith(1, { skip: 0, take: 12, q: undefined });
+    expect(mocks.clienteRepo.countBySalon).toHaveBeenCalledWith(1, undefined);
   });
 
-  it('should filter by telefono when provided', async () => {
+  it('should pass search query to repository', async () => {
     const mocks = createMocks();
-    const matchingCliente = makeMockCliente(1, 'Juan', '+541112345');
-    mocks.clienteRepo.findBySalon = vi.fn().mockResolvedValue([matchingCliente]);
+    mocks.clienteRepo.findBySalonPaginated = vi.fn().mockResolvedValue([]);
+    mocks.clienteRepo.countBySalon = vi.fn().mockResolvedValue(0);
 
     const useCase = new ListClientesUseCase(mocks.clienteRepo);
-    const result = await useCase.execute({ salonId: 1, telefono: '+541112345' });
+    await useCase.execute({ salonId: 1, page: 1, limit: 12, q: 'Juan' });
 
-    expect(result).toHaveLength(1);
-    expect(result[0].telefono).toBe('+541112345');
-    expect(mocks.clienteRepo.findBySalon).toHaveBeenCalledWith(1, '+541112345');
+    expect(mocks.clienteRepo.findBySalonPaginated).toHaveBeenCalledWith(1, { skip: 0, take: 12, q: 'Juan' });
+    expect(mocks.clienteRepo.countBySalon).toHaveBeenCalledWith(1, 'Juan');
   });
 
-  it('should return empty array when no clientes match', async () => {
+  it('should use skip=undefined when limit is 0 (all results)', async () => {
     const mocks = createMocks();
-    mocks.clienteRepo.findBySalon = vi.fn().mockResolvedValue([]);
+    mocks.clienteRepo.findBySalonPaginated = vi.fn().mockResolvedValue([]);
+    mocks.clienteRepo.countBySalon = vi.fn().mockResolvedValue(0);
 
     const useCase = new ListClientesUseCase(mocks.clienteRepo);
-    const result = await useCase.execute({ salonId: 1, telefono: '99999' });
+    await useCase.execute({ salonId: 1, page: 1, limit: 0 });
 
-    expect(result).toHaveLength(0);
+    expect(mocks.clienteRepo.findBySalonPaginated).toHaveBeenCalledWith(1, { skip: undefined, take: undefined, q: undefined });
   });
 });

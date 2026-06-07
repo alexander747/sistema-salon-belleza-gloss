@@ -4,6 +4,7 @@ import { ListClientesUseCase } from '../../application/use-cases/cliente/ListCli
 import { GetClienteUseCase } from '../../application/use-cases/cliente/GetClienteUseCase';
 import { CreateClienteUseCase } from '../../application/use-cases/cliente/CreateClienteUseCase';
 import { UpdateClienteUseCase } from '../../application/use-cases/cliente/UpdateClienteUseCase';
+import { paginationSchema } from '@pos-final/validation';
 
 @injectable()
 export class ClienteController {
@@ -16,9 +17,15 @@ export class ClienteController {
 
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const pag = paginationSchema.safeParse(req.query);
+      const page = pag.success ? pag.data.page : 1;
+      const limit = pag.success ? pag.data.limit : 0;
+
       const result = await this.listUseCase.execute({
         salonId: req.salonId!,
-        telefono: req.query.telefono as string | undefined,
+        page,
+        limit,
+        q: (req.query.q as string) || undefined,
       });
       res.json(result);
     } catch (error) {

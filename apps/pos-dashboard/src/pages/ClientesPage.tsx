@@ -13,6 +13,7 @@ interface Cliente {
   id: number;
   nombre: string;
   telefono: string;
+  cedula?: string | null;
   email?: string;
   fechaNacimiento?: string;
   genero?: string;
@@ -27,11 +28,19 @@ interface Cliente {
   actualizadoEn?: string;
 }
 
+interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 type ModalMode = 'create' | 'edit' | 'detail' | 'delete' | null;
 
 interface ClienteForm {
   nombre: string;
   telefono: string;
+  cedula: string;
   email: string;
   fechaNacimiento: string;
   genero: string;
@@ -46,6 +55,7 @@ interface ClienteForm {
 const EMPTY_FORM: ClienteForm = {
   nombre: '',
   telefono: '',
+  cedula: '',
   email: '',
   fechaNacimiento: '',
   genero: '',
@@ -121,6 +131,10 @@ const ClientesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<PaginationMeta>({ page: 1, limit: 12, total: 0, totalPages: 0 });
+  const limit = 12;
 
   /* ── Modal state ── */
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -143,27 +157,45 @@ const ClientesPage: React.FC = () => {
       .finally(() => setAuthLoading(false));
   }, [navigate]);
 
-  /* ── Fetch clientes ── */
+  /* ── Fetch clientes (paginado) ── */
   const fetchClientes = useCallback(async () => {
     if (salonId == null) return;
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get(`/salones/${salonId}/clientes`);
-      const mapped = (Array.isArray(data) ? data : []).map((c: Record<string, unknown>) => ({
+      const params: Record<string, string> = { page: String(page), limit: String(limit) };
+      if (search.trim()) params.q = search.trim();
+
+      const { data } = await api.get(`/salones/${salonId}/clientes`, { params });
+      const list: Cliente[] = (Array.isArray(data.data) ? data.data : []).map((c: Record<string, unknown>) => ({
         ...c,
         visitas: (c.totalServicios as number) ?? 0,
       }));
-      setClientes(mapped as Cliente[]);
+      setClientes(list as Cliente[]);
+      setMeta(data.meta ?? { page: 1, limit: 12, total: 0, totalPages: 0 });
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Error al cargar clientes';
       setError(msg);
       setClientes([]);
+      setMeta({ page: 1, limit: 12, total: 0, totalPages: 0 });
     } finally {
       setLoading(false);
     }
-  }, [salonId]);
+  }, [salonId, page, debouncedSearch]);
+
+  // Debounce search: wait 400ms after user stops typing before fetching
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search !== debouncedSearch) {
+        setPage(1);
+        setDebouncedSearch(search);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+    // Only run when raw search value changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   useEffect(() => {
     if (!authLoading && salonId != null) {
@@ -171,16 +203,8 @@ const ClientesPage: React.FC = () => {
     }
   }, [authLoading, salonId, fetchClientes]);
 
-  /* ── Search filter ── */
-  const filteredClientes = useMemo(() => {
-    if (!search.trim()) return clientes;
-    const q = search.toLowerCase();
-    return clientes.filter(
-      (c) =>
-        c.nombre.toLowerCase().includes(q) ||
-        c.telefono.replace(/\D/g, '').includes(q.replace(/\D/g, '')),
-    );
-  }, [clientes, search]);
+  // Use server-side data directly — no client-side filter
+  const filteredClientes = clientes;
 
   /* ── Modal openers ── */
   const openCreate = () => {
@@ -194,6 +218,7 @@ const ClientesPage: React.FC = () => {
     setForm({
       nombre: cliente.nombre,
       telefono: cliente.telefono,
+      cedula: cliente.cedula || '',
       email: cliente.email || '',
       fechaNacimiento: cliente.fechaNacimiento || '',
       genero: cliente.genero || '',
@@ -225,6 +250,7 @@ const ClientesPage: React.FC = () => {
       nombre: form.nombre.trim(),
       telefono: form.telefono.trim(),
     };
+    if (form.cedula.trim()) payload.cedula = form.cedula.trim();
     if (form.email.trim()) payload.email = form.email.trim();
     if (form.fechaNacimiento) payload.fechaNacimiento = form.fechaNacimiento;
     if (form.genero) payload.genero = form.genero;
@@ -353,7 +379,7 @@ const ClientesPage: React.FC = () => {
               <input
                 type="text"
                 className={styles.searchInput}
-                placeholder="Buscar por nombre o teléfono..."
+                placeholder="Buscar por nombre, teléfono o cédula..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -381,14 +407,39 @@ const ClientesPage: React.FC = () => {
               onCreate={openCreate}
             />
           ) : (
-            <RenderTable
-              clientes={filteredClientes}
-              containerVariants={containerVariants}
-              itemVariants={itemVariants}
-              onDetail={openDetail}
-              onEdit={openEdit}
-              onDelete={openDelete}
-            />
+            <>
+              <RenderTable
+                clientes={filteredClientes}
+                containerVariants={containerVariants}
+                itemVariants={itemVariants}
+                onDetail={openDetail}
+                onEdit={openEdit}
+                onDelete={openDelete}
+              />
+
+              {/* ── Pagination controls ── */}
+              {meta.totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem', alignItems: 'center' }}>
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
+                  >
+                    ← Anterior
+                  </button>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                    Página {meta.page} de {meta.totalPages} ({meta.total} registros)
+                  </span>
+                  <button
+                    disabled={page >= meta.totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: page >= meta.totalPages ? 'not-allowed' : 'pointer', opacity: page >= meta.totalPages ? 0.5 : 1 }}
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </motion.div>
       </AnimatePresence>
@@ -461,6 +512,7 @@ const RenderSkeleton: React.FC = () => (
         <tr>
           <th>Nombre</th>
           <th>Teléfono</th>
+          <th>Cédula</th>
           <th>Email</th>
           <th>Visitas</th>
           <th>Creado</th>
@@ -485,6 +537,10 @@ const RenderSkeleton: React.FC = () => (
           <div
             className={styles.skeletonBlock}
             style={{ height: 14, flex: 2 }}
+          />
+          <div
+            className={styles.skeletonBlock}
+            style={{ height: 14, flex: 1.5 }}
           />
           <div
             className={styles.skeletonBlock}
@@ -631,6 +687,7 @@ const RenderTable: React.FC<RenderTableProps> = ({
         <tr>
           <th>Nombre</th>
           <th>Teléfono</th>
+          <th>Cédula</th>
           <th>Email</th>
           <th>Visitas</th>
           <th>Creado</th>
@@ -648,6 +705,9 @@ const RenderTable: React.FC<RenderTableProps> = ({
           >
             <td style={{ fontWeight: 500 }}>{cliente.nombre}</td>
             <td>{formatPhone(cliente.telefono)}</td>
+            <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '0.8125rem' }}>
+              {cliente.cedula || '—'}
+            </td>
             <td style={{ color: 'var(--text-secondary)' }}>
               {cliente.email || '—'}
             </td>
@@ -787,6 +847,18 @@ const RenderFormModal: React.FC<FormModalProps> = ({
           />
         </div>
 
+        {/* Cédula */}
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>Cédula</label>
+          <input
+            type="text"
+            className={styles.formInput}
+            value={form.cedula}
+            onChange={(e) => onChange({ cedula: e.target.value })}
+            placeholder="Ej: 1012345678"
+          />
+        </div>
+
         {/* Email */}
         <div className={styles.formGroup}>
           <label className={styles.formLabel}>Email</label>
@@ -918,6 +990,12 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
             {formatPhone(cliente.telefono)}
           </span>
         </div>
+        {cliente.cedula && (
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>Cédula</span>
+            <span className={styles.infoValue}>{cliente.cedula}</span>
+          </div>
+        )}
         {cliente.email && (
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Email</span>

@@ -294,7 +294,14 @@
 }
 
 .modalContentWide {
-  max-width: 560px;
+  max-width: 720px;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .modalHeader {

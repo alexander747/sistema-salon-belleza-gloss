@@ -8,6 +8,7 @@ interface UpdateClienteInput {
   id: number;
   nombre?: string;
   telefono?: string;
+  cedula?: string;
   email?: string;
   fechaNacimiento?: string;
 }
@@ -35,9 +36,21 @@ export class UpdateClienteUseCase {
       }
     }
 
+    // Check cedula uniqueness if changing
+    if (input.cedula !== undefined && input.cedula !== cliente.cedula) {
+      const existingByCedula = await this.clienteRepo.findBySalonAndCedula(
+        input.salonId,
+        input.cedula,
+      );
+      if (existingByCedula && existingByCedula.id !== input.id) {
+        throw new ConflictError('Ya existe otro cliente con esta cédula en el salón');
+      }
+    }
+
     const data: Record<string, unknown> = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;
     if (input.telefono !== undefined) data.telefono = input.telefono;
+    if (input.cedula !== undefined) data.cedula = input.cedula || null;
     if (input.email !== undefined) data.email = input.email;
     if (input.fechaNacimiento !== undefined) data.fechaNacimiento = new Date(input.fechaNacimiento);
 

@@ -46,6 +46,7 @@ export type UpdateEmpleadaInput = z.infer<typeof updateEmpleadaSchema>;
 export const createClienteSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido').max(100),
   telefono: z.string().min(1, 'El teléfono es requerido').max(20),
+  cedula: z.string().max(20).optional(),
   email: z.string().email('Email inválido').max(200).optional(),
   fechaNacimiento: z.string().optional(),
 });
@@ -55,6 +56,7 @@ export type CreateClienteInput = z.infer<typeof createClienteSchema>;
 export const updateClienteSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido').max(100).optional(),
   telefono: z.string().min(1, 'El teléfono es requerido').max(20).optional(),
+  cedula: z.string().max(20).optional(),
   email: z.string().email('Email inválido').max(200).optional(),
   fechaNacimiento: z.string().optional(),
 });

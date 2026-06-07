@@ -19,6 +19,9 @@ export class ClienteEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 20 })
   telefono: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  cedula: string | null;
+
   @Column({ type: 'varchar', length: 200, nullable: true })
   email: string;
 

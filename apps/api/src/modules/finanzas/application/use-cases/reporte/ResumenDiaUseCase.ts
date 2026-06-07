@@ -3,7 +3,7 @@ import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistr
 
 export interface ResumenDiaInput {
   salonId: number;
-  fecha: Date;
+  fecha: string; // YYYY-MM-DD (Colombia date)
 }
 
 export interface ResumenDiaOutput {
@@ -23,11 +23,15 @@ export class ResumenDiaUseCase {
   ) {}
 
   async execute(input: ResumenDiaInput): Promise<ResumenDiaOutput> {
-    const inicio = new Date(input.fecha);
-    inicio.setHours(0, 0, 0, 0);
+    // Colombia is UTC-5, so a day in Colombia runs from 05:00 UTC to 05:00 UTC next day
+    // Parse YYYY-MM-DD
+    const [year, month, day] = input.fecha.split('-').map(Number);
 
-    const fin = new Date(input.fecha);
-    fin.setHours(23, 59, 59, 999);
+    // Start of day in Colombia = 05:00 UTC
+    const inicio = new Date(Date.UTC(year, month - 1, day, 5, 0, 0, 0));
+
+    // End of day in Colombia = 05:00 UTC next day
+    const fin = new Date(Date.UTC(year, month - 1, day + 1, 5, 0, 0, 0));
 
     const registros = await this.registroRepo.findBySalonAndDateRange(
       input.salonId,

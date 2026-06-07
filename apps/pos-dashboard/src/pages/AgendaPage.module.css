@@ -87,7 +87,7 @@
   cursor: pointer;
   overflow: hidden;
   z-index: 2;
-  border-left: 3px solid;
+  border-left: 6px solid;
   transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
 
@@ -923,4 +923,84 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+/* ── Required field asterisk ── */
+.requiredAsterisk {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ── Mini-modal for creating a client inside Nueva Cita ── */
+.clienteMiniModal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(212, 168, 83, 0.06);
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+}
+
+/* ── Two-column grid for related form fields ── */
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 600px) {
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Service chips container ── */
+.serviceChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.serviceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  color: var(--accent);
+  line-height: 1.3;
+}
+
+.serviceChipRemove {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.75rem;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.serviceChipRemove:hover {
+  opacity: 1;
+}
+
+/* ── Total price badge under services ── */
+.totalPriceBadge {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: right;
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px dashed var(--border);
 }

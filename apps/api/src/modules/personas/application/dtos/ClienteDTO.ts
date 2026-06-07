@@ -4,6 +4,7 @@ export class ClienteDTO {
   id: number;
   nombre: string;
   telefono: string;
+  cedula: string | null;
   email: string | null;
   puntajeConfianza: number;
   cantidadNoShows: number;
@@ -23,6 +24,7 @@ export class ClienteDTO {
     dto.id = entity.id;
     dto.nombre = entity.nombre;
     dto.telefono = entity.telefono;
+    dto.cedula = entity.cedula ?? null;
     dto.email = entity.email ?? null;
     dto.puntajeConfianza = entity.puntajeConfianza;
     dto.cantidadNoShows = entity.cantidadNoShows;

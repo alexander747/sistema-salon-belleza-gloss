@@ -26,27 +26,12 @@ describe('ClienteController', () => {
   });
 
   describe('list', () => {
-    it('should return 200 with clientes and pass telefono filter', async () => {
-      const expected = [{ id: 1, nombre: 'Juan', telefono: '+541112345' }];
+    it('should return paginated clientes with default page/limit', async () => {
+      const expected = {
+        data: [{ id: 1, nombre: 'Juan', telefono: '+541112345' }],
+        meta: { page: 1, limit: 12, total: 1, totalPages: 1 },
+      };
       mockListUseCase.execute.mockResolvedValue(expected);
-
-      const req = {
-        salonId: 1,
-        query: { telefono: '+541112345' },
-      } as unknown as Request;
-      const res = { json: vi.fn() } as unknown as Response;
-
-      await controller.list(req, res, next);
-
-      expect(res.json).toHaveBeenCalledWith(expected);
-      expect(mockListUseCase.execute).toHaveBeenCalledWith({
-        salonId: 1,
-        telefono: '+541112345',
-      });
-    });
-
-    it('should work without telefono filter', async () => {
-      mockListUseCase.execute.mockResolvedValue([]);
 
       const req = {
         salonId: 1,
@@ -56,9 +41,34 @@ describe('ClienteController', () => {
 
       await controller.list(req, res, next);
 
+      expect(res.json).toHaveBeenCalledWith(expected);
       expect(mockListUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
-        telefono: undefined,
+        page: 1,
+        limit: 0,
+        q: undefined,
+      });
+    });
+
+    it('should pass q search param', async () => {
+      mockListUseCase.execute.mockResolvedValue({
+        data: [],
+        meta: { page: 1, limit: 12, total: 0, totalPages: 0 },
+      });
+
+      const req = {
+        salonId: 1,
+        query: { q: 'Juan', page: '1', limit: '12' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.list(req, res, next);
+
+      expect(mockListUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        page: 1,
+        limit: 12,
+        q: 'Juan',
       });
     });
   });
