@@ -137,3 +137,13 @@ a:hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Hide number input spinners globally */
+.noSpinner::-webkit-outer-spin-button,
+.noSpinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.noSpinner {
+  -moz-appearance: textfield;
+}

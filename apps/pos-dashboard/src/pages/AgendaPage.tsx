@@ -2822,48 +2822,48 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                 )}
 
                 {/* Action Buttons */}
-                <div className={styles.actionButtons}>
-                  <button
-                    onClick={onClose}
-                    style={{
-                      flex: 1,
-                      height: '38px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid var(--border)',
-                      background: 'transparent',
-                      color: 'var(--text-secondary)',
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.8125rem',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                    }}
-                    disabled={completando}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={onConfirmar}
-                    disabled={ajusteNoteRequired || completando}
-                    style={{
-                      flex: 2,
-                      height: '38px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: 'none',
-                      background: ajusteNoteRequired ? 'var(--border)' : 'var(--accent)',
-                      color: ajusteNoteRequired ? 'var(--text-dim)' : 'var(--bg-root)',
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.8125rem',
-                      fontWeight: 600,
-                      cursor: ajusteNoteRequired ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    {completando ? 'Registrando…' : 'Confirmar y Registrar'}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
+        </div>
+        <div className={styles.modalFooter}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1,
+              height: '38px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+            disabled={completando}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirmar}
+            disabled={ajusteNoteRequired || completando}
+            style={{
+              flex: 2,
+              height: '38px',
+              borderRadius: 'var(--radius-sm)',
+              border: 'none',
+              background: ajusteNoteRequired ? 'var(--border)' : 'var(--accent)',
+              color: ajusteNoteRequired ? 'var(--text-dim)' : 'var(--bg-root)',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              cursor: ajusteNoteRequired ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            {completando ? 'Registrando…' : 'Confirmar y Registrar'}
+          </button>
         </div>
       </motion.div>
     </motion.div>

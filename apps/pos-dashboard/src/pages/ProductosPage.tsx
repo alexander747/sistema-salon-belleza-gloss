@@ -159,15 +159,6 @@ const formLabelStyle: React.CSSProperties = {
   letterSpacing: '0.02em',
 };
 
-const previewChipStyle: React.CSSProperties = {
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.7rem',
-  color: 'var(--accent)',
-  fontStyle: 'italic',
-  marginTop: '0.2rem',
-  paddingLeft: '0.1rem',
-};
-
 /* ── Helpers ── */
 
 function formatCurrency(n: number): string {
@@ -233,6 +224,7 @@ const ProductosPage: React.FC = () => {
     stockMinimo: 0,
     tipoInventario: 'RETAIL' as 'RETAIL' | 'INTERNAL',
   });
+  const [priceMode, setPriceMode] = useState<'margin' | 'fixed'>('margin');
 
   /* ── Derived ── */
 
@@ -248,6 +240,13 @@ const ProductosPage: React.FC = () => {
     }
     return 0;
   }, [form.precioCompra, form.margenGanancia]);
+
+  // Auto-set precioVenta in margin mode
+  useEffect(() => {
+    if (priceMode === 'margin' && suggestedPrecioVenta > 0) {
+      setForm((prev) => ({ ...prev, precioVenta: suggestedPrecioVenta }));
+    }
+  }, [suggestedPrecioVenta, priceMode]);
 
   const canViewCost = user?.rol === Rol.DUEÑA || user?.rol === Rol.ADMINISTRADOR || user?.rol === Rol.CONTADOR || user?.rol === Rol.SUPERADMIN;
 
@@ -316,6 +315,7 @@ const ProductosPage: React.FC = () => {
       tipoInventario: 'RETAIL',
     });
     setEditing(null);
+    setPriceMode('margin');
   };
 
   /* ── Open edit modal ── */
@@ -332,6 +332,13 @@ const ProductosPage: React.FC = () => {
       stockMinimo: prod.stockMinimo,
       tipoInventario: prod.tipoInventario ?? 'RETAIL',
     });
+    // Detect mode: if precioCompra * (1+margen/100) ≈ precioVenta, use margin
+    const precioCompra = prod.precioCompra ?? 0;
+    const suggested = precioCompra > 0 && prod.margenGanancia > 0
+      ? Math.round(precioCompra * (1 + prod.margenGanancia / 100) * 100) / 100
+      : 0;
+    const diff = Math.abs(suggested - prod.precioVenta);
+    setPriceMode(diff <= 1 && suggested > 0 ? 'margin' : 'fixed');
     setShowModal(true);
   };
 
@@ -696,7 +703,7 @@ const ProductosPage: React.FC = () => {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(120px, 1.2fr) 60px 80px 90px 70px 80px 100px 100px',
+                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 220px',
                     gap: '0.75rem',
                     padding: '0.65rem 1rem',
                     borderBottom: '1px solid var(--border)',
@@ -713,6 +720,7 @@ const ProductosPage: React.FC = () => {
                   <span>P. Compra</span>
                   <span>P. Venta</span>
                   <span>Margen</span>
+                  <span>Precio</span>
                   <span>Tipo</span>
                   <span>Marca</span>
                   <span style={{ textAlign: 'right' }}>Acción</span>
@@ -723,6 +731,12 @@ const ProductosPage: React.FC = () => {
                   const isLowStock = prod.cantidadStock <= prod.stockMinimo;
                   const isLast = idx === productos.length - 1;
                   const margen = prod.margenGanancia;
+                  // Determine pricing mode
+                  const pc = prod.precioCompra ?? 0;
+                  const suggested = pc > 0 && prod.margenGanancia > 0
+                    ? Math.round(pc * (1 + prod.margenGanancia / 100) * 100) / 100
+                    : 0;
+                  const isMargin = suggested > 0 && Math.abs(suggested - prod.precioVenta) <= 1;
 
                   return (
                     <motion.div
@@ -730,7 +744,7 @@ const ProductosPage: React.FC = () => {
                       variants={itemVariants}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: 'minmax(120px, 1.2fr) 60px 80px 90px 70px 80px 100px 100px',
+                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 220px',
                         gap: '0.75rem',
                         padding: '0.75rem 1rem',
                         borderBottom: isLast ? 'none' : '1px solid var(--border)',
@@ -780,6 +794,12 @@ const ProductosPage: React.FC = () => {
                       </span>
                       <span style={{ color: getMargenColor(margen), fontWeight: 600, fontSize: '0.75rem' }}>
                         {margen}%
+                      </span>
+                      <span style={{
+                        fontSize: '0.65rem', fontWeight: 600, whiteSpace: 'nowrap',
+                        color: isMargin ? 'var(--accent)' : 'var(--text-dim)',
+                      }}>
+                        {isMargin ? '📐 %' : '🎯 Fijo'}
                       </span>
                       <span>
                         {prod.tipoInventario ? (
@@ -1041,68 +1061,119 @@ const ProductosPage: React.FC = () => {
                       placeholder="Opcional"
                     />
                   </div>
-                  <div>
-                    <label style={formLabelStyle}>Precio de compra</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={form.precioCompra || ''}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setForm((prev) => ({ ...prev, precioCompra: val }));
+                </div>
+                {/* ── Pricing mode toggle ── */}
+                <div style={{ marginBottom: '0.875rem' }}>
+                  <label style={formLabelStyle}>Tipo de precio</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.3rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPriceMode('margin')}
+                      style={{
+                        flex: 1, height: '36px', borderRadius: 'var(--radius-sm)',
+                        border: priceMode === 'margin' ? '2px solid var(--accent)' : '1px solid var(--border)',
+                        background: priceMode === 'margin' ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                        color: priceMode === 'margin' ? 'var(--accent)' : 'var(--text-secondary)',
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600,
+                        cursor: 'pointer', transition: 'all 0.2s',
                       }}
-                      style={formFieldStyle}
-                      placeholder="0"
-                    />
+                    >
+                      📐 Margen por %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPriceMode('fixed')}
+                      style={{
+                        flex: 1, height: '36px', borderRadius: 'var(--radius-sm)',
+                        border: priceMode === 'fixed' ? '2px solid var(--accent)' : '1px solid var(--border)',
+                        background: priceMode === 'fixed' ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                        color: priceMode === 'fixed' ? 'var(--accent)' : 'var(--text-secondary)',
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600,
+                        cursor: 'pointer', transition: 'all 0.2s',
+                      }}
+                    >
+                      🎯 Precio fijo
+                    </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
-                  <div>
-                    <label style={formLabelStyle}>Margen de ganancia (%)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={1000}
-                      value={form.margenGanancia}
-                      onChange={(e) => setForm((prev) => ({ ...prev, margenGanancia: Number(e.target.value) }))}
-                      style={formFieldStyle}
-                      placeholder="30"
-                    />
-                  </div>
-                  <div>
-                    <label style={formLabelStyle}>Precio de venta</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={form.precioVenta || ''}
-                      onChange={(e) => setForm((prev) => ({ ...prev, precioVenta: Number(e.target.value) }))}
-                      style={{
+                {priceMode === 'margin' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+                    <div>
+                      <label style={formLabelStyle}>Precio de compra</label>
+                      <input
+                        type="number" min={0} step={0.01}
+                        value={form.precioCompra || ''}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setForm((prev) => ({ ...prev, precioCompra: val }));
+                        }}
+                        className="noSpinner"
+                        style={formFieldStyle}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label style={formLabelStyle}>Margen de ganancia (%)</label>
+                      <input
+                        type="number" min={0} max={1000}
+                        value={form.margenGanancia}
+                        onChange={(e) => setForm((prev) => ({ ...prev, margenGanancia: Number(e.target.value) }))}
+                        className="noSpinner"
+                        style={formFieldStyle}
+                        placeholder="30"
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...formLabelStyle, color: 'var(--success)' }}>Precio de venta sugerido</label>
+                      <div style={{
                         ...formFieldStyle,
-                        borderColor: form.precioVenta !== suggestedPrecioVenta && suggestedPrecioVenta > 0 ? 'var(--accent)' : 'var(--border)',
-                      }}
-                      placeholder="0"
-                    />
-                    {suggestedPrecioVenta > 0 && (
-                      <div style={previewChipStyle}>
-                        Sugerido: {formatCurrency(suggestedPrecioVenta)}
-                        {form.precioVenta !== suggestedPrecioVenta && (
-                          <span style={{ color: 'var(--text-dim)', marginLeft: '0.3rem' }}>
-                            (manual)
-                          </span>
-                        )}
+                        display: 'flex', alignItems: 'center',
+                        background: 'var(--bg-elevated)',
+                        color: form.precioVenta > 0 ? 'var(--success)' : 'var(--text-dim)',
+                        fontWeight: 600, fontSize: '0.875rem',
+                        cursor: 'default',
+                      }}>
+                        {form.precioVenta > 0 ? formatCurrency(form.precioVenta) : '—'}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+                    <div>
+                      <label style={formLabelStyle}>Precio de compra</label>
+                      <input
+                        type="number" min={0} step={0.01}
+                        value={form.precioCompra || ''}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setForm((prev) => ({ ...prev, precioCompra: val }));
+                        }}
+                        className="noSpinner"
+                        style={formFieldStyle}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...formLabelStyle, color: 'var(--accent)' }}>Precio de venta *</label>
+                      <input
+                        type="number" min={0} step={0.01}
+                        value={form.precioVenta || ''}
+                        onChange={(e) => setForm((prev) => ({ ...prev, precioVenta: Number(e.target.value) }))}
+                        className="noSpinner"
+                        style={formFieldStyle}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
                   <div>
                     <label style={formLabelStyle}>Stock inicial</label>
                     <input
                       type="number"
+                      className="noSpinner"
                       min={0}
                       value={form.cantidadStock}
                       onChange={(e) => setForm((prev) => ({ ...prev, cantidadStock: Number(e.target.value) }))}
@@ -1113,6 +1184,7 @@ const ProductosPage: React.FC = () => {
                     <label style={formLabelStyle}>Stock mínimo</label>
                     <input
                       type="number"
+                      className="noSpinner"
                       min={0}
                       value={form.stockMinimo}
                       onChange={(e) => setForm((prev) => ({ ...prev, stockMinimo: Number(e.target.value) }))}
@@ -1238,6 +1310,7 @@ const ProductosPage: React.FC = () => {
                   <label style={formLabelStyle}>Cantidad</label>
                   <input
                     type="number"
+                    className="noSpinner"
                     min={1}
                     value={stockCantidad || ''}
                     onChange={(e) => setStockCantidad(Number(e.target.value))}
@@ -1253,6 +1326,7 @@ const ProductosPage: React.FC = () => {
                       <label style={formLabelStyle}>Nuevo precio de compra unitario</label>
                       <input
                         type="number"
+                        className="noSpinner"
                         min={0.01}
                         step={0.01}
                         value={restockPrecioCompra || ''}
