@@ -45,6 +45,8 @@ import { UpdateProductoUseCase } from '../modules/catalogo/application/use-cases
 import { DescontarStockUseCase } from '../modules/catalogo/application/use-cases/producto/DescontarStockUseCase';
 import { ReabastecerStockUseCase } from '../modules/catalogo/application/use-cases/producto/ReabastecerStockUseCase';
 import { DeleteProductoUseCase } from '../modules/catalogo/application/use-cases/producto/DeleteProductoUseCase';
+import { RestockProductoUseCase } from '../modules/catalogo/application/use-cases/producto/RestockProductoUseCase';
+import { ObtenerHistorialPreciosUseCase } from '../modules/catalogo/application/use-cases/producto/ObtenerHistorialPreciosUseCase';
 
 // Personas Module — Repositories
 import { TypeORMUsuarioRepository as PersonasTypeORMUsuarioRepository } from '../modules/personas/infrastructure/persistence/TypeORMUsuarioRepository';
@@ -148,6 +150,8 @@ container.register('CreateProductoUseCase', { useClass: CreateProductoUseCase })
 container.register('UpdateProductoUseCase', { useClass: UpdateProductoUseCase });
 container.register('DescontarStockUseCase', { useClass: DescontarStockUseCase });
 container.register('ReabastecerStockUseCase', { useClass: ReabastecerStockUseCase });
+container.register('RestockProductoUseCase', { useClass: RestockProductoUseCase });
+container.register('ObtenerHistorialPreciosUseCase', { useClass: ObtenerHistorialPreciosUseCase });
 container.register('DeleteProductoUseCase', { useClass: DeleteProductoUseCase });
 
 // ---- Catalogo Module — Controllers ----
@@ -297,6 +301,36 @@ container.register(GastoController, { useClass: GastoController });
 container.register(DevolucionController, { useClass: DevolucionController });
 container.register(LiquidacionController, { useClass: LiquidacionController });
 container.register(ReporteController, { useClass: ReporteController });
+
+// ---- Préstamos Module — Repositories ----
+import { TypeORMPrestamoRepository } from '../modules/prestamos/infrastructure/persistence/TypeORMPrestamoRepository';
+import { TypeORMPagoPrestamoRepository } from '../modules/prestamos/infrastructure/persistence/TypeORMPagoPrestamoRepository';
+
+// ---- Préstamos Module — Use Cases ----
+import { CrearPrestamoUseCase } from '../modules/prestamos/application/use-cases/CrearPrestamoUseCase';
+import { ListarPrestamosUseCase } from '../modules/prestamos/application/use-cases/ListarPrestamosUseCase';
+import { ObtenerPrestamoUseCase } from '../modules/prestamos/application/use-cases/ObtenerPrestamoUseCase';
+import { RegistrarPagoUseCase } from '../modules/prestamos/application/use-cases/RegistrarPagoUseCase';
+import { CancelarPrestamoUseCase } from '../modules/prestamos/application/use-cases/CancelarPrestamoUseCase';
+import { EditarPrestamoUseCase } from '../modules/prestamos/application/use-cases/EditarPrestamoUseCase';
+
+// ---- Préstamos Module — Controller ----
+import { PrestamoController } from '../modules/prestamos/presentation/controllers/PrestamoController';
+
+// ---- Préstamos Module — DI ----
+container.register('IPrestamoRepository', { useClass: TypeORMPrestamoRepository });
+container.register('IPagoPrestamoRepository', { useClass: TypeORMPagoPrestamoRepository });
+
+// ---- Préstamos Module — Use Cases ----
+container.register(CrearPrestamoUseCase, { useClass: CrearPrestamoUseCase });
+container.register(ListarPrestamosUseCase, { useClass: ListarPrestamosUseCase });
+container.register(ObtenerPrestamoUseCase, { useClass: ObtenerPrestamoUseCase });
+container.register(RegistrarPagoUseCase, { useClass: RegistrarPagoUseCase });
+container.register(CancelarPrestamoUseCase, { useClass: CancelarPrestamoUseCase });
+container.register(EditarPrestamoUseCase, { useClass: EditarPrestamoUseCase });
+
+// ---- Préstamos Module — Controller ----
+container.register(PrestamoController, { useClass: PrestamoController });
 
 // ---- Planes Module ----
 container.register('IPlanRepository', { useClass: TypeORMPlanRepository });

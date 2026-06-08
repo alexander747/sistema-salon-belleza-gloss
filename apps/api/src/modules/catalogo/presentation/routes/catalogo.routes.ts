@@ -15,6 +15,7 @@ import {
   updateProductoSchema,
   descontarStockSchema,
   reabastecerStockSchema,
+  restockProductoSchema,
 } from '@pos-final/validation';
 
 const router = Router({ mergeParams: true });
@@ -93,6 +94,17 @@ router.post(
   validate(reabastecerStockSchema),
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   productoController.reabastecer,
+);
+router.post(
+  '/productos/:id/restock',
+  validate(restockProductoSchema),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
+  productoController.restock,
+);
+router.get(
+  '/productos/:id/historial-precios',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
+  productoController.historialPrecios,
 );
 router.delete(
   '/productos/:id',

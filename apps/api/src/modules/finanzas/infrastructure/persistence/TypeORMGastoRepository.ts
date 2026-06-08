@@ -73,6 +73,17 @@ export class TypeORMGastoRepository implements IGastoRepository {
     return query.getCount();
   }
 
+  async sumBySalonAndDateRange(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<number> {
+    const result = await this.getRepo()
+      .createQueryBuilder('g')
+      .select('COALESCE(SUM(g.monto), 0)', 'total')
+      .where('g.salonId = :salonId', { salonId })
+      .andWhere('g.fecha >= :fechaInicio', { fechaInicio })
+      .andWhere('g.fecha < :fechaFin', { fechaFin })
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
+
   async create(data: Partial<GastoEntity>): Promise<GastoEntity> {
     const entity = this.getRepo().create(data);
     return this.getRepo().save(entity);

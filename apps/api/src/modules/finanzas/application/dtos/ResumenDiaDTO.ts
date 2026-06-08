@@ -6,4 +6,6 @@ export interface ResumenDiaDTO {
   cantidadAtenciones: number;
   cantidadProductosVendidos: number;
   totalIngresos: number;
+  totalGastos: number;
+  balanceNeto: number;
 }

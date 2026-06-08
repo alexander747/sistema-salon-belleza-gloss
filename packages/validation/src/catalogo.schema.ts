@@ -41,7 +41,8 @@ export const createProductoSchema = z.object({
   descripcion: z.string().max(500).optional(),
   urlFoto: z.string().max(500).optional(),
   precioCompra: z.number().min(0).default(0),
-  precioVenta: z.number().min(0).default(0),
+  margenGanancia: z.number().int().min(0).max(1000).default(30),
+  precioVenta: z.number().min(0).optional(),
   cantidadStock: z.number().min(0).default(0),
   stockMinimo: z.number().min(0).default(0),
   tipoInventario: z.enum(['RETAIL', 'INTERNAL']).default('RETAIL'),
@@ -65,3 +66,11 @@ export const reabastecerStockSchema = z.object({
 });
 
 export type ReabastecerStockInput = z.infer<typeof reabastecerStockSchema>;
+
+export const restockProductoSchema = z.object({
+  cantidad: z.number().int().min(1, 'La cantidad debe ser al menos 1'),
+  precioCompra: z.number().positive('El precio de compra debe ser positivo'),
+  observacion: z.string().optional(),
+});
+
+export type RestockProductoInput = z.infer<typeof restockProductoSchema>;

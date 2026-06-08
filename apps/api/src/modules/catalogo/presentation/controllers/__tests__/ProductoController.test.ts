@@ -12,6 +12,8 @@ describe('ProductoController', () => {
   let mockUpdateUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockDescontarUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockReabastecerUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockRestockUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockHistorialUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockDeleteUseCase: { execute: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
@@ -22,6 +24,8 @@ describe('ProductoController', () => {
     mockUpdateUseCase = { execute: vi.fn() };
     mockDescontarUseCase = { execute: vi.fn() };
     mockReabastecerUseCase = { execute: vi.fn() };
+    mockRestockUseCase = { execute: vi.fn() };
+    mockHistorialUseCase = { execute: vi.fn() };
     mockDeleteUseCase = { execute: vi.fn() };
     next = vi.fn();
     controller = new ProductoController(
@@ -32,6 +36,8 @@ describe('ProductoController', () => {
       mockDescontarUseCase as never,
       mockReabastecerUseCase as never,
       mockDeleteUseCase as never,
+      mockRestockUseCase as never,
+      mockHistorialUseCase as never,
     );
   });
 
@@ -54,6 +60,9 @@ describe('ProductoController', () => {
         salonId: 1,
         tipoInventario: undefined,
         userRol: Rol.MANICURISTA,
+        page: 1,
+        limit: 0,
+        q: undefined,
       });
     });
 
@@ -73,6 +82,9 @@ describe('ProductoController', () => {
         salonId: 1,
         tipoInventario: 'INTERNAL',
         userRol: Rol.DUEÑA,
+        page: 1,
+        limit: 0,
+        q: undefined,
       });
     });
 
@@ -91,6 +103,9 @@ describe('ProductoController', () => {
         salonId: 1,
         tipoInventario: undefined,
         userRol: undefined,
+        page: 1,
+        limit: 0,
+        q: undefined,
       });
     });
   });

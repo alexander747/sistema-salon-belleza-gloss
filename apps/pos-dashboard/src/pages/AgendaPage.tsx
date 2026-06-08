@@ -81,8 +81,8 @@ const MONTH_LABELS = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
 
-const START_HOUR = 8;   // 08:00
-const END_HOUR = 20;    // 20:00
+const START_HOUR = 4;   // 04:00
+const END_HOUR = 24;    // 00:00
 const TOTAL_HOURS = END_HOUR - START_HOUR;
 const HOUR_HEIGHT = 72; // px per hour row
 const HEADER_HEIGHT = 50;

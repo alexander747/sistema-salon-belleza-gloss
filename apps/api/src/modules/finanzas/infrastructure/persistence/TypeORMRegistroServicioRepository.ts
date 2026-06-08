@@ -20,10 +20,17 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
   }
 
   async findById(id: number): Promise<RegistroServicioEntity | null> {
-    return this.getRepo().findOne({
-      where: { id },
-      relations: ['pagos', 'divisiones', 'devoluciones', 'cliente', 'usuario'],
-    });
+    return this.getRepo()
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.pagos', 'pago')
+      .leftJoinAndSelect('r.divisiones', 'division')
+      .leftJoinAndSelect('r.devoluciones', 'devolucion')
+      .leftJoinAndSelect('r.cliente', 'cliente')
+      .leftJoinAndSelect('r.usuario', 'usuario')
+      .leftJoinAndSelect('r.productosVendidos', 'rp')
+      .leftJoinAndSelect('rp.producto', 'p')
+      .where('r.id = :id', { id })
+      .getOne();
   }
 
   async findBySalon(salonId: number): Promise<RegistroServicioEntity[]> {
@@ -65,6 +72,8 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.pagos', 'pago')
       .leftJoinAndSelect('r.divisiones', 'division')
       .leftJoinAndSelect('r.cliente', 'cliente')
+      .leftJoinAndSelect('r.productosVendidos', 'rp')
+      .leftJoinAndSelect('rp.producto', 'p')
       .where('r.salonId = :salonId', { salonId: params.salonId });
 
     if (params.desde) {

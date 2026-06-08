@@ -3,12 +3,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { ListServiciosUseCase } from '../ListServiciosUseCase';
 import type { IServicioRepository } from '../../../../domain/ports/IServicioRepository';
 import type { ISalonRepository } from '../../../../../../modules/salon/domain/ports/ISalonRepository';
+import type { ServicioDTO } from '../../../dtos/ServicioDTO';
 
 describe('ListServiciosUseCase', () => {
   const createMocks = () => ({
     servicioRepo: {
       findBySalon: vi.fn(),
       findBySalonAndId: vi.fn(),
+      search: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       softDelete: vi.fn(),
@@ -38,7 +40,7 @@ describe('ListServiciosUseCase', () => {
     mocks.salonRepo.findById = vi.fn().mockResolvedValue(mockSalon);
 
     const useCase = new ListServiciosUseCase(mocks.servicioRepo, mocks.salonRepo);
-    const result = await useCase.execute({ salonId: 1 });
+    const result = await useCase.execute({ salonId: 1 }) as ServicioDTO[];
 
     expect(result).toHaveLength(1);
     expect(result[0].precioFinal).toBe(1500);
@@ -55,7 +57,7 @@ describe('ListServiciosUseCase', () => {
     mocks.salonRepo.findById = vi.fn().mockResolvedValue({ id: 1 });
 
     const useCase = new ListServiciosUseCase(mocks.servicioRepo, mocks.salonRepo);
-    const result = await useCase.execute({ salonId: 1 });
+    const result = await useCase.execute({ salonId: 1 }) as ServicioDTO[];
 
     expect(result[0].precioFinal).toBe(1000);
   });

@@ -2,6 +2,7 @@ import { injectable, inject } from 'tsyringe';
 import { Rol } from '@pos-final/types';
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
+import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionRepository';
 
 export interface NominaPendienteEmpleada {
   empleadaId: number;
@@ -25,6 +26,8 @@ export class NominaPendienteUseCase {
     private readonly usuarioRepo: IUsuarioRepository,
     @inject('IRegistroServicioRepository')
     private readonly registroRepo: IRegistroServicioRepository,
+    @inject('ILiquidacionRepository')
+    private readonly liquidacionRepo: ILiquidacionRepository,
   ) {}
 
   async execute(input: NominaPendienteInput): Promise<NominaPendienteEmpleada[]> {
@@ -35,20 +38,44 @@ export class NominaPendienteUseCase {
       true, // activo
     );
 
-    // 2. Get all registros for the salon (to filter pending ones per empleada)
+    // Calculate current month period
+    const now = new Date();
+    const periodoInicio = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodoFin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // 2. Get all registros for the salon
     const allRegistros = await this.registroRepo.findBySalon(input.salonId);
 
     // 3. Map each empleada to their pending summary
     const result: NominaPendienteEmpleada[] = [];
 
     for (const empleada of empleadas) {
-      const pendingRegistros = allRegistros.filter(
+      // Get pending (unpaid) registros for this employee
+      let pendingRegistros = allRegistros.filter(
         (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada,
       );
 
       if (pendingRegistros.length === 0) {
-        // Employee has no pending work registros — do not appear in pending list
         continue;
+      }
+
+      // If already liquidated this month, only include registros created AFTER the last liquidation
+      const liquidaciones = await this.liquidacionRepo.findBySalonEmpleadaAndPeriodo(
+        input.salonId,
+        empleada.id,
+        periodoInicio,
+        periodoFin,
+      );
+      if (liquidaciones.length > 0) {
+        const ultimaLiq = liquidaciones.sort(
+          (a, b) => new Date(b.creadoEn).getTime() - new Date(a.creadoEn).getTime(),
+        )[0];
+        pendingRegistros = pendingRegistros.filter(
+          (r) => new Date(r.creadoEn) > new Date(ultimaLiq.creadoEn),
+        );
+        if (pendingRegistros.length === 0) {
+          continue; // No new registros since last liquidation
+        }
       }
 
       const totalComisionesPendientes = pendingRegistros.reduce(

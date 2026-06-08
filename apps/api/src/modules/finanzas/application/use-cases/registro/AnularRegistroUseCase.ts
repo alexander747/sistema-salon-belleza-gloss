@@ -1,4 +1,6 @@
 import { injectable, inject } from 'tsyringe';
+import { AppDataSource } from '../../../../../shared/database';
+import { RegistroProductoEntity } from '../../../../../infrastructure/persistence/entities/RegistroProductoEntity';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IClienteRepository } from '../../../../personas/domain/ports/IClienteRepository';
 import type { IProductoRepository } from '../../../../catalogo/domain/ports/IProductoRepository';
@@ -26,19 +28,32 @@ export class AnularRegistroUseCase {
       throw new NotFoundError('Registro no encontrado');
     }
 
-    // --- Stock restoration ---
-    // The registro's totalProductos is the monetary amount of products sold.
-    // Currently there is no line-items relation (lineasProductos) on
-    // RegistroServicioEntity, so we cannot determine WHICH individual products
-    // were sold and in what quantities. Without that mapping we cannot restore
-    // stock per product.
-    // If a lineasProductos relation is added in the future, iterate over it
-    // here and call this.productoRepo.incrementStock(productoId, cantidad).
-    if (Number(registro.totalProductos) > 0) {
-      console.log(
-        `[AnularRegistro] Registro #${input.id} had $${registro.totalProductos} in product sales, ` +
-        'but no product-line relation exists yet — stock was NOT restored automatically.',
-      );
+    // --- Stock restoration from product lines ---
+    if (registro.productosVendidos && registro.productosVendidos.length > 0) {
+      const queryRunner = AppDataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      try {
+        for (const rp of registro.productosVendidos) {
+          await this.productoRepo.incrementStock(
+            rp.productoId,
+            rp.cantidad,
+            undefined,
+            queryRunner,
+          );
+          // Delete the product line
+          await queryRunner.manager
+            .getRepository(RegistroProductoEntity)
+            .delete(rp.id);
+        }
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        throw error;
+      } finally {
+        await queryRunner.release();
+      }
     }
 
     // Soft-void: zero out financial impact, preserve audit trail

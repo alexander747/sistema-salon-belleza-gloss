@@ -7,6 +7,8 @@ import { UpdateProductoUseCase } from '../../application/use-cases/producto/Upda
 import { DescontarStockUseCase } from '../../application/use-cases/producto/DescontarStockUseCase';
 import { ReabastecerStockUseCase } from '../../application/use-cases/producto/ReabastecerStockUseCase';
 import { DeleteProductoUseCase } from '../../application/use-cases/producto/DeleteProductoUseCase';
+import { RestockProductoUseCase } from '../../application/use-cases/producto/RestockProductoUseCase';
+import { ObtenerHistorialPreciosUseCase } from '../../application/use-cases/producto/ObtenerHistorialPreciosUseCase';
 import type { TipoInventario } from '../../../../infrastructure/persistence/entities/ProductoEntity';
 
 @injectable()
@@ -19,6 +21,8 @@ export class ProductoController {
     @inject('DescontarStockUseCase') private readonly descontarUseCase: DescontarStockUseCase,
     @inject('ReabastecerStockUseCase') private readonly reabastecerUseCase: ReabastecerStockUseCase,
     @inject('DeleteProductoUseCase') private readonly deleteUseCase: DeleteProductoUseCase,
+    @inject('RestockProductoUseCase') private readonly restockUseCase: RestockProductoUseCase,
+    @inject('ObtenerHistorialPreciosUseCase') private readonly historialPreciosUseCase: ObtenerHistorialPreciosUseCase,
   ) {}
 
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -26,10 +30,17 @@ export class ProductoController {
       const tipoInventario = req.query.tipo
         ? (req.query.tipo as TipoInventario)
         : undefined;
+      const page = req.query.page ? Number(req.query.page) : 1;
+      const limit = req.query.limit ? Number(req.query.limit) : 0;
+      const q = req.query.q as string | undefined;
+
       const result = await this.listUseCase.execute({
         salonId: req.salonId!,
         tipoInventario,
         userRol: req.user?.rol,
+        page,
+        limit,
+        q,
       });
       res.json(result);
     } catch (error) {
@@ -95,6 +106,33 @@ export class ProductoController {
         id: Number(req.params.id),
         cantidad: req.body.cantidad,
         precioCompra: req.body.precioCompra,
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  restock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.restockUseCase.execute({
+        salonId: req.salonId!,
+        id: Number(req.params.id),
+        cantidad: req.body.cantidad,
+        precioCompra: req.body.precioCompra,
+        registradoPorId: req.user?.id,
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  historialPrecios = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.historialPreciosUseCase.execute({
+        salonId: req.salonId!,
+        productoId: Number(req.params.id),
       });
       res.json(result);
     } catch (error) {

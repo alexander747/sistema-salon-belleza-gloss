@@ -21,6 +21,7 @@ interface FinanzasResumen {
   cantidadProductosVendidos: number;
   totalIngresos: number;
   totalGastos?: number;
+  balanceNeto?: number;
 }
 
 interface Pago {
@@ -36,6 +37,15 @@ interface Division {
   usuarioId: number;
   porcentajeParticipacion: number;
   comisionCorrespondiente: number;
+}
+
+interface ProductoVendido {
+  id: number;
+  productoId: number;
+  nombre: string;
+  cantidad: number;
+  precioVentaUnitario: number;
+  subtotal: number;
 }
 
 interface Registro {
@@ -61,6 +71,7 @@ interface Registro {
   actualizadoEn: string;
   pagos: Pago[];
   divisiones: Division[];
+  productosVendidos?: ProductoVendido[];
   /** Computed after data fetch — client name resolved from clientesMap */
   _clienteNombre?: string;
   /** Computed after data fetch — empleada name resolved from empleadasMap */
@@ -227,9 +238,10 @@ function formatDateTimeAMPM(dateStr: string): string {
 }
 
 function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  // Usar UTC para coincidir con el backend que opera en UTC
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
@@ -534,7 +546,7 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     return (
       <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div className={styles.summaryGrid}>
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
             <Skeleton key={i} height="80px" variant="rect" />
           ))}
         </div>
@@ -626,6 +638,25 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
           <span className={styles.summaryLabel}>🎁 Propinas</span>
           <span className={styles.summaryValueSuccess}>
             {resumen ? formatCurrency(resumen.totalPropinas) : '$0'}
+          </span>
+        </motion.div>
+        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
+          <span className={styles.summaryLabel}>💸 Total gastos</span>
+          <span className={styles.summaryValue} style={{ color: '#ef4444' }}>
+            {resumen?.totalGastos != null ? formatCurrency(resumen.totalGastos) : '$0'}
+          </span>
+        </motion.div>
+        <motion.div
+          variants={itemVariants}
+          className={styles.summaryCard}
+          style={{ borderColor: (resumen?.balanceNeto ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}
+        >
+          <span className={styles.summaryLabel}>📊 Balance neto</span>
+          <span
+            className={styles.summaryValue}
+            style={{ color: (resumen?.balanceNeto ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}
+          >
+            {resumen?.balanceNeto != null ? formatCurrency(resumen.balanceNeto) : '$0'}
           </span>
         </motion.div>
       </motion.div>
@@ -926,7 +957,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
-        className={`${styles.modalContent} ${styles.modalContentWide}`}
+        className={`${styles.modalContent} ${styles.modalContentXl}`}
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -938,154 +969,300 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
           <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
 
-        <div className={styles.modalBody}>
-          {/* Header info bar */}
-          <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-            Registro #{registro.id} · Creado: {formatDateTimeAMPM(registro.creadoEn)} · Actualizado: {formatDateTimeAMPM(registro.actualizadoEn)}
-          </p>
+          <div className={styles.modalBody}>
+            {/* ── Header: Registro # + badges + date ── */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem', gap: '0.35rem' }}>
+              <div>
+                <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  Registro #{registro.id}
+                </h2>
+                <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', margin: '0.25rem 0 0', lineHeight: 1.5 }}>
+                  {formatDateTimeAMPM(registro.creadoEn)}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'flex-start' }}>
+                {registro.esRetoque && (
+                  <span style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>🔁 Retoque</span>
+                )}
+                {registro.precioAjustado && (
+                  <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>💰 Precio ajustado</span>
+                )}
+                {registro.montoPendiente > 0 && (
+                  <span style={{ background: 'rgba(224,85,106,0.12)', color: 'var(--danger)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>⚠️ {formatCurrency(registro.montoPendiente)} pend.</span>
+                )}
+                {!registro.estaPagadaEmpleada && (
+                  <span style={{ background: 'rgba(224,85,106,0.1)', color: 'var(--danger)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>⏳ Pago emp. pend.</span>
+                )}
+              </div>
+            </div>
 
-          {/* Top badges row */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-            {registro.esRetoque && (
-              <span style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>🔁 Retoque</span>
-            )}
-            {registro.precioAjustado && (
-              <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>💰 Precio ajustado</span>
-            )}
-            {registro.montoPendiente > 0 && (
-              <span style={{ background: 'rgba(224,85,106,0.12)', color: 'var(--danger)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>⚠️ Pendiente: {formatCurrency(registro.montoPendiente)}</span>
-            )}
-          </div>
+            <hr className={styles.sectionDivider} />
 
-          {/* Two-column info section */}
-          <div className={styles.detailGrid}>
-            <div>
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Cliente</span>
-                <span className={styles.infoValue}>{registro._clienteNombre ?? `Cliente #${registro.clienteId}`}</span>
-              </div>
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Empleada</span>
-                <span className={styles.infoValue}>{registro._empleadaNombre ?? `Usuaria #${registro.usuarioId}`}</span>
-              </div>
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Método de pago</span>
-                <span className={styles.infoValue}>{METODO_PAGO_LABELS[registro.pagos?.[0]?.metodoPago ?? '---'] ?? '---'}</span>
-              </div>
-            </div>
-            <div>
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Fecha creación</span>
-                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTimeAMPM(registro.creadoEn)}</span>
-              </div>
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Fecha actualización</span>
-                <span className={styles.infoValue} style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{formatDateTimeAMPM(registro.actualizadoEn)}</span>
-              </div>
-              {registro.propina > 0 && (
-                <div className={styles.infoRow}>
-                  <span className={styles.infoLabel}>Propina</span>
-                  <span className={styles.infoValue} style={{ color: 'var(--success)' }}>+{formatCurrency(registro.propina)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Totals section (receipt style) */}
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
-            <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Servicios</span>
-              <span className={styles.infoValue}>{formatCurrency(registro.totalServicios)}</span>
-            </div>
-            <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Productos</span>
-              <span className={styles.infoValue}>{formatCurrency(registro.totalProductos)}</span>
-            </div>
-            {registro.totalProductos > 0 && (
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Productos vendidos</span>
-                <span className={styles.infoValue} style={{ color: 'var(--accent)' }}>{formatCurrency(registro.totalProductos)}</span>
-              </div>
-            )}
-            <div className={styles.infoRow} style={{ borderTop: '1px dashed var(--border)' }}>
-              <span className={styles.infoLabel}>Subtotal</span>
-              <span className={styles.infoValue}>{formatCurrency(subtotal)}</span>
-            </div>
-            {registro.porcentajeDescuento != null && registro.porcentajeDescuento > 0 && (
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Dto. {registro.porcentajeDescuento}%</span>
-                <span className={styles.infoValue} style={{ color: 'var(--danger)' }}>-{formatCurrency(Math.round(subtotal * registro.porcentajeDescuento / 100))}</span>
-              </div>
-            )}
-            {registro.precioAjustado && (
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Total original</span>
-                <span className={styles.infoValue} style={{ textDecoration: 'line-through', color: 'var(--text-dim)' }}>{formatCurrency(originalTotal)}</span>
-              </div>
-            )}
-            <div className={styles.infoRow} style={{ borderTop: '1px solid var(--border)', marginTop: '0.25rem', paddingTop: '0.5rem' }}>
-              <span className={styles.infoLabel} style={{ fontWeight: 700 }}>Total final</span>
-              <span className={styles.infoValue} style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '1rem' }}>{formatCurrency(totalFinal)}</span>
-            </div>
-            {registro.precioAjustado && registro.notas && (
-              <div className={styles.infoRow} style={{ borderBottom: 'none' }}>
-                <span className={styles.infoLabel}>Nota de ajuste</span>
-                <span className={styles.infoValue} style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontStyle: 'italic' }}>"{registro.notas}"</span>
-              </div>
-            )}
-          </div>
-
-          {/* Payment section */}
-          {registro.pagos && registro.pagos.length > 0 && (
-            <div style={{ marginBottom: '1rem' }}>
-              <h4 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pagos</h4>
-              {registro.pagos.map((p) => (
-                <div key={p.id} className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: '1px solid var(--border)', paddingTop: '0.3rem', paddingBottom: '0.3rem' }}>
-                  <span className={styles.infoValue}>
-                    {METODO_PAGO_LABELS[p.metodoPago] ?? p.metodoPago}
-                    {p.referencia ? ` (${p.referencia})` : ''}
+            {/* ── Customer & Employee ── */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <h4 className={styles.sectionSubtitle}>Cliente y empleada</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>👤</span>
+                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {registro._clienteNombre ?? `Cliente #${registro.clienteId}`}
                   </span>
-                  <span className={styles.infoValue} style={{ marginLeft: 'auto', color: 'var(--accent)' }}>
-                    {formatCurrency(p.monto)}
+                  {registro.pagos?.[0] && (
+                    <span style={{
+                      marginLeft: '0.5rem',
+                      background: 'rgba(92,186,123,0.12)',
+                      color: 'var(--success)',
+                      padding: '0.1rem 0.5rem',
+                      borderRadius: '999px',
+                      fontSize: '0.6rem',
+                      fontWeight: 600,
+                      fontFamily: "'DM Sans', sans-serif",
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {METODO_PAGO_LABELS[registro.pagos[0].metodoPago] ?? registro.pagos[0].metodoPago}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>💇</span>
+                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {registro._empleadaNombre ?? `Usuaria #${registro.usuarioId}`}
                   </span>
                 </div>
-              ))}
-              <div className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: 'none', paddingTop: '0.4rem' }}>
-                <span className={styles.infoLabel}>Monto recibido</span>
-                <span className={styles.infoValue} style={{ fontWeight: 600 }}>{formatCurrency(totalPagos)}</span>
               </div>
-              {cambio > 0 && (
-                <div className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: 'none' }}>
-                  <span className={styles.infoLabel}>Cambio</span>
-                  <span className={styles.infoValue} style={{ color: 'var(--success)' }}>{formatCurrency(cambio)}</span>
-                </div>
-              )}
             </div>
-          )}
 
-          {/* Divisiones */}
-          {registro.divisiones && registro.divisiones.length > 0 && (
-            <div style={{ marginBottom: '1rem' }}>
-              <h4 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Divisiones</h4>
-              {registro.divisiones.map((d) => (
-                <div key={d.id} className={styles.infoRow} style={{ paddingLeft: 0, borderBottom: '1px solid var(--border)', paddingTop: '0.3rem', paddingBottom: '0.3rem' }}>
-                  <span className={styles.infoValue}>Empleada #{d.usuarioId}</span>
-                  <span className={styles.infoValue} style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                    {d.porcentajeParticipacion}%
+            <hr className={styles.sectionDivider} />
+
+            {/* ── Service detail card ── */}
+            {registro.descripcionServicio && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <h4 className={styles.sectionSubtitle}>Servicio</h4>
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25 }}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(92,186,123,0.07), rgba(92,186,123,0.02))',
+                    border: '1px solid rgba(92,186,123,0.18)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.6rem 0.9rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {registro.descripcionServicio}
                   </span>
-                </div>
-              ))}
-            </div>
-          )}
+                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1rem', fontWeight: 700, color: 'var(--success)' }}>
+                    {formatCurrency(registro.totalServicios)}
+                  </span>
+                </motion.div>
+              </div>
+            )}
 
-          {/* General Notas (only if not already shown as adjustment note) */}
-          {registro.notas && !registro.precioAjustado && (
-            <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>Notas</span>
-              <span className={styles.infoValue}>{registro.notas}</span>
+            {/* ── Products section (mini-cards with accent border) ── */}
+            {registro.productosVendidos && registro.productosVendidos.length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <h4 className={styles.sectionSubtitle}>Productos vendidos</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {registro.productosVendidos.map((pv, idx) => (
+                    <motion.div
+                      key={pv.id}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2, delay: idx * 0.04 }}
+                      className={styles.miniCard}
+                      style={{
+                        borderLeft: `3px solid ${idx % 2 === 0 ? 'var(--accent)' : 'var(--success)'}`,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {pv.nombre}
+                        </div>
+                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.1rem' }}>
+                          {pv.cantidad} × {formatCurrency(pv.precioVentaUnitario)}
+                        </div>
+                      </div>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+                        {formatCurrency(pv.subtotal)}
+                      </span>
+                    </motion.div>
+                  ))}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.4rem 0.6rem 0.2rem',
+                    borderTop: '1px solid var(--border)',
+                    marginTop: '0.1rem',
+                  }}>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Total productos
+                    </span>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', fontWeight: 700, color: 'var(--accent)' }}>
+                      {formatCurrency(registro.totalProductos)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Resumen (combined cobro + comisiones) ── */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <h4 className={styles.sectionSubtitle}>Resumen</h4>
+              <div style={{
+                background: 'var(--bg-elevated)',
+                border: '1px dashed var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.6rem 0.9rem',
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 1.5rem' }}>
+                  {/* Left column: Servicios, Productos, Subtotal */}
+                  <div>
+                    <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                      <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Servicios</span>
+                      <span className={styles.infoValue} style={{ fontSize: '0.75rem', marginLeft: 'auto' }}>{formatCurrency(registro.totalServicios)}</span>
+                    </div>
+                    <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                      <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Productos</span>
+                      <span className={styles.infoValue} style={{ fontSize: '0.75rem', marginLeft: 'auto' }}>{formatCurrency(registro.totalProductos)}</span>
+                    </div>
+                    <div className={styles.infoRow} style={{ padding: '0.2rem 0', borderTop: '1px dashed var(--border)', marginTop: '0.1rem' }}>
+                      <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem', fontWeight: 600 }}>Subtotal</span>
+                      <span className={styles.infoValue} style={{ fontSize: '0.75rem', fontWeight: 600, marginLeft: 'auto' }}>{formatCurrency(subtotal)}</span>
+                    </div>
+                  </div>
+                  {/* Right column: Comisión, Propina, Total Empleada */}
+                  {(registro.comisionCalculada > 0 || registro.propina > 0) && (
+                    <div>
+                      {registro.comisionCalculada > 0 && (
+                        <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                          <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Comisión</span>
+                          <span className={styles.infoValue} style={{ fontSize: '0.75rem', marginLeft: 'auto' }}>{formatCurrency(registro.comisionCalculada)}</span>
+                        </div>
+                      )}
+                      {registro.propina > 0 && (
+                        <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                          <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Propina</span>
+                          <span className={styles.infoValue} style={{ fontSize: '0.75rem', color: 'var(--success)', marginLeft: 'auto' }}>+{formatCurrency(registro.propina)}</span>
+                        </div>
+                      )}
+                      {(registro.comisionCalculada > 0 || registro.propina > 0) && (
+                        <div className={styles.infoRow} style={{ padding: '0.2rem 0', borderTop: '1px dashed var(--border)', marginTop: '0.1rem' }}>
+                          <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem', fontWeight: 600 }}>Total empleada</span>
+                          <span className={styles.infoValue} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', marginLeft: 'auto' }}>
+                            {formatCurrency((registro.comisionCalculada ?? 0) + (registro.propina ?? 0))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {(registro.porcentajeDescuento != null && registro.porcentajeDescuento > 0) && (
+                  <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                    <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Dto. {registro.porcentajeDescuento}%</span>
+                    <span className={styles.infoValue} style={{ fontSize: '0.75rem', color: 'var(--danger)', marginLeft: 'auto' }}>-{formatCurrency(Math.round(subtotal * registro.porcentajeDescuento / 100))}</span>
+                  </div>
+                )}
+                {registro.precioAjustado && (
+                  <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                    <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Total original</span>
+                    <span className={styles.infoValue} style={{ fontSize: '0.75rem', textDecoration: 'line-through', color: 'var(--text-dim)', marginLeft: 'auto' }}>{formatCurrency(originalTotal)}</span>
+                  </div>
+                )}
+                <div className={styles.infoRow} style={{ borderTop: '2px solid var(--border)', marginTop: '0.2rem', padding: '0.3rem 0 0' }}>
+                  <span className={styles.infoLabel} style={{ minWidth: 'auto', fontWeight: 700, fontSize: '0.8125rem' }}>Total final</span>
+                  <span className={styles.infoValue} style={{ fontWeight: 800, color: 'var(--accent)', fontSize: '1rem', marginLeft: 'auto' }}>{formatCurrency(totalFinal)}</span>
+                </div>
+                {registro.precioAjustado && registro.notas && (
+                  <div className={styles.infoRow} style={{ border: 'none', padding: '0.2rem 0 0' }}>
+                    <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.7rem' }}>Nota de ajuste</span>
+                    <span className={styles.infoValue} style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontStyle: 'italic', marginLeft: 'auto' }}>"{registro.notas}"</span>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* ── Payments section (compact list) ── */}
+            {registro.pagos && registro.pagos.length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <h4 className={styles.sectionSubtitle}>Pagos</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  {registro.pagos.map((p) => (
+                    <div key={p.id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.25rem 0.5rem',
+                      background: 'var(--bg-elevated)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '0.78rem',
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <span style={{ fontSize: '0.7rem' }}>💳</span>
+                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {METODO_PAGO_LABELS[p.metodoPago] ?? p.metodoPago}
+                        </span>
+                        {p.referencia && (
+                          <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)' }}>
+                            · Ref: {p.referencia}
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, color: 'var(--success)', fontSize: '0.8125rem' }}>
+                        +{formatCurrency(p.monto)}
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', padding: '0.2rem 0.5rem', borderTop: '1px solid var(--border)', marginTop: '0.15rem' }}>
+                    <div>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)' }}>Recibido: </span>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(totalPagos)}</span>
+                    </div>
+                    {cambio > 0 && (
+                      <div>
+                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)' }}>Cambio: </span>
+                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(cambio)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Divisions (inline text) ── */}
+            {registro.divisiones && registro.divisiones.length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <h4 className={styles.sectionSubtitle}>Divisiones</h4>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', padding: '0.3rem 0.6rem', lineHeight: 1.6 }}>
+                  {registro.divisiones.map((d, i) => (
+                    <span key={d.id}>
+                      {i > 0 && <span style={{ margin: '0 0.4rem', color: 'var(--text-dim)' }}>|</span>}
+                      Empleada #{d.usuarioId}: {d.porcentajeParticipacion}%
+                      {d.comisionCorrespondiente > 0 && <> · {formatCurrency(d.comisionCorrespondiente)}</>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── General Notes ── */}
+            {registro.notas && !registro.precioAjustado && (
+              <div style={{ marginBottom: '0.5rem' }}>
+                <h4 className={styles.sectionSubtitle}>Notas</h4>
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', lineHeight: 1.6, fontStyle: 'italic' }}>
+                  {registro.notas}
+                </div>
+              </div>
+            )}
+          </div>
 
         <div className={styles.modalFooter}>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -1114,12 +1291,12 @@ const RenderConfirmAnular: React.FC<AnularConfirmProps> = ({ registro, submittin
     exit={{ opacity: 0 }}
     transition={{ duration: 0.2 }}
     onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-  >
-    <motion.div
-      className={styles.modalContent}
-      initial={{ opacity: 0, scale: 0.92, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 10 }}
+          >
+            <motion.div
+              className={`${styles.modalContent} ${styles.modalContentXl}`}
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
       transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -1893,11 +2070,19 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   // ── Pre-liquidation audit modal ──
   const [auditarOpen, setAuditarOpen] = useState(false);
   const [selectedEmpleada, setSelectedEmpleada] = useState<NominaEmpleado | null>(null);
+  const [auditarRegistros, setAuditarRegistros] = useState<Registro[]>([]);
+  const [auditarLoading, setAuditarLoading] = useState(false);
+  const [auditarError, setAuditarError] = useState<string | null>(null);
 
   // ── Payment adjustment state ──
   const [ajustarPago, setAjustarPago] = useState(false);
   const [pagoAjustado, setPagoAjustado] = useState(0);
   const [motivoAjuste, setMotivoAjuste] = useState('');
+
+  // ── Loan deduction state ──
+  const [prestamosActivos, setPrestamosActivos] = useState<Array<{id: number; saldoPendiente: number; motivo: string | null; monto: number}>>([]);
+  const [descuentosPrestamos, setDescuentosPrestamos] = useState<Record<number, {checked: boolean; monto: number}>>({});
+  const [loadingPrestamos, setLoadingPrestamos] = useState(false);
 
   // ── Derived values ──
   const totalComisiones = useMemo(
@@ -1913,6 +2098,15 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     () => pendientes.filter((p) => p.totalAPagar > 0),
     [pendientes],
   );
+
+  // ── Helper: current month period ──
+  const getCurrentPeriod = () => {
+    const now = new Date();
+    // Usar UTC para coincidir con el backend
+    const firstDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    return { firstDay, today };
+  };
 
   // ── Filtered historial (client-side) ──
   const filteredHistorial = useMemo(() => {
@@ -1996,12 +2190,18 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     if (salonId) fetchData();
   }, [salonId, fetchData]);
 
-  const handleLiquidar = async (empleadaId: number, totalPagadoOverride?: number) => {
+  const handleLiquidar = async (
+    empleadaId: number,
+    totalPagadoOverride?: number,
+    descuentos?: Array<{prestamoId: number; monto: number}>,
+  ) => {
     if (!salonId) return;
     setSubmittingId(empleadaId);
+    setError(null);
     try {
-      const today = new Date();
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      const now = new Date();
+      const firstDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       const body: Record<string, any> = {
         usuarioId: empleadaId,
         periodoInicio: toISODate(firstDay),
@@ -2010,31 +2210,98 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       if (totalPagadoOverride != null) {
         body.totalPagado = totalPagadoOverride;
       }
+      if (descuentos && descuentos.length > 0) {
+        body.descuentosPrestamos = descuentos;
+      }
       await api.post(`/salones/${salonId}/finanzas/nomina/liquidar`, body);
-      fetchData();
-    } catch {
-      // silent
+      await fetchData();
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message ?? 'Error al liquidar nómina';
+      setError(msg);
+      // Re-lanzar para que handleConfirmLiquidar sepa que falló
+      throw new Error(msg);
     } finally {
       setSubmittingId(null);
     }
   };
 
-  const handleAuditar = (emp: NominaEmpleado) => {
+  const handleAuditar = async (emp: NominaEmpleado) => {
     setSelectedEmpleada(emp);
     setPagoAjustado(emp.totalAPagar);
     setAjustarPago(false);
     setMotivoAjuste('');
+    setDescuentosPrestamos({});
     setAuditarOpen(true);
+
+    // Fetch active loans for this employee
+    if (salonId) {
+      setLoadingPrestamos(true);
+      try {
+        const { data } = await api.get(`/salones/${salonId}/prestamos`, {
+          params: { usuarioId: emp.empleadaId, estado: 'ACTIVO', limit: 50 },
+        });
+        const prestamos = Array.isArray(data?.data) ? data.data : [];
+        setPrestamosActivos(prestamos);
+        const descMap: Record<number, {checked: boolean; monto: number}> = {};
+        for (const p of prestamos) {
+          if (Number(p.saldoPendiente) > 0) {
+            descMap[p.id] = { checked: true, monto: Number(p.saldoPendiente) };
+          }
+        }
+        setDescuentosPrestamos(descMap);
+      } catch {
+        setPrestamosActivos([]);
+        setDescuentosPrestamos({});
+      } finally {
+        setLoadingPrestamos(false);
+      }
+
+      // Fetch detailed registros for audit
+      setAuditarLoading(true);
+      try {
+        const { data: regData } = await api.get(`/salones/${salonId}/registros`, {
+          params: { usuarioId: emp.empleadaId, limit: 50 },
+        });
+        const allRegs = Array.isArray(regData?.data) ? regData.data : Array.isArray(regData) ? regData : [];
+        const { firstDay, today } = getCurrentPeriod();
+        setAuditarRegistros(allRegs.filter((r: any) => {
+          if (r.estaPagadaEmpleada !== false) return false;
+          if (!r.creadoEn) return true;
+          const creado = new Date(r.creadoEn);
+          return creado >= firstDay && creado <= today;
+        }));
+      } catch {
+        setAuditarRegistros([]);
+      } finally {
+        setAuditarLoading(false);
+      }
+    }
   };
 
   const handleConfirmLiquidar = async () => {
     if (!selectedEmpleada) return;
+    setAuditarError(null);
     const totalPagadoOverride = ajustarPago && motivoAjuste.length >= 10 ? pagoAjustado : undefined;
-    await handleLiquidar(selectedEmpleada.empleadaId, totalPagadoOverride);
-    setAuditarOpen(false);
-    setSelectedEmpleada(null);
-    setAjustarPago(false);
-    setMotivoAjuste('');
+    const descuentos = Object.entries(descuentosPrestamos)
+      .filter(([, v]) => v.checked && v.monto > 0)
+      .map(([prestamoId, v]) => ({ prestamoId: Number(prestamoId), monto: v.monto }));
+    try {
+      await handleLiquidar(
+        selectedEmpleada.empleadaId,
+        totalPagadoOverride,
+        descuentos.length > 0 ? descuentos : undefined,
+      );
+      // Solo cerrar modal si la liquidación fue exitosa
+      setAuditarOpen(false);
+      setSelectedEmpleada(null);
+      setAjustarPago(false);
+      setMotivoAjuste('');
+      setDescuentosPrestamos({});
+      setPrestamosActivos([]);
+    } catch (err: any) {
+      const msg = err?.message ?? err?.response?.data?.error?.message ?? 'Error al liquidar nómina';
+      setAuditarError(msg);
+    }
   };
 
   if (loading) {
@@ -2494,7 +2761,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             }}
           >
             <motion.div
-              className={styles.modalContent}
+              className={`${styles.modalContent} ${styles.modalContentXl}`}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -2516,10 +2783,12 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               </div>
 
               <div className={styles.modalBody}>
-                {/* Employee avatar + name */}
+                {/* ════════════════════════════════════════ */}
+                {/*  SECTION 1 — Employee header + period   */}
+                {/* ════════════════════════════════════════ */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                   <div style={{
-                    width: '44px', height: '44px', borderRadius: '50%',
+                    width: '48px', height: '48px', borderRadius: '50%',
                     background: 'var(--accent-subtle)', color: 'var(--accent)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontWeight: 700, fontSize: '1.125rem',
@@ -2527,7 +2796,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   }}>
                     {selectedEmpleada.nombre.charAt(0)}
                   </div>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{
                       fontFamily: "'DM Sans', sans-serif", fontSize: '1rem',
                       fontWeight: 600, color: 'var(--text-primary)',
@@ -2535,63 +2804,499 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                       {selectedEmpleada.nombre}
                     </div>
                     <div style={{
-                      fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
                       color: 'var(--text-secondary)',
                     }}>
-                      {selectedEmpleada.cantidadRegistros} servicios realizados
+                      {(() => {
+                        const d = new Date();
+                        const fd = new Date(d.getFullYear(), d.getMonth(), 1);
+                        return `${toISODate(fd)} — ${toISODate(d)}`;
+                      })()}
                     </div>
                   </div>
-                </div>
-
-                {/* Breakdown */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <div className={styles.infoRow} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span className={styles.infoLabel}>Comisiones</span>
-                    <span className={styles.infoValue} style={{ fontWeight: 600 }}>
-                      {formatCurrency(selectedEmpleada.totalComisionesPendientes)}
-                    </span>
-                  </div>
-                  <div className={styles.infoRow} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span className={styles.infoLabel}>Propinas</span>
-                    <span className={styles.infoValue} style={{ fontWeight: 600, color: 'var(--success)' }}>
-                      {formatCurrency(selectedEmpleada.totalPropinas)}
-                    </span>
-                  </div>
-                  <div className={styles.infoRow} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span className={styles.infoLabel}>Bono horario</span>
-                    <span className={styles.infoValue} style={{ fontWeight: 600 }}>
-                      {formatCurrency(selectedEmpleada.bonoHorario)}
-                    </span>
-                  </div>
-                  <div className={styles.infoRow} style={{ borderBottom: 'none' }}>
-                    <span className={styles.infoLabel}>Sueldo fijo</span>
-                    <span className={styles.infoValue} style={{ fontWeight: 600 }}>
-                      {formatCurrency(selectedEmpleada.sueldoFijo)}
-                    </span>
+                  <div style={{
+                    background: 'var(--accent-subtle)', color: 'var(--accent)',
+                    borderRadius: '999px', padding: '0.2rem 0.65rem',
+                    fontSize: '0.6875rem', fontWeight: 700,
+                    fontFamily: "'DM Sans', sans-serif",
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {auditarRegistros.length} registros
                   </div>
                 </div>
 
-                {/* Total */}
-                <div style={{
-                  borderTop: '1px solid var(--border)', paddingTop: '0.75rem',
-                  marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}>
-                  <span style={{
-                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem',
+                {/* ════════════════════════════════════════ */}
+                {/*  SECTION 2 — Summary cards (4 cols)     */}
+                {/* ════════════════════════════════════════ */}
+                <motion.div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '0.625rem',
+                    marginBottom: '1.25rem',
+                  }}
+                  variants={{
+                    hidden: { opacity: 0 },
+                    show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+                  }}
+                  initial="hidden"
+                  animate="show"
+                >
+                  {([
+                    {
+                      label: 'Comisiones', value: selectedEmpleada.totalComisionesPendientes,
+                      emoji: '💰', color: 'var(--accent)', borderColor: 'var(--accent)',
+                    },
+                    {
+                      label: 'Propinas', value: selectedEmpleada.totalPropinas,
+                      emoji: '🎁', color: 'var(--success)', borderColor: 'var(--success)',
+                    },
+                    {
+                      label: 'Bono + Sueldo', value: selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo,
+                      emoji: '⏰', color: '#818cf8', borderColor: '#818cf8',
+                    },
+                    {
+                      label: 'Total bruto',
+                      value: selectedEmpleada.totalComisionesPendientes + selectedEmpleada.totalPropinas + selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo,
+                      emoji: '🧾', color: 'var(--accent)', borderColor: 'var(--accent)', isTotal: true,
+                    },
+                  ]).map((card) => (
+                    <motion.div
+                      key={card.label}
+                      variants={{
+                        hidden: { opacity: 0, y: 12 },
+                        show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 0.61, 0.36, 1] } },
+                      }}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.2rem',
+                        padding: '0.75rem 1rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: `1px solid ${card.isTotal ? 'var(--accent)' : 'var(--border)'}`,
+                        borderLeft: `3px solid ${card.borderColor}`,
+                        background: card.isTotal
+                          ? 'linear-gradient(135deg, var(--accent-subtle), var(--bg-elevated))'
+                          : 'var(--bg-elevated)',
+                        transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
+                      }}
+                      whileHover={{
+                        y: -2,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        transition: { duration: 0.2 },
+                      }}
+                    >
+                      <div style={{ fontSize: '1.25rem', lineHeight: 1, marginBottom: '0.15rem' }}>
+                        {card.emoji}
+                      </div>
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '0.625rem',
+                        fontWeight: 600, color: 'var(--text-dim)',
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                      }}>
+                        {card.label}
+                      </div>
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem',
+                        fontWeight: 700, color: card.color, lineHeight: 1.2,
+                      }}>
+                        {formatCurrency(card.value)}
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+
+                <hr className={styles.auditDivider} />
+
+                {/* ════════════════════════════════════════ */}
+                {/*  SECTION 3 — Detailed service records   */}
+                {/* ════════════════════════════════════════ */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
                     fontWeight: 700, color: 'var(--text-primary)',
+                    marginBottom: '0.5rem',
+                    display: 'flex', alignItems: 'center', gap: '0.35rem',
                   }}>
-                    Total a pagar
-                  </span>
-                  <span style={{
-                    fontFamily: "'DM Sans', sans-serif", fontSize: '1.125rem',
-                    fontWeight: 700, color: 'var(--accent)',
-                  }}>
-                    {ajustarPago ? formatCurrency(pagoAjustado) : formatCurrency(selectedEmpleada.totalAPagar)}
-                  </span>
+                    📋 Detalle de servicios
+                    {auditarLoading && (
+                      <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', fontWeight: 400 }}>
+                        Cargando detalle...
+                      </span>
+                    )}
+                  </div>
+                  {auditarLoading ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} style={{
+                          height: '72px',
+                          background: 'var(--bg-elevated)',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid var(--border)',
+                          padding: '0.75rem',
+                        }}>
+                          <div style={{
+                            width: '60%', height: '10px',
+                            background: 'var(--bg-hover)',
+                            borderRadius: '4px', marginBottom: '0.5rem',
+                          }} />
+                          <div style={{
+                            width: '40%', height: '8px',
+                            background: 'var(--bg-hover)',
+                            borderRadius: '4px',
+                          }} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : auditarRegistros.length === 0 ? (
+                    <div style={{
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+                      color: 'var(--text-dim)', padding: '0.75rem 0',
+                      textAlign: 'center',
+                    }}>
+                      No se encontraron registros detallados para este período.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                      {auditarRegistros.map((reg, idx) => {
+                        const totalBrutoReg = (reg.montoTotal ?? reg.totalServicios ?? 0) + (reg.totalProductos ?? 0);
+                        const hasProducts = reg.productosVendidos && reg.productosVendidos.length > 0;
+                        return (
+                          <motion.div
+                            key={reg.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.03, duration: 0.2 }}
+                            style={{
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-md)',
+                              padding: '0.75rem 1rem',
+                              borderLeft: '4px solid var(--accent)',
+                              position: 'relative',
+                              transition: 'box-shadow 0.2s, transform 0.2s',
+                            }}
+                            whileHover={{
+                              boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+                              y: -1,
+                              transition: { duration: 0.2 },
+                            }}
+                          >
+                            {/* Header: index badge + service name + total */}
+                            <div style={{
+                              display: 'flex', justifyContent: 'space-between',
+                              alignItems: 'flex-start', marginBottom: '0.4rem',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  width: '22px', height: '22px', borderRadius: '50%',
+                                  background: 'var(--accent-subtle)', color: 'var(--accent)',
+                                  fontSize: '0.65rem', fontWeight: 700, flexShrink: 0,
+                                  fontFamily: "'DM Sans', sans-serif",
+                                }}>
+                                  {idx + 1}
+                                </span>
+                                <span style={{
+                                  fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                                  fontWeight: 600, color: 'var(--text-primary)',
+                                }}>
+                                  {reg.descripcionServicio ?? `Servicio #${reg.id}`}
+                                </span>
+                                {hasProducts && (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+                                    background: 'rgba(212, 168, 83, 0.12)', color: 'var(--accent)',
+                                    fontSize: '0.6rem', fontWeight: 700,
+                                    padding: '0.1rem 0.45rem', borderRadius: '999px',
+                                    fontFamily: "'DM Sans', sans-serif",
+                                  }}>
+                                    🏷️ Con productos
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{
+                                fontFamily: "'DM Sans', sans-serif", fontSize: '0.9rem',
+                                fontWeight: 700, color: 'var(--accent)',
+                              }}>
+                                {formatCurrency(totalBrutoReg)}
+                              </div>
+                            </div>
+
+                            {/* Metadata row: comisión, propina, badges */}
+                            <div style={{
+                              display: 'flex', gap: '1rem', flexWrap: 'wrap',
+                              fontFamily: "'DM Sans', sans-serif", fontSize: '0.9rem',
+                            }}>
+                              <span style={{ color: 'var(--text-secondary)' }}>
+                                Comisión:{' '}
+                                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                  {formatCurrency(reg.comisionCalculada ?? 0)}
+                                </span>
+                              </span>
+                              {reg.propina > 0 && (
+                                <span style={{ color: 'var(--text-secondary)' }}>
+                                  Propina:{' '}
+                                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>
+                                    +{formatCurrency(reg.propina)}
+                                  </span>
+                                </span>
+                              )}
+                              {reg.esRetoque && (
+                                <span style={{
+                                  background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24',
+                                  padding: '0.05rem 0.4rem', borderRadius: '999px',
+                                  fontWeight: 600, fontSize: '0.625rem',
+                                }}>
+                                  Retoque
+                                </span>
+                              )}
+                              {reg.porcentajeDescuento != null && reg.porcentajeDescuento > 0 && (
+                                <span style={{
+                                  background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger)',
+                                  padding: '0.05rem 0.4rem', borderRadius: '999px',
+                                  fontWeight: 600, fontSize: '0.625rem',
+                                }}>
+                                  -{reg.porcentajeDescuento}% desc.
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Products sub-list with distinct background */}
+                            {hasProducts && (
+                              <div style={{
+                                marginTop: '0.5rem',
+                                padding: '0.5rem 0.6rem',
+                                background: 'var(--bg-elevated)',
+                                borderRadius: 'var(--radius-sm)',
+                                border: '1px solid var(--border)',
+                              }}>
+                                <div style={{
+                                  fontFamily: "'DM Sans', sans-serif", fontSize: '0.625rem',
+                                  fontWeight: 600, color: 'var(--text-secondary)',
+                                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                                  marginBottom: '0.25rem',
+                                }}>
+                                  🛍️ Productos
+                                </div>
+                                {reg.productosVendidos?.map((pv) => (
+                                  <div key={pv.id} style={{
+                                    display: 'flex', justifyContent: 'space-between',
+                                    fontSize: '0.6875rem', fontFamily: "'DM Sans', sans-serif",
+                                    color: 'var(--text-secondary)',
+                                    padding: '0.1rem 0',
+                                  }}>
+                                    <span>
+                                      {pv.nombre}{' '}
+                                      <span style={{ color: 'var(--text-dim)' }}>×{pv.cantidad}</span>
+                                    </span>
+                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                      {formatCurrency(pv.subtotal)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                {/* ── Payment Adjustment toggle ── */}
+                <hr className={styles.auditDivider} />
+
+                {/* ════════════════════════════════════════ */}
+                {/*  SECTION 4 — Loan deductions (existing) */}
+                {/* ════════════════════════════════════════ */}
+                {loadingPrestamos ? (
+                  <div style={{ padding: '0.5rem 0', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                    Cargando préstamos activos...
+                  </div>
+                ) : prestamosActivos.length > 0 ? (
+                  <div style={{
+                    borderTop: '1px solid var(--border)',
+                    marginTop: '0.75rem',
+                    paddingTop: '0.75rem',
+                    marginBottom: '0.75rem',
+                  }}>
+                    <div style={{
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+                      fontWeight: 600, color: 'var(--text-primary)',
+                      marginBottom: '0.5rem',
+                    }}>
+                      💳 Descuentos por préstamo
+                    </div>
+                    {prestamosActivos.map((p) => {
+                      const desc = descuentosPrestamos[p.id] ?? { checked: true, monto: Number(p.saldoPendiente) };
+                      return (
+                        <div
+                          key={p.id}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            padding: '0.35rem 0', borderBottom: '1px solid var(--border)',
+                            fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={desc.checked}
+                            onChange={(e) => setDescuentosPrestamos((prev) => ({
+                              ...prev,
+                              [p.id]: { ...prev[p.id] ?? { monto: Number(p.saldoPendiente) }, checked: e.target.checked },
+                            }))}
+                          />
+                          <span style={{ flex: 1, color: 'var(--text-secondary)' }}>
+                            {p.motivo ?? `Préstamo #${p.id}`}
+                          </span>
+                          <span style={{ color: 'var(--text-dim)', marginRight: '0.5rem' }}>
+                            Saldo: ${Number(p.saldoPendiente).toLocaleString()}
+                          </span>
+                          <input
+                            type="number"
+                            className={styles.noSpinner}
+                            value={desc.monto}
+                            onChange={(e) => setDescuentosPrestamos((prev) => ({
+                              ...prev,
+                              [p.id]: { ...prev[p.id] ?? { checked: true }, monto: Math.max(0, Number(e.target.value)) },
+                            }))}
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                            style={{
+                              width: '90px',
+                              padding: '0.2rem 0.4rem',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-sm)',
+                              background: 'var(--bg-root)',
+                              color: 'var(--text-primary)',
+                              fontSize: '0.75rem',
+                              textAlign: 'right',
+                            }}
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
+                      );
+                    })}
+                    {Object.values(descuentosPrestamos).some((d) => d.checked && d.monto > 0) && (
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        padding: '0.4rem 0', fontSize: '0.8125rem',
+                        fontFamily: "'DM Sans', sans-serif",
+                        color: 'var(--danger)',
+                      }}>
+                        <span style={{ fontWeight: 600 }}>Total a descontar</span>
+                        <span style={{ fontWeight: 700 }}>
+                          -{formatCurrency(
+                            Object.entries(descuentosPrestamos)
+                              .filter(([, v]) => v.checked)
+                              .reduce((s, [, v]) => s + v.monto, 0)
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* ════════════════════════════════════════ */}
+                {/*  SECTION 5 — Total (Bruto - Desc = Neto)*/}
+                {/* ════════════════════════════════════════ */}
+                <div style={{
+                  borderTop: '1px solid var(--border)', paddingTop: '0.85rem',
+                  marginTop: '1.25rem',
+                }}>
+                  {/* Comisiones */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                    color: 'var(--text-secondary)', padding: '0.2rem 0',
+                  }}>
+                    <span>Comisiones</span>
+                    <span>{formatCurrency(selectedEmpleada.totalComisionesPendientes)}</span>
+                  </div>
+                  {/* Propinas */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                    color: 'var(--text-secondary)', padding: '0.2rem 0',
+                  }}>
+                    <span>Propinas</span>
+                    <span>{formatCurrency(selectedEmpleada.totalPropinas)}</span>
+                  </div>
+                  {/* Bono + Sueldo */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                    color: 'var(--text-secondary)', padding: '0.2rem 0',
+                  }}>
+                    <span>Bono + Sueldo</span>
+                    <span>{formatCurrency(selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo)}</span>
+                  </div>
+                  {/* ─── Divider ─── */}
+                  <hr style={{
+                    border: 'none', borderTop: '1px solid var(--border)',
+                    margin: '0.35rem 0',
+                  }} />
+                  {/* SUBTOTAL */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                    color: 'var(--text-primary)', padding: '0.2rem 0',
+                    fontWeight: 500,
+                  }}>
+                    <span>SUBTOTAL</span>
+                    <span>{formatCurrency(selectedEmpleada.totalAPagar)}</span>
+                  </div>
+                  {/* Descuentos line (conditional) */}
+                  {Object.values(descuentosPrestamos).some((d) => d.checked && d.monto > 0) && (
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
+                      color: 'var(--danger)', padding: '0.2rem 0',
+                    }}>
+                      <span>Descuentos</span>
+                      <span>
+                        -{formatCurrency(
+                          Object.entries(descuentosPrestamos)
+                            .filter(([, v]) => v.checked)
+                            .reduce((s, [, v]) => s + v.monto, 0)
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {/* ─── Divider ─── */}
+                  <hr style={{
+                    border: 'none', borderTop: '1px solid var(--border)',
+                    margin: '0.35rem 0',
+                  }} />
+                  {/* Neto a pagar */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', padding: '0.4rem 0 0',
+                  }}>
+                    <span style={{
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem',
+                      fontWeight: 700, color: 'var(--text-primary)',
+                    }}>
+                      NETO A PAGAR
+                    </span>
+                    <span style={{
+                      fontFamily: "'DM Sans', sans-serif", fontSize: '1.5rem',
+                      fontWeight: 700, color: 'var(--accent)',
+                    }}>
+                      {((): string => {
+                        const base = ajustarPago ? pagoAjustado : selectedEmpleada.totalAPagar;
+                        const descuento = Object.entries(descuentosPrestamos)
+                          .filter(([, v]) => v.checked)
+                          .reduce((s, [, v]) => s + v.monto, 0);
+                        return formatCurrency(Math.max(0, base - descuento));
+                      })()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ════════════════════════════════════════ */}
+                {/*  SECTION 6 — Payment adj. (existing)    */}
+                {/* ════════════════════════════════════════ */}
                 <div style={{
                   borderTop: '1px solid var(--border)',
                   marginTop: '0.75rem',
@@ -2634,7 +3339,8 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                           type="number"
                           className={styles.formInput}
                           value={pagoAjustado}
-                          onChange={(e) => setPagoAjustado(Number(e.target.value))}
+                          onChange={(e) => setPagoAjustado(Math.max(0, Number(e.target.value)))}
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           min="0"
                           style={{ width: '100%' }}
                         />
@@ -2680,7 +3386,22 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 </div>
               </div>
 
-              <div className={styles.modalFooter}>
+              {auditarError && (
+                <div style={{
+                  margin: '0 1.5rem 0.75rem',
+                  padding: '0.65rem 1rem',
+                  background: 'rgba(239,68,68,0.08)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--danger, #ef4444)',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.8125rem',
+                  color: 'var(--danger, #ef4444)',
+                }}>
+                  {auditarError}
+                </div>
+              )}
+
+              <div className={styles.auditModalFooter}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -2694,15 +3415,28 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   Cancelar
                 </Button>
                 <motion.button
-                  style={primaryBtnStyle}
-                  whileHover={{ scale: 1.03 }}
+                  style={{
+                    ...primaryBtnStyle,
+                    padding: '0.6rem 1.5rem',
+                    fontSize: '0.875rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    boxShadow: submittingId === selectedEmpleada.empleadaId
+                      ? 'none'
+                      : '0 2px 16px rgba(212,168,83,0.35)',
+                  }}
+                  whileHover={submittingId === selectedEmpleada.empleadaId ? {} : {
+                    scale: 1.03,
+                    boxShadow: '0 4px 24px rgba(212,168,83,0.5)',
+                  }}
                   whileTap={{ scale: 0.97 }}
                   disabled={submittingId === selectedEmpleada.empleadaId || (ajustarPago && motivoAjuste.length < 10)}
                   onClick={handleConfirmLiquidar}
                 >
                   {submittingId === selectedEmpleada.empleadaId
-                    ? 'Liquidando...'
-                    : 'Confirmar liquidación'}
+                    ? '⏳ Liquidando...'
+                    : '✅ Confirmar liquidación'}
                 </motion.button>
               </div>
             </motion.div>

@@ -15,6 +15,7 @@ import { catalogoRouter } from './modules/catalogo/presentation/routes/catalogo.
 import { personasRouter } from './modules/personas/presentation/routes/personas.routes';
 import { agendaRouter } from './modules/agenda/presentation/routes/agenda.routes';
 import { finanzasRouter } from './modules/finanzas/presentation/routes/finanzas.routes';
+import { prestamoRouter } from './modules/prestamos/presentation/routes/prestamoRoutes';
 import planRoutes from './modules/planes/presentation/routes/planRoutes';
 import logger from './shared/logger';
 
@@ -55,6 +56,7 @@ export function createApp(): express.Application {
   app.use('/api/salones/:salonId', personasRouter);
   app.use('/api/salones/:salonId', agendaRouter);
   app.use('/api/salones/:salonId', finanzasRouter);
+  app.use('/api/salones/:salonId', prestamoRouter);
 
   // 7. Global error handler — MUST be last
   app.use(errorHandler);

@@ -17,6 +17,7 @@ export interface IGastoRepository {
     hasta?: Date;
     esGastoFijo?: boolean;
   }): Promise<number>;
+  sumBySalonAndDateRange(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<number>;
   create(data: Partial<GastoEntity>): Promise<GastoEntity>;
   delete(id: number): Promise<void>;
 }

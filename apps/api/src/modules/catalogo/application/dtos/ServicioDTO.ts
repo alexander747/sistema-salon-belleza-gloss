@@ -9,6 +9,7 @@ export class ServicioDTO {
   duracionMinutos: number;
   activo: boolean;
   categoriaId: number;
+  categoria?: { id: number; nombre: string } | null;
   fotosCount?: number;
   creadoEn: Date;
   actualizadoEn: Date;
@@ -27,6 +28,9 @@ export class ServicioDTO {
     dto.duracionMinutos = entity.duracionMinutos;
     dto.activo = entity.activo;
     dto.categoriaId = entity.categoriaId ?? 0;
+    if (entity.categoria) {
+      dto.categoria = { id: entity.categoria.id, nombre: entity.categoria.nombre };
+    }
     dto.fotosCount = fotosCount;
     dto.creadoEn = entity.creadoEn;
     dto.actualizadoEn = entity.actualizadoEn;

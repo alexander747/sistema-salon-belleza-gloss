@@ -3,6 +3,7 @@ import type { CreateRegistroInput } from '@pos-final/validation';
 import { MetodoPago } from '../../../../../infrastructure/persistence/entities/PagoTransaccionEntity';
 import { AppDataSource } from '../../../../../shared/database';
 import { ClienteEntity } from '../../../../../infrastructure/persistence/entities/ClienteEntity';
+import { RegistroProductoEntity } from '../../../../../infrastructure/persistence/entities/RegistroProductoEntity';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IPagoTransaccionRepository } from '../../../domain/ports/IPagoTransaccionRepository';
 import type { IDivisionRegistroRepository } from '../../../domain/ports/IDivisionRegistroRepository';
@@ -136,10 +137,38 @@ export class CreateRegistroUseCase {
         deudaTotal: Number(Number(cliente.deudaTotal ?? 0) + montoPendiente),
       });
 
-      // ── 10. Decrement product stock ─────────────────────────
+      // ── 10. Save product lines & decrement stock ─────────────
       if (input.productosVendidos && input.productosVendidos.length > 0) {
         for (const pv of input.productosVendidos) {
-          await this.productoRepo.decrementStock(pv.productoId, pv.cantidad);
+          // Fetch product to get current price
+          const producto = await this.productoRepo.findBySalonAndId(
+            input.salonId,
+            pv.productoId,
+          );
+          if (!producto) continue;
+
+          const precioVentaUnitario = Number(producto.precioVenta);
+          const subtotal = precioVentaUnitario * pv.cantidad;
+
+          const registroProducto = queryRunner.manager
+            .getRepository(RegistroProductoEntity)
+            .create({
+              registroServicioId: registro.id,
+              productoId: pv.productoId,
+              cantidad: pv.cantidad,
+              precioVentaUnitario,
+              subtotal,
+            });
+          await queryRunner.manager
+            .getRepository(RegistroProductoEntity)
+            .save(registroProducto);
+
+          // Decrement stock within the same transaction
+          await this.productoRepo.decrementStock(
+            pv.productoId,
+            pv.cantidad,
+            queryRunner,
+          );
         }
       }
 

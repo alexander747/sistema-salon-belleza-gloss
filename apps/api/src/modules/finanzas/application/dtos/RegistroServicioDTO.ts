@@ -1,4 +1,6 @@
 import type { RegistroServicioEntity } from '../../../../infrastructure/persistence/entities/RegistroServicioEntity';
+import type { RegistroProductoDTO } from './RegistroProductoDTO';
+import { registroProductoToDTO } from './RegistroProductoDTO';
 
 export interface PagoDTO {
   id: number;
@@ -36,6 +38,7 @@ export interface RegistroServicioDTO {
   valorFinal: number;
   pagos: PagoDTO[];
   divisiones: DivisionDTO[];
+  productosVendidos: RegistroProductoDTO[];
   creadoEn: Date;
   actualizadoEn: Date;
 }
@@ -73,6 +76,7 @@ export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroS
       porcentajeParticipacion: Number(d.porcentajeParticipacion),
       comisionCorrespondiente: Number(d.comisionCorrespondiente),
     })),
+    productosVendidos: (entity.productosVendidos ?? []).map(registroProductoToDTO),
     creadoEn: entity.creadoEn,
     actualizadoEn: entity.actualizadoEn,
   };

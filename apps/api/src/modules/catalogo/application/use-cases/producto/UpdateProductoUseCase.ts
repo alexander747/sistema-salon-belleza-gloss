@@ -13,6 +13,7 @@ interface UpdateProductoInput {
   descripcion?: string;
   urlFoto?: string;
   precioCompra?: number;
+  margenGanancia?: number;
   precioVenta?: number;
   cantidadStock?: number;
   stockMinimo?: number;
@@ -39,10 +40,21 @@ export class UpdateProductoUseCase {
     if (input.descripcion !== undefined) data.descripcion = input.descripcion;
     if (input.urlFoto !== undefined) data.urlFoto = input.urlFoto;
     if (input.precioCompra !== undefined) data.precioCompra = input.precioCompra;
-    if (input.precioVenta !== undefined) data.precioVenta = input.precioVenta;
+    if (input.margenGanancia !== undefined) data.margenGanancia = input.margenGanancia;
     if (input.cantidadStock !== undefined) data.cantidadStock = input.cantidadStock;
     if (input.stockMinimo !== undefined) data.stockMinimo = input.stockMinimo;
     if (input.tipoInventario !== undefined) data.tipoInventario = input.tipoInventario;
+
+    // Recalculate precioVenta if precioCompra or margen changed and precioVenta not explicitly provided
+    const precioCompra = input.precioCompra ?? Number(producto.precioCompra);
+    const margenGanancia = input.margenGanancia ?? producto.margenGanancia;
+
+    if (input.precioVenta !== undefined) {
+      data.precioVenta = input.precioVenta;
+    } else if (input.precioCompra !== undefined || input.margenGanancia !== undefined) {
+      // Only auto-calculate if one of the factors changed
+      data.precioVenta = Math.round(precioCompra * (1 + margenGanancia / 100) * 100) / 100;
+    }
 
     const updated = await this.productoRepo.update(input.id, data);
     return ProductoDTO.fromEntity(updated!);

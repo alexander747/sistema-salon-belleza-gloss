@@ -1,10 +1,15 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import {
+  fetchServicios,
+  type Servicio,
+  type PaginatedResult,
+} from '../services/servicioService.js';
 
 /* ── Types ── */
 
@@ -14,22 +19,9 @@ interface Categoria {
   descripcion?: string;
 }
 
-interface Servicio {
-  id: number;
-  nombre: string;
-  descripcion?: string;
-  precioBase: number;
-  duracionMinutos: number;
-  categoriaId?: number;
-  categoria?: Categoria;
-  activo: boolean;
-  creadoEn?: string;
-  actualizadoEn?: string;
-}
-
 /* ── Constants ── */
 
-
+const ITEMS_PER_PAGE = 12;
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -93,6 +85,18 @@ const ghostBtnStyle: React.CSSProperties = {
   fontSize: '0.8125rem',
   cursor: 'pointer',
   transition: 'background 0.2s',
+};
+
+const paginationBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--text-primary)',
+  padding: '0.35rem 0.7rem',
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.75rem',
+  cursor: 'pointer',
+  transition: 'background 0.2s, border-color 0.2s',
 };
 
 const tableHeaderStyle: React.CSSProperties = {
@@ -190,11 +194,16 @@ const ServiciosPage: React.FC = () => {
   /* Data state */
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageCount, setPageCount] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
 
   /* UI state */
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Servicio | null>(null);
   const [deleting, setDeleting] = useState<Servicio | null>(null);
@@ -217,20 +226,34 @@ const ServiciosPage: React.FC = () => {
     return stored ? Number(stored) : user.salonId;
   }, [user]);
 
-  const filteredServicios = useMemo(() => {
-    if (!search.trim()) return servicios;
-    const q = search.toLowerCase();
-    return servicios.filter((s) => s.nombre.toLowerCase().includes(q));
-  }, [servicios, search]);
+  const hasData = useMemo(() => servicios.length > 0, [servicios]);
 
-  const hasData = useMemo(() => filteredServicios.length > 0, [filteredServicios]);
+  const paginationRange = useMemo(() => {
+    const range: (number | string)[] = [];
+    const maxVisible = 5;
+    if (pageCount <= maxVisible + 2) {
+      for (let i = 1; i <= pageCount; i++) range.push(i);
+    } else {
+      range.push(1);
+      if (currentPage > 3) range.push('...');
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(pageCount - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) range.push(i);
+      if (currentPage < pageCount - 2) range.push('...');
+      range.push(pageCount);
+    }
+    return range;
+  }, [pageCount, currentPage]);
 
-  const sortedServicios = useMemo(() => {
-    return [...filteredServicios].sort((a, b) => {
-      if (a.activo !== b.activo) return a.activo ? -1 : 1;
-      return 0;
-    });
-  }, [filteredServicios]);
+  /* ── Debounced search ── */
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+      setCurrentPage(1);
+    }, 300);
+  };
 
   /* ── Auth effect ── */
   useEffect(() => {
@@ -248,28 +271,33 @@ const ServiciosPage: React.FC = () => {
     setDataLoading(true);
     setDataError(null);
     try {
-      const [svcRes, catRes] = await Promise.all([
-        api.get(`/salones/${salonId}/servicios`),
+      const [svcResult, catRes] = await Promise.all([
+        fetchServicios(salonId, {
+          page: currentPage,
+          limit: ITEMS_PER_PAGE,
+          q: debouncedSearch || undefined,
+        }) as Promise<PaginatedResult<Servicio>>,
         api.get(`/salones/${salonId}/categorias`),
       ]);
-      console.log('[DEBUG ServiciosPage] svcRes:', svcRes.status, typeof svcRes.data, Array.isArray(svcRes.data));
-      console.log('[DEBUG ServiciosPage] catRes:', catRes.status, typeof catRes.data, Array.isArray(catRes.data));
-      const svcData = Array.isArray(svcRes.data) ? svcRes.data : svcRes.data?.data ?? [];
       const catData = Array.isArray(catRes.data) ? catRes.data : catRes.data?.data ?? [];
-      console.log('[DEBUG ServiciosPage] svcData.length:', svcData.length, 'catData.length:', catData.length);
-      console.log('[DEBUG ServiciosPage] svcData:', svcData.map((s: Servicio) => ({ id: s.id, nombre: s.nombre, categoriaId: s.categoriaId })));
-      setServicios(svcData);
+      console.log('[DEBUG ServiciosPage] svcResult:', svcResult);
+      console.log('[DEBUG ServiciosPage] catData.length:', catData.length);
+      setServicios(svcResult.data);
+      setTotalCount(svcResult.meta.total);
+      setPageCount(svcResult.meta.totalPages);
       setCategorias(catData);
     } catch (err) {
       console.error('[DEBUG ServiciosPage] fetchData ERROR:', err);
       setDataError('Error al cargar servicios');
       setServicios([]);
+      setTotalCount(0);
+      setPageCount(0);
       setCategorias([]);
     } finally {
       console.log('[DEBUG ServiciosPage] fetchData DONE, dataLoading -> false');
       setDataLoading(false);
     }
-  }, [salonId]);
+  }, [salonId, currentPage, debouncedSearch]);
 
   useEffect(() => {
     console.log('[DEBUG ServiciosPage EFFECT] authLoading:', authLoading, 'salonId:', salonId, 'user:', user?.email);
@@ -436,7 +464,7 @@ const ServiciosPage: React.FC = () => {
                 type="text"
                 placeholder="Buscar servicio…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 style={searchInputStyle}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = 'var(--accent)';
@@ -527,7 +555,7 @@ const ServiciosPage: React.FC = () => {
                   marginBottom: '0.5rem',
                 }}
               >
-                No hay servicios
+                {debouncedSearch ? 'Sin resultados' : 'No hay servicios'}
               </h2>
               <p
                 style={{
@@ -538,19 +566,23 @@ const ServiciosPage: React.FC = () => {
                   maxWidth: '320px',
                 }}
               >
-                Agregá tu primer servicio para empezar a usarlo en las citas.
+                {debouncedSearch
+                  ? 'No encontramos servicios con ese nombre.'
+                  : 'Agregá tu primer servicio para empezar a usarlo en las citas.'}
               </p>
-              <motion.button
-                style={primaryBtnStyle}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => {
-                  resetForm();
-                  setShowModal(true);
-                }}
-              >
-                + Nuevo Servicio
-              </motion.button>
+              {!debouncedSearch && (
+                <motion.button
+                  style={primaryBtnStyle}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    resetForm();
+                    setShowModal(true);
+                  }}
+                >
+                  + Nuevo Servicio
+                </motion.button>
+              )}
             </motion.div>
           ) : (
             <div
@@ -576,7 +608,7 @@ const ServiciosPage: React.FC = () => {
               </div>
 
               {/* Rows — active first, then inactive */}
-              {sortedServicios.map((svc) => (
+              {servicios.map((svc) => (
                 <motion.div
                   key={svc.id}
                   style={tableRowStyle}
@@ -654,6 +686,77 @@ const ServiciosPage: React.FC = () => {
                   </span>
                 </motion.div>
               ))}
+
+              {/* ── Pagination ── */}
+              {pageCount > 1 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.35rem',
+                    marginTop: '1rem',
+                    padding: '0 1rem 0.75rem',
+                  }}
+                >
+                  <button
+                    style={{
+                      ...paginationBtnStyle,
+                      opacity: currentPage === 1 ? 0.4 : 1,
+                      cursor: currentPage === 1 ? 'default' : 'pointer',
+                    }}
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    ←
+                  </button>
+                  {paginationRange.map((p, i) =>
+                    typeof p === 'string' ? (
+                      <span
+                        key={`ellipsis-${i}`}
+                        style={{ color: 'var(--text-dim)', fontSize: '0.75rem', padding: '0 0.25rem' }}
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        style={{
+                          ...paginationBtnStyle,
+                          background: p === currentPage ? 'var(--accent)' : 'transparent',
+                          color: p === currentPage ? 'var(--bg-root)' : 'var(--text-primary)',
+                          borderColor: p === currentPage ? 'var(--accent)' : 'var(--border)',
+                          fontWeight: p === currentPage ? 600 : 400,
+                        }}
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </button>
+                    ),
+                  )}
+                  <button
+                    style={{
+                      ...paginationBtnStyle,
+                      opacity: currentPage === pageCount ? 0.4 : 1,
+                      cursor: currentPage === pageCount ? 'default' : 'pointer',
+                    }}
+                    disabled={currentPage === pageCount}
+                    onClick={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
+                  >
+                    →
+                  </button>
+                  <span
+                    style={{
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.7rem',
+                      color: 'var(--text-dim)',
+                      marginLeft: '0.5rem',
+                    }}
+                  >
+                    {totalCount} servicios
+                  </span>
+                </div>
+              )}
             </div>
           )}
 

@@ -2,10 +2,12 @@ import {
   Entity,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { SalonEntity } from './SalonEntity';
+import type { ProductoPrecioHistoricoEntity } from './ProductoPrecioHistoricoEntity';
 
 export enum TipoInventario {
   RETAIL = 'RETAIL',
@@ -51,6 +53,9 @@ export class ProductoEntity extends BaseEntity {
   })
   tipoInventario: TipoInventario;
 
+  @Column({ type: 'int', default: 30 })
+  margenGanancia: number;
+
   @Column({ type: 'boolean', default: true })
   activo: boolean;
 
@@ -61,4 +66,7 @@ export class ProductoEntity extends BaseEntity {
 
   @Column({ type: 'int' })
   salonId: number;
+
+  @OneToMany('ProductoPrecioHistoricoEntity', 'producto')
+  historialPrecios: ProductoPrecioHistoricoEntity[];
 }

@@ -25,12 +25,24 @@ export class LiquidacionController {
 
   liquidarEmpleada = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const fechaDesde = req.body.fechaDesde || req.body.periodoInicio;
+      const fechaHasta = req.body.fechaHasta || req.body.periodoFin;
+      
+      if (!fechaDesde || !fechaHasta) {
+        throw new Error('fechaDesde/periodoInicio y fechaHasta/periodoFin son requeridos');
+      }
+      
+      // Asegurar que hasta incluya todo el día (fin de jornada 23:59:59)
+      const hasta = new Date(fechaHasta);
+      hasta.setHours(23, 59, 59, 999);
+      
       const result = await this.liquidarUseCase.execute({
         salonId: req.salonId!,
         usuarioId: req.body.usuarioId,
-        periodoInicio: new Date(req.body.periodoInicio),
-        periodoFin: new Date(req.body.periodoFin),
+        periodoInicio: new Date(fechaDesde),
+        periodoFin: hasta,
         totalPagado: req.body.totalPagado ? Number(req.body.totalPagado) : undefined,
+        descuentosPrestamos: req.body.descuentosPrestamos,
       });
       res.status(201).json(result);
     } catch (error) {

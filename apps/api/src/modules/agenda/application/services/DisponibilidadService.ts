@@ -172,5 +172,8 @@ function timeToMinutes(date: Date): number {
 
 function timeStrToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);
-  return h * 60 + m;
+  const mins = h * 60 + m;
+  // 00:00 como hora de cierre significa medianoche (24:00)
+  if (mins === 0 && time.trim() === '00:00') return 1440;
+  return mins;
 }

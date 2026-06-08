@@ -10,11 +10,11 @@ export class TypeORMUsuarioRepository implements IUsuarioRepository {
   }
 
   async findById(id: number): Promise<UsuarioEntity | null> {
-    return this.getRepo().findOneBy({ id });
+    return this.getRepo().findOne({ where: { id }, relations: ['salon'] });
   }
 
   async findByEmail(email: string): Promise<UsuarioEntity | null> {
-    return this.getRepo().findOneBy({ email });
+    return this.getRepo().findOne({ where: { email }, relations: ['salon'] });
   }
 
   async findByPhone(phone: string): Promise<UsuarioEntity | null> {

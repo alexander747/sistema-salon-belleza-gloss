@@ -1,5 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
+import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
 
 export interface ResumenDiaInput {
   salonId: number;
@@ -16,6 +17,8 @@ export interface ResumenDiaOutput {
   cantidadAtenciones: number;
   cantidadProductosVendidos: number;
   totalIngresos: number;
+  totalGastos: number;
+  balanceNeto: number;
 }
 
 @injectable()
@@ -23,6 +26,8 @@ export class ResumenDiaUseCase {
   constructor(
     @inject('IRegistroServicioRepository')
     private readonly registroRepo: IRegistroServicioRepository,
+    @inject('IGastoRepository')
+    private readonly gastoRepo: IGastoRepository,
   ) {}
 
   async execute(input: ResumenDiaInput): Promise<ResumenDiaOutput> {
@@ -49,11 +54,10 @@ export class ResumenDiaUseCase {
       fin = new Date(Date.UTC(year, month - 1, day + 1, 5, 0, 0, 0));
     }
 
-    const registros = await this.registroRepo.findBySalonAndDateRange(
-      input.salonId,
-      inicio,
-      fin,
-    );
+    const [registros, totalGastos] = await Promise.all([
+      this.registroRepo.findBySalonAndDateRange(input.salonId, inicio, fin),
+      this.gastoRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
+    ]);
 
     const totalServicios = registros.reduce(
       (sum, r) => sum + Number(r.totalServicios), 0,
@@ -71,6 +75,9 @@ export class ResumenDiaUseCase {
       (sum, r) => sum + Number(r.cantidadProductosVendidos ?? 0), 0,
     );
 
+    const totalIngresos = totalServicios + totalProductos;
+    const balanceNeto = totalIngresos - totalGastos;
+
     return {
       totalServicios,
       totalProductos,
@@ -78,7 +85,9 @@ export class ResumenDiaUseCase {
       totalComisiones,
       cantidadAtenciones: registros.length,
       cantidadProductosVendidos,
-      totalIngresos: totalServicios + totalProductos,
+      totalIngresos,
+      totalGastos,
+      balanceNeto,
     };
   }
 }

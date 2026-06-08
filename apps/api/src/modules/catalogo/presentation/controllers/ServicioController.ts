@@ -21,9 +21,16 @@ export class ServicioController {
       const categoriaId = req.query.categoriaId
         ? Number(req.query.categoriaId)
         : undefined;
+      const page = req.query.page ? Number(req.query.page) : 1;
+      const limit = req.query.limit ? Number(req.query.limit) : 0;
+      const q = req.query.q as string | undefined;
+
       const result = await this.listUseCase.execute({
         salonId: req.salonId!,
         categoriaId,
+        page,
+        limit,
+        q,
       });
       res.json(result);
     } catch (error) {

@@ -12,6 +12,7 @@ interface CreateProductoInput {
   descripcion?: string;
   urlFoto?: string;
   precioCompra?: number;
+  margenGanancia?: number;
   precioVenta?: number;
   cantidadStock?: number;
   stockMinimo?: number;
@@ -25,6 +26,15 @@ export class CreateProductoUseCase {
   ) {}
 
   async execute(input: CreateProductoInput): Promise<ProductoDTO> {
+    const precioCompra = input.precioCompra ?? 0;
+    const margenGanancia = input.margenGanancia ?? 30;
+
+    // Calculate precioVenta from precioCompra + margen if not explicitly provided
+    let precioVenta = input.precioVenta;
+    if (precioVenta === undefined || precioVenta === null) {
+      precioVenta = Math.round(precioCompra * (1 + margenGanancia / 100) * 100) / 100;
+    }
+
     const producto = await this.productoRepo.create({
       nombre: input.nombre,
       marca: input.marca ?? undefined,
@@ -32,8 +42,9 @@ export class CreateProductoUseCase {
       tamano: input.tamano ?? undefined,
       descripcion: input.descripcion ?? undefined,
       urlFoto: input.urlFoto ?? undefined,
-      precioCompra: input.precioCompra ?? 0,
-      precioVenta: input.precioVenta ?? 0,
+      precioCompra,
+      margenGanancia,
+      precioVenta,
       cantidadStock: input.cantidadStock ?? 0,
       stockMinimo: input.stockMinimo ?? 0,
       tipoInventario: input.tipoInventario ?? TipoInventario.RETAIL,

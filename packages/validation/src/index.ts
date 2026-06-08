@@ -13,6 +13,7 @@ export {
   updateProductoSchema,
   descontarStockSchema,
   reabastecerStockSchema,
+  restockProductoSchema,
 } from './catalogo.schema.js';
 export type {
   CreateCategoriaInput,
@@ -23,6 +24,7 @@ export type {
   UpdateProductoInput,
   DescontarStockInput,
   ReabastecerStockInput,
+  RestockProductoInput,
 } from './catalogo.schema.js';
 export {
   createEmpleadaSchema,
@@ -50,6 +52,16 @@ export type {
   CreateBloqueoInput,
   UpdateHorariosInput,
 } from './agenda.schema.js';
+export {
+  crearPrestamoSchema,
+  registrarPagoSchema,
+  editarPrestamoSchema,
+} from './prestamos.schema.js';
+export type {
+  CrearPrestamoInput,
+  RegistrarPagoInput,
+  EditarPrestamoInput,
+} from './prestamos.schema.js';
 export {
   createRegistroSchema,
   pagoTransaccionSchema,

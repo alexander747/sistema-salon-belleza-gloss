@@ -11,15 +11,38 @@ import ClientesPage from './pages/ClientesPage.js';
 import EmpleadasPage from './pages/EmpleadasPage.js';
 import FinanzasPage from './pages/FinanzasPage.js';
 import VentasPage from './pages/VentasPage.js';
+import PrestamosPage from './pages/PrestamosPage.js';
+import HorariosPage from './pages/HorariosPage.js';
 import ProtectedRoute from './components/ProtectedRoute.js';
 import LuxeLayout from './components/LuxeLayout.js';
 import api from './services/api.js';
+
+/* ── Types ── */
+
+interface SalonInfo {
+  id: number;
+  nombre: string;
+  logoUrl: string | null;
+  colorPrimario: string | null;
+  colorSecundario: string | null;
+  tema: string | null;
+}
+
+interface UserWithSalon {
+  id: number;
+  nombre: string;
+  email: string;
+  rol: number;
+  salonId: number;
+  activo: boolean;
+  salon: SalonInfo | null;
+}
 
 /* ── Wrapper: provides LuxeLayout with auth state ── */
 
 const ProtectedLayout: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<{ nombre?: string } | null>(null);
+  const [user, setUser] = useState<UserWithSalon | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,7 +61,7 @@ const ProtectedLayout: React.FC = () => {
 
   return (
     <LuxeLayout
-      userName={user?.nombre}
+      user={user}
       onLogout={handleLogout}
       loading={loading}
     />
@@ -64,6 +87,8 @@ const App: React.FC = () => {
               <Route path="/empleadas" element={<EmpleadasPage />} />
               <Route path="/ventas" element={<VentasPage />} />
               <Route path="/finanzas" element={<FinanzasPage />} />
+              <Route path="/prestamos" element={<PrestamosPage />} />
+              <Route path="/horarios" element={<HorariosPage />} />
             </Route>
           </Route>
         </Routes>
