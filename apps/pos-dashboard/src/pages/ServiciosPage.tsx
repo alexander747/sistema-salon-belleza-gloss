@@ -101,7 +101,7 @@ const paginationBtnStyle: React.CSSProperties = {
 
 const tableHeaderStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1fr 80px 100px 120px 70px 100px 100px 80px',
+  gridTemplateColumns: '1fr 80px 100px 110px 120px 70px 100px 100px 80px',
   gap: '0.75rem',
   padding: '0.65rem 1rem',
   borderBottom: '1px solid var(--border)',
@@ -115,7 +115,7 @@ const tableHeaderStyle: React.CSSProperties = {
 
 const tableRowStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1fr 80px 100px 120px 70px 100px 100px 80px',
+  gridTemplateColumns: '1fr 80px 100px 110px 120px 70px 100px 100px 80px',
   gap: '0.75rem',
   padding: '0.75rem 1rem',
   borderBottom: '1px solid var(--border)',
@@ -214,6 +214,7 @@ const ServiciosPage: React.FC = () => {
     descripcion: '',
     precioBase: 0,
     duracionMinutos: 30,
+    costoBaseInsumos: 0,
     categoriaId: 0,
     activo: true,
   });
@@ -314,6 +315,7 @@ const ServiciosPage: React.FC = () => {
       descripcion: '',
       precioBase: 0,
       duracionMinutos: 30,
+      costoBaseInsumos: 0,
       categoriaId: 0,
       activo: true,
     });
@@ -328,6 +330,7 @@ const ServiciosPage: React.FC = () => {
       descripcion: svc.descripcion ?? '',
       precioBase: svc.precioBase,
       duracionMinutos: svc.duracionMinutos,
+      costoBaseInsumos: svc.costoBaseInsumos ?? 0,
       categoriaId: svc.categoriaId ?? 0,
       activo: svc.activo,
     });
@@ -345,6 +348,7 @@ const ServiciosPage: React.FC = () => {
         descripcion: form.descripcion.trim() || undefined,
         precioBase: form.precioBase,
         duracionMinutos: form.duracionMinutos,
+        costoBaseInsumos: form.costoBaseInsumos > 0 ? form.costoBaseInsumos : undefined,
         categoriaId: form.categoriaId > 0 ? form.categoriaId : undefined,
         activo: form.activo,
       };
@@ -600,6 +604,7 @@ const ServiciosPage: React.FC = () => {
                 <span>Nombre</span>
                 <span>Duración</span>
                 <span>Precio</span>
+                <span>Costo base insumos</span>
                 <span>Categoría</span>
                 <span>Estado</span>
                 <span>Creado</span>
@@ -623,6 +628,9 @@ const ServiciosPage: React.FC = () => {
                   </span>
                   <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
                     {formatCurrency(svc.precioBase)}
+                  </span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    {(svc.costoBaseInsumos ?? 0) > 0 ? formatCurrency(svc.costoBaseInsumos ?? 0) : '—'}
                   </span>
                   <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
                     {svc.categoria?.nombre ?? '—'}
@@ -872,6 +880,18 @@ const ServiciosPage: React.FC = () => {
                       style={formFieldStyle}
                     />
                   </div>
+                </div>
+
+                <div style={{ marginBottom: '0.875rem' }}>
+                  <label style={formLabelStyle}>Costo base insumos</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.costoBaseInsumos || ''}
+                    onChange={(e) => setForm((prev) => ({ ...prev, costoBaseInsumos: Number(e.target.value) }))}
+                    style={formFieldStyle}
+                    placeholder="0"
+                  />
                 </div>
 
                 <div style={{ marginBottom: '0.875rem' }}>

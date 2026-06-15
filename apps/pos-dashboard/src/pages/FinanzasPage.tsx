@@ -17,6 +17,7 @@ interface FinanzasResumen {
   totalProductos: number;
   totalPropinas: number;
   totalComisiones: number;
+  totalCostoBaseInsumos: number;
   cantidadAtenciones: number;
   cantidadProductosVendidos: number;
   totalIngresos: number;
@@ -53,6 +54,7 @@ interface ServicioItemDTO {
   servicioId: number;
   nombreServicio: string;
   precioServicio: number;
+  costoBaseInsumos?: number;
 }
 
 interface Registro {
@@ -645,6 +647,12 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             {resumen ? formatCurrency(resumen.totalComisiones) : '$0'}
           </span>
         </motion.div>
+        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
+          <span className={styles.summaryLabel}>🧴 Costo base insumos</span>
+          <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
+            {resumen ? formatCurrency(resumen.totalCostoBaseInsumos) : '$0'}
+          </span>
+        </motion.div>
         <motion.div variants={itemVariants} className={styles.summaryCard}>
           <span className={styles.summaryLabel}>🎁 Propinas</span>
           <span className={styles.summaryValueSuccess}>
@@ -956,6 +964,13 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
   const subtotal = registro.totalServicios + registro.totalProductos;
   const totalPagos = registro.pagos?.reduce((s, p) => s + p.monto, 0) ?? 0;
   const cambio = totalPagos > totalFinal ? totalPagos - totalFinal : 0;
+  const totalCostoBaseInsumos = (registro.serviciosItems ?? []).reduce(
+    (sum, si) => sum + Number(si.costoBaseInsumos ?? 0),
+    0,
+  );
+  const baseNetaComision = Math.max(0, registro.totalServicios - totalCostoBaseInsumos);
+  const totalEmpleada = (registro.comisionCalculada ?? 0) + (registro.propina ?? 0);
+  const gananciaSalon = totalFinal - totalEmpleada - totalCostoBaseInsumos;
 
   return (
     <motion.div
@@ -1049,31 +1064,39 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
               <div style={{ marginBottom: '0.75rem' }}>
                 <h4 className={styles.sectionSubtitle}>Servicios realizados</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  {registro.serviciosItems.map((si, idx) => (
-                    <motion.div
-                      key={si.id}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.2, delay: idx * 0.04 }}
-                      className={styles.miniCard}
-                      style={{
-                        borderLeft: `3px solid ${idx % 2 === 0 ? 'var(--accent)' : 'var(--success)'}`,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {si.nombreServicio}
+                  {registro.serviciosItems.map((si, idx) => {
+                    const baseNeta = Math.max(0, si.precioServicio - (si.costoBaseInsumos ?? 0));
+                    return (
+                      <motion.div
+                        key={si.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2, delay: idx * 0.04 }}
+                        className={styles.miniCard}
+                        style={{
+                          borderLeft: `3px solid ${idx % 2 === 0 ? 'var(--accent)' : 'var(--success)'}`,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {si.nombreServicio}
+                          </div>
+                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.1rem' }}>
+                            {(si.costoBaseInsumos ?? 0) > 0
+                              ? `${formatCurrency(si.precioServicio)} - ${formatCurrency(si.costoBaseInsumos)} base = ${formatCurrency(baseNeta)} neto`
+                              : `${formatCurrency(si.precioServicio)}`}
+                          </div>
                         </div>
-                      </div>
-                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
-                        {formatCurrency(si.precioServicio)}
-                      </span>
-                    </motion.div>
-                  ))}
+                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+                          {formatCurrency(si.precioServicio)}
+                        </span>
+                      </motion.div>
+                    );
+                  })}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -1155,7 +1178,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
                 padding: '0.6rem 0.9rem',
               }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 1.5rem' }}>
-                  {/* Left column: Servicios, Productos, Subtotal */}
+                  {/* Left column: ingresos y costos */}
                   <div>
                     <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
                       <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Servicios</span>
@@ -1165,37 +1188,54 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
                       <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Productos</span>
                       <span className={styles.infoValue} style={{ fontSize: '0.75rem', marginLeft: 'auto' }}>{formatCurrency(registro.totalProductos)}</span>
                     </div>
+                    {totalCostoBaseInsumos > 0 && (
+                      <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                        <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Costo base insumos</span>
+                        <span className={styles.infoValue} style={{ fontSize: '0.75rem', color: '#fb923c', marginLeft: 'auto' }}>-{formatCurrency(totalCostoBaseInsumos)}</span>
+                      </div>
+                    )}
                     <div className={styles.infoRow} style={{ padding: '0.2rem 0', borderTop: '1px dashed var(--border)', marginTop: '0.1rem' }}>
                       <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem', fontWeight: 600 }}>Subtotal</span>
                       <span className={styles.infoValue} style={{ fontSize: '0.75rem', fontWeight: 600, marginLeft: 'auto' }}>{formatCurrency(subtotal)}</span>
                     </div>
                   </div>
-                  {/* Right column: Comisión, Propina, Total Empleada */}
-                  {(registro.comisionCalculada > 0 || registro.propina > 0) && (
-                    <div>
-                      {registro.comisionCalculada > 0 && (
-                        <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
-                          <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Comisión</span>
-                          <span className={styles.infoValue} style={{ fontSize: '0.75rem', marginLeft: 'auto' }}>{formatCurrency(registro.comisionCalculada)}</span>
-                        </div>
-                      )}
-                      {registro.propina > 0 && (
-                        <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
-                          <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Propina</span>
-                          <span className={styles.infoValue} style={{ fontSize: '0.75rem', color: 'var(--success)', marginLeft: 'auto' }}>+{formatCurrency(registro.propina)}</span>
-                        </div>
-                      )}
-                      {(registro.comisionCalculada > 0 || registro.propina > 0) && (
-                        <div className={styles.infoRow} style={{ padding: '0.2rem 0', borderTop: '1px dashed var(--border)', marginTop: '0.1rem' }}>
-                          <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem', fontWeight: 600 }}>Total empleada</span>
-                          <span className={styles.infoValue} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', marginLeft: 'auto' }}>
-                            {formatCurrency((registro.comisionCalculada ?? 0) + (registro.propina ?? 0))}
-                          </span>
-                        </div>
-                      )}
+                  {/* Right column: empleada */}
+                  <div>
+                    {registro.comisionCalculada > 0 && (
+                      <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                        <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Comisión</span>
+                        <span className={styles.infoValue} style={{ fontSize: '0.75rem', marginLeft: 'auto' }}>{formatCurrency(registro.comisionCalculada)}</span>
+                      </div>
+                    )}
+                    {totalCostoBaseInsumos > 0 && (
+                      <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                        <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Base neta comisión</span>
+                        <span className={styles.infoValue} style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginLeft: 'auto' }}>{formatCurrency(baseNetaComision)}</span>
+                      </div>
+                    )}
+                    {registro.propina > 0 && (
+                      <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
+                        <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Propina</span>
+                        <span className={styles.infoValue} style={{ fontSize: '0.75rem', color: 'var(--success)', marginLeft: 'auto' }}>+{formatCurrency(registro.propina)}</span>
+                      </div>
+                    )}
+                    <div className={styles.infoRow} style={{ padding: '0.2rem 0', borderTop: '1px dashed var(--border)', marginTop: '0.1rem' }}>
+                      <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem', fontWeight: 600 }}>Total empleada</span>
+                      <span className={styles.infoValue} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', marginLeft: 'auto' }}>
+                        {formatCurrency(totalEmpleada)}
+                      </span>
                     </div>
-                  )}
+                  </div>
                 </div>
+                
+                {/* Ganancia salón */}
+                <div className={styles.infoRow} style={{ borderTop: '1px dashed var(--border)', marginTop: '0.3rem', padding: '0.3rem 0' }}>
+                  <span className={styles.infoLabel} style={{ minWidth: 'auto', fontWeight: 600, fontSize: '0.8125rem' }}>Ganancia salón</span>
+                  <span className={styles.infoValue} style={{ fontWeight: 700, color: gananciaSalon >= 0 ? '#22c55e' : '#ef4444', fontSize: '0.875rem', marginLeft: 'auto' }}>
+                    {formatCurrency(gananciaSalon)}
+                  </span>
+                </div>
+                
                 {(registro.porcentajeDescuento != null && registro.porcentajeDescuento > 0) && (
                   <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
                     <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Dto. {registro.porcentajeDescuento}%</span>
@@ -2989,148 +3029,170 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                      {auditarRegistros.map((reg, idx) => {
-                        const totalBrutoReg = (reg.montoTotal ?? reg.totalServicios ?? 0) + (reg.totalProductos ?? 0);
-                        const hasProducts = reg.productosVendidos && reg.productosVendidos.length > 0;
-                        return (
-                          <motion.div
-                            key={reg.id}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.03, duration: 0.2 }}
-                            style={{
-                              background: 'var(--bg-surface)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 'var(--radius-md)',
-                              padding: '0.75rem 1rem',
-                              borderLeft: '4px solid var(--accent)',
-                              position: 'relative',
-                              transition: 'box-shadow 0.2s, transform 0.2s',
-                            }}
-                            whileHover={{
-                              boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-                              y: -1,
-                              transition: { duration: 0.2 },
-                            }}
-                          >
-                            {/* Header: index badge + service name + total */}
-                            <div style={{
-                              display: 'flex', justifyContent: 'space-between',
-                              alignItems: 'flex-start', marginBottom: '0.4rem',
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                  width: '22px', height: '22px', borderRadius: '50%',
-                                  background: 'var(--accent-subtle)', color: 'var(--accent)',
-                                  fontSize: '0.65rem', fontWeight: 700, flexShrink: 0,
-                                  fontFamily: "'DM Sans', sans-serif",
-                                }}>
-                                  {idx + 1}
-                                </span>
-                                <span style={{
-                                  fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
-                                  fontWeight: 600, color: 'var(--text-primary)',
-                                }}>
-                                  {reg.descripcionServicio ?? `Servicio #${reg.id}`}
-                                </span>
-                                {hasProducts && (
-                                  <span style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
-                                    background: 'rgba(212, 168, 83, 0.12)', color: 'var(--accent)',
-                                    fontSize: '0.6rem', fontWeight: 700,
-                                    padding: '0.1rem 0.45rem', borderRadius: '999px',
-                                    fontFamily: "'DM Sans', sans-serif",
-                                  }}>
-                                    🏷️ Con productos
-                                  </span>
-                                )}
-                              </div>
+                      {/* Service detail table */}
+                      <div style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        overflow: 'hidden',
+                        background: 'var(--bg-surface)',
+                      }}>
+                        {/* Table header */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr',
+                          gap: '0.5rem',
+                          padding: '0.5rem 0.75rem',
+                          background: 'var(--bg-elevated)',
+                          borderBottom: '1px solid var(--border)',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.625rem',
+                          fontWeight: 600,
+                          color: 'var(--text-dim)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                        }}>
+                          <span>Servicio</span>
+                          <span style={{ textAlign: 'right' }}>Precio</span>
+                          <span style={{ textAlign: 'right' }}>Costo base</span>
+                          <span style={{ textAlign: 'right' }}>Base neta</span>
+                          <span style={{ textAlign: 'right' }}>Comisión</span>
+                        </div>
+
+                        {/* Table rows */}
+                        {(() => {
+                          const filas: Array<{
+                            id: number;
+                            nombre: string;
+                            precio: number;
+                            costoBase: number;
+                            baseNeta: number;
+                            comision: number;
+                          }> = [];
+
+                          for (const reg of auditarRegistros) {
+                            const items = reg.serviciosItems ?? [];
+                            const baseNetaTotal = items.reduce(
+                              (sum, si) => sum + Math.max(0, si.precioServicio - (si.costoBaseInsumos ?? 0)),
+                              0,
+                            );
+                            const comisionTotal = reg.comisionCalculada ?? 0;
+
+                            for (const si of items) {
+                              const baseNeta = Math.max(0, si.precioServicio - (si.costoBaseInsumos ?? 0));
+                              const proporcion = baseNetaTotal > 0 ? baseNeta / baseNetaTotal : 0;
+                              filas.push({
+                                id: si.id,
+                                nombre: si.nombreServicio,
+                                precio: si.precioServicio,
+                                costoBase: si.costoBaseInsumos ?? 0,
+                                baseNeta,
+                                comision: Math.round(comisionTotal * proporcion),
+                              });
+                            }
+                          }
+
+                          if (filas.length === 0) {
+                            return (
                               <div style={{
-                                fontFamily: "'DM Sans', sans-serif", fontSize: '0.9rem',
-                                fontWeight: 700, color: 'var(--accent)',
+                                fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+                                color: 'var(--text-dim)', padding: '0.75rem',
+                                textAlign: 'center',
                               }}>
-                                {formatCurrency(totalBrutoReg)}
+                                No se encontraron servicios detallados para este período.
                               </div>
-                            </div>
+                            );
+                          }
 
-                            {/* Metadata row: comisión, propina, badges */}
-                            <div style={{
-                              display: 'flex', gap: '1rem', flexWrap: 'wrap',
-                              fontFamily: "'DM Sans', sans-serif", fontSize: '0.9rem',
-                            }}>
-                              <span style={{ color: 'var(--text-secondary)' }}>
-                                Comisión:{' '}
-                                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                                  {formatCurrency(reg.comisionCalculada ?? 0)}
-                                </span>
-                              </span>
-                              {reg.propina > 0 && (
-                                <span style={{ color: 'var(--text-secondary)' }}>
-                                  Propina:{' '}
-                                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>
-                                    +{formatCurrency(reg.propina)}
+                          const totales = {
+                            precio: filas.reduce((s, f) => s + f.precio, 0),
+                            costoBase: filas.reduce((s, f) => s + f.costoBase, 0),
+                            baseNeta: filas.reduce((s, f) => s + f.baseNeta, 0),
+                            comision: filas.reduce((s, f) => s + f.comision, 0),
+                          };
+
+                          return (
+                            <>
+                              {filas.map((fila, idx) => (
+                                <motion.div
+                                  key={fila.id}
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  transition={{ delay: idx * 0.02, duration: 0.2 }}
+                                  style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr',
+                                    gap: '0.5rem',
+                                    padding: '0.5rem 0.75rem',
+                                    borderBottom: '1px solid var(--border)',
+                                    fontFamily: "'DM Sans', sans-serif",
+                                    fontSize: '0.75rem',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <span style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {fila.nombre}
                                   </span>
-                                </span>
-                              )}
-                              {reg.esRetoque && (
-                                <span style={{
-                                  background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24',
-                                  padding: '0.05rem 0.4rem', borderRadius: '999px',
-                                  fontWeight: 600, fontSize: '0.625rem',
-                                }}>
-                                  Retoque
-                                </span>
-                              )}
-                              {reg.porcentajeDescuento != null && reg.porcentajeDescuento > 0 && (
-                                <span style={{
-                                  background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger)',
-                                  padding: '0.05rem 0.4rem', borderRadius: '999px',
-                                  fontWeight: 600, fontSize: '0.625rem',
-                                }}>
-                                  -{reg.porcentajeDescuento}% desc.
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Products sub-list with distinct background */}
-                            {hasProducts && (
+                                  <span style={{ textAlign: 'right', color: 'var(--text-primary)' }}>{formatCurrency(fila.precio)}</span>
+                                  <span style={{ textAlign: 'right', color: '#fb923c' }}>{formatCurrency(fila.costoBase)}</span>
+                                  <span style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatCurrency(fila.baseNeta)}</span>
+                                  <span style={{ textAlign: 'right', color: 'var(--accent)', fontWeight: 600 }}>{formatCurrency(fila.comision)}</span>
+                                </motion.div>
+                              ))}
+                              {/* Totals row */}
                               <div style={{
-                                marginTop: '0.5rem',
-                                padding: '0.5rem 0.6rem',
+                                display: 'grid',
+                                gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr',
+                                gap: '0.5rem',
+                                padding: '0.5rem 0.75rem',
+                                background: 'var(--bg-elevated)',
+                                fontFamily: "'DM Sans', sans-serif",
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                alignItems: 'center',
+                              }}>
+                                <span style={{ color: 'var(--text-primary)' }}>Total servicios</span>
+                                <span style={{ textAlign: 'right', color: 'var(--accent)' }}>{formatCurrency(totales.precio)}</span>
+                                <span style={{ textAlign: 'right', color: '#fb923c' }}>{formatCurrency(totales.costoBase)}</span>
+                                <span style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatCurrency(totales.baseNeta)}</span>
+                                <span style={{ textAlign: 'right', color: 'var(--accent)' }}>{formatCurrency(totales.comision)}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Registro cards with products/notes kept for context */}
+                      {auditarRegistros.some(r => (r.productosVendidos ?? []).length > 0 || r.propina > 0 || r.esRetoque || (r.porcentajeDescuento ?? 0) > 0) && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          <div style={{
+                            fontFamily: "'DM Sans', sans-serif", fontSize: '0.6875rem',
+                            fontWeight: 600, color: 'var(--text-secondary)',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>
+                            Notas por registro
+                          </div>
+                          {auditarRegistros.map((reg) => {
+                            const hasProducts = reg.productosVendidos && reg.productosVendidos.length > 0;
+                            if (!hasProducts && reg.propina === 0 && !reg.esRetoque && (reg.porcentajeDescuento ?? 0) === 0) return null;
+                            return (
+                              <div key={`note-${reg.id}`} style={{
+                                display: 'flex', gap: '0.5rem', flexWrap: 'wrap',
+                                fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem',
+                                color: 'var(--text-dim)',
+                                padding: '0.35rem 0.5rem',
                                 background: 'var(--bg-elevated)',
                                 borderRadius: 'var(--radius-sm)',
-                                border: '1px solid var(--border)',
                               }}>
-                                <div style={{
-                                  fontFamily: "'DM Sans', sans-serif", fontSize: '0.625rem',
-                                  fontWeight: 600, color: 'var(--text-secondary)',
-                                  textTransform: 'uppercase', letterSpacing: '0.04em',
-                                  marginBottom: '0.25rem',
-                                }}>
-                                  🛍️ Productos
-                                </div>
-                                {reg.productosVendidos?.map((pv) => (
-                                  <div key={pv.id} style={{
-                                    display: 'flex', justifyContent: 'space-between',
-                                    fontSize: '0.6875rem', fontFamily: "'DM Sans', sans-serif",
-                                    color: 'var(--text-secondary)',
-                                    padding: '0.1rem 0',
-                                  }}>
-                                    <span>
-                                      {pv.nombre}{' '}
-                                      <span style={{ color: 'var(--text-dim)' }}>×{pv.cantidad}</span>
-                                    </span>
-                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                      {formatCurrency(pv.subtotal)}
-                                    </span>
-                                  </div>
-                                ))}
+                                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Registro #{reg.id}:</span>
+                                {hasProducts && <span>Con productos ({formatCurrency(reg.totalProductos ?? 0)})</span>}
+                                {reg.propina > 0 && <span style={{ color: 'var(--success)' }}>Propina +{formatCurrency(reg.propina)}</span>}
+                                {reg.esRetoque && <span style={{ color: '#fbbf24' }}>Retoque</span>}
+                                {(reg.porcentajeDescuento ?? 0) > 0 && <span style={{ color: 'var(--danger)' }}>-{reg.porcentajeDescuento}% desc.</span>}
                               </div>
-                            )}
-                          </motion.div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

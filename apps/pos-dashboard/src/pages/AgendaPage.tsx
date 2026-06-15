@@ -25,6 +25,7 @@ interface Cita {
     nombre: string;
     duracionMinutos: number;
     precio: number;
+    costoBaseInsumos?: number;
   }>;
   empleada: { id: number; nombre: string };
   salonId: number;
@@ -49,6 +50,7 @@ interface ServicioSimple {
   nombre: string;
   duracionMinutos: number;
   precioBase: number;
+  costoBaseInsumos?: number;
   activo?: boolean;
 }
 
@@ -351,6 +353,7 @@ const AgendaPage: React.FC = () => {
             nombre: s.nombre,
             duracionMinutos: s.duracionMinutos,
             precio: s.precioBase ?? 0,
+            costoBaseInsumos: s.costoBaseInsumos ?? 0,
           })),
         };
       });
@@ -585,6 +588,7 @@ const AgendaPage: React.FC = () => {
             servicioId: s.id,
             nombreServicio: s.nombre,
             precioServicio: completarForm.serviciosPrecios[s.id] ?? s.precio,
+            costoBaseInsumos: s.costoBaseInsumos ?? 0,
           })),
           ...servicios
             .filter(s => completarForm.nuevosServiciosIds.includes(s.id))
@@ -592,6 +596,7 @@ const AgendaPage: React.FC = () => {
               servicioId: s.id,
               nombreServicio: s.nombre,
               precioServicio: s.precioBase ?? 0,
+              costoBaseInsumos: s.costoBaseInsumos ?? 0,
             })),
         ],
         notas,

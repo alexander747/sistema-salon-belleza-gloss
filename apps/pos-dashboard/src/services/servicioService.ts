@@ -7,6 +7,7 @@ export interface Servicio {
   precioBase: number;
   precioFinal: number;
   duracionMinutos: number;
+  costoBaseInsumos?: number;
   categoriaId?: number;
   categoria?: { id: number; nombre: string } | null;
   activo: boolean;

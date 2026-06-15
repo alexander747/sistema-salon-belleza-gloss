@@ -13,6 +13,7 @@ interface Servicio {
   precioFinal: number;
   duracionMinutos: number;
   categoriaId: number;
+  costoBaseInsumos?: number;
 }
 
 interface CartItem {
@@ -20,6 +21,7 @@ interface CartItem {
   nombre: string;
   precio: number;
   duracionMinutos: number;
+  costoBaseInsumos?: number;
 }
 
 interface Producto {
@@ -349,6 +351,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           nombre: serv.nombre,
           precio: serv.precioFinal,
           duracionMinutos: serv.duracionMinutos,
+          costoBaseInsumos: serv.costoBaseInsumos ?? 0,
         },
       ];
     });
@@ -457,6 +460,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           servicioId: item.servicioId,
           nombreServicio: item.nombre,
           precioServicio: item.precio,
+          costoBaseInsumos: item.costoBaseInsumos ?? 0,
         })),
         // Price adjustment fields
         porcentajeDescuento: descuento,
