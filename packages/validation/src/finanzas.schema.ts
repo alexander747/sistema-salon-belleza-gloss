@@ -44,6 +44,7 @@ export const createRegistroSchema = z.object({
     servicioId: z.number().int().positive('El servicioId debe ser un entero positivo'),
     nombreServicio: z.string().min(1, 'El nombre del servicio es requerido').max(200),
     precioServicio: z.number().min(0, 'El precio del servicio debe ser mayor o igual a 0'),
+    costoBaseInsumos: z.number().min(0).default(0).optional(),
   })).optional().default([]),
 });
 
