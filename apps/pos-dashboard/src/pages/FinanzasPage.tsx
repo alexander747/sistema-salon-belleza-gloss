@@ -2175,7 +2175,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     const now = new Date();
     // Usar UTC para coincidir con el backend
     const firstDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
     return { firstDay, today };
   };
 
