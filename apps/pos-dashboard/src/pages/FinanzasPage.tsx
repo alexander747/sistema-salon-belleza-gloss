@@ -1752,7 +1752,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
               <div className={styles.modalBody}>
                 <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                  ¿Estás segura de eliminar <strong>{selectedGasto.concepto}</strong>?
+                  ¿Estás segura de eliminar <strong>{selectedGasto.descripcion}</strong>?
                 </p>
                 <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                   Esta acción no se puede deshacer.
@@ -2211,7 +2211,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   );
 
   const totalFiltrado = useMemo(
-    () => filteredHistorial.reduce((sum, r) => sum + (r.montoTotal || (r.totalServicios + r.totalProductos)), 0),
+    () => filteredHistorial.reduce((sum, r) => sum + (r.totalPagado || 0), 0),
     [filteredHistorial],
   );
 
