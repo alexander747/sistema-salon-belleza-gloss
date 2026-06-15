@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
@@ -42,10 +42,13 @@ interface FinanzasResumen {
   totalComisiones: number;
   cantidadAtenciones: number;
   totalIngresos: number;
+  totalGastos?: number;
+  balanceNeto?: number;
 }
 
 interface CitaDashboard {
   id: number;
+  clienteId: number;
   cliente: { id: number; nombre: string };
   servicios: Array<{ id: number; nombre: string }>;
   usuario: { id: number; nombre: string };
@@ -99,25 +102,27 @@ function formatCurrency(n: number): string {
 }
 
 function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
+
+
 function getMonday(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-  date.setDate(diff);
-  date.setHours(0, 0, 0, 0);
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = date.getUTCDay();
+  const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1);
+  date.setUTCDate(diff);
+  date.setUTCHours(0, 0, 0, 0);
   return date;
 }
 
 function getWeekDays(monday: Date): Date[] {
   return Array.from({ length: 6 }, (_, i) => {
     const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    d.setUTCDate(monday.getUTCDate() + i);
     return d;
   });
 }
@@ -175,10 +180,12 @@ const ChartTooltipContent: React.FC<ChartTooltipProps> = ({
 interface CitaRowProps {
   cita: CitaDashboard;
   isLast: boolean;
+  clientesMap: Record<number, string>;
 }
 
-const CitaRow: React.FC<CitaRowProps> = ({ cita, isLast }) => {
+const CitaRow: React.FC<CitaRowProps> = ({ cita, isLast, clientesMap }) => {
   const cfg = STATUS_CFG[cita.estado] ?? STATUS_CFG.PENDIENTE;
+  const displayName = clientesMap[cita.clienteId] ?? `Cliente #${cita.clienteId}`;
   return (
     <Box
       sx={{
@@ -201,7 +208,7 @@ const CitaRow: React.FC<CitaRowProps> = ({ cita, isLast }) => {
         </Typography>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
-            {cita.cliente.nombre}
+            {displayName}
           </Typography>
           <Typography variant="caption" color="text.secondary" noWrap>
             {cita.servicios.map((s) => s.nombre).join(', ')}
@@ -308,6 +315,7 @@ const DashboardPage: React.FC = () => {
   const [empleadas, setEmpleadas] = useState<EmpleadaSimple[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const clientesMapRef = useRef<Record<number, string>>({});
 
   /* ── Auth effect ── */
   useEffect(() => {
@@ -327,8 +335,8 @@ const DashboardPage: React.FC = () => {
     const todayStr = toISODate(today);
     const monday = getMonday(today);
     const weekDays = getWeekDays(monday);
-    const weekDesde = toISODate(weekDays[0]);
-    const weekHasta = toISODate(weekDays[5]);
+    const weekDesde = new Date(`${toISODate(weekDays[0])}T00:00:00`).toISOString();
+    const weekHasta = new Date(`${toISODate(weekDays[5])}T23:59:59.999`).toISOString();
 
     try {
       if (salonId == null) {
@@ -337,7 +345,7 @@ const DashboardPage: React.FC = () => {
       }
 
       const results = await Promise.allSettled([
-        api.get(`/salones/${salonId}/finanzas/resumen`, { params: { fecha: todayStr } }),
+        api.get(`/salones/${salonId}/finanzas/resumen`),
         api.get(`/salones/${salonId}/agenda/citas`, { params: { desde: weekDesde, hasta: weekHasta } }),
         api.get(`/salones/${salonId}/clientes`),
         api.get(`/salones/${salonId}/empleadas`),
@@ -351,23 +359,40 @@ const DashboardPage: React.FC = () => {
         setResumen(null);
       }
 
+      if (clientesRes.status === 'fulfilled') {
+        const raw = clientesRes.value.data;
+        const list = Array.isArray(raw) ? raw : raw?.data ?? [];
+        const arr = Array.isArray(list) ? list : [];
+        setClientes(arr);
+        clientesMapRef.current = Object.fromEntries(arr.map((c: any) => [c.id, c.nombre]));
+      } else {
+        setClientes([]);
+        clientesMapRef.current = {};
+      }
+
       if (citasRes.status === 'fulfilled') {
         const raw = citasRes.value.data;
-        setCitas(Array.isArray(raw) ? raw : []);
+        const list = Array.isArray(raw) ? raw : raw?.data ?? [];
+        // Transform API response: fechaHora → fecha + horaInicio + horaFin
+        setCitas((Array.isArray(list) ? list : []).map((c: any) => {
+          const fh = c.fechaHora ? new Date(c.fechaHora) : null;
+          const duracion = c.duracionTotalMinutos ?? 60;
+          return {
+            ...c,
+            fecha: fh ? toISODate(fh) : '',
+            horaInicio: fh ? `${String(fh.getUTCHours()).padStart(2, '0')}:${String(fh.getUTCMinutes()).padStart(2, '0')}` : '',
+            horaFin: fh ? new Date(fh.getTime() + duracion * 60000).toISOString() : '',
+            cliente: c.cliente ?? { id: c.clienteId, nombre: clientesMapRef.current[c.clienteId] ?? `Cliente #${c.clienteId}` },
+          };
+        }));
       } else {
         setCitas([]);
       }
 
-      if (clientesRes.status === 'fulfilled') {
-        const raw = clientesRes.value.data;
-        setClientes(Array.isArray(raw) ? raw : []);
-      } else {
-        setClientes([]);
-      }
-
       if (empleadasRes.status === 'fulfilled') {
         const raw = empleadasRes.value.data;
-        setEmpleadas(Array.isArray(raw) ? raw : []);
+        const list = Array.isArray(raw) ? raw : raw?.data ?? [];
+        setEmpleadas(Array.isArray(list) ? list : []);
       } else {
         setEmpleadas([]);
       }
@@ -424,7 +449,7 @@ const DashboardPage: React.FC = () => {
     () =>
       weekDays.map((day, i) => {
         const dayStr = toISODate(day);
-        const count = citas.filter((c) => c.fecha === dayStr).length;
+        const count = citas.filter((c) => c.fecha === dayStr && c.estado !== 'CANCELADA').length;
         return { day: DAY_LABELS[i], citas: count };
       }),
     [citas, weekDays],
@@ -436,6 +461,11 @@ const DashboardPage: React.FC = () => {
     const noEmpleadas = empleadas.length === 0;
     return noIngresos && noClientes && noEmpleadas;
   }, [resumen, clientes, empleadas]);
+
+  const clientesMap = useMemo(
+    () => Object.fromEntries(clientes.map((c) => [c.id, c.nombre])),
+    [clientes],
+  );
 
   /* ================================================================ */
   /*  RENDER                                                           */
@@ -556,7 +586,7 @@ const DashboardPage: React.FC = () => {
         <KpiCard
           icon={<TrendingUp sx={{ fontSize: 20 }} />}
           value={resumen ? formatCurrency(resumen.totalIngresos) : '$0'}
-          label="Ingresos totales"
+          label="TOTAL INGRESOS"
           trend={
             resumen && resumen.cantidadAtenciones > 0
               ? { value: 12.5, positive: true }
@@ -641,7 +671,7 @@ const DashboardPage: React.FC = () => {
             ) : (
               <>
                 {todayCitas.map((cita, i) => (
-                  <CitaRow key={cita.id} cita={cita} isLast={i === todayCitas.length - 1} />
+                  <CitaRow key={cita.id} cita={cita} isLast={i === todayCitas.length - 1} clientesMap={clientesMap} />
                 ))}
                 <Divider sx={{ my: 1.5 }} />
                 <Button
@@ -708,7 +738,7 @@ const DashboardPage: React.FC = () => {
             </ResponsiveContainer>
             {chartData.every((d) => d.citas === 0) && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1 }}>
-                Conectá el módulo de finanzas para ver ingresos
+                No hay citas esta semana
               </Typography>
             )}
           </CardContent>

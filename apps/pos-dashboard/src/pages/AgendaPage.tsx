@@ -316,8 +316,8 @@ const AgendaPage: React.FC = () => {
     setCitasLoading(true);
     setCitasError(null);
     try {
-      const desde = toISODate(weekStart);
-      const hasta = toISODate(weekDays[6]);
+      const desde = new Date(`${toISODate(weekStart)}T00:00:00`).toISOString();
+      const hasta = new Date(`${toISODate(weekDays[6])}T23:59:59.999`).toISOString();
       const { data } = await api.get(`/salones/${salonId}/agenda/citas`, {
         params: { desde, hasta },
       });
@@ -630,13 +630,6 @@ const AgendaPage: React.FC = () => {
         nuevosServiciosIds: prev.nuevosServiciosIds.filter(id => id !== servicioId),
       }));
     }
-  };
-
-  const handleUpdatePrecioCompletar = (servicioId: number, precio: number) => {
-    setCompletarForm(prev => ({
-      ...prev,
-      serviciosPrecios: { ...prev.serviciosPrecios, [servicioId]: precio },
-    }));
   };
 
   /* ── Cancelar (POST) ── */
@@ -976,7 +969,6 @@ const AgendaPage: React.FC = () => {
             }}
             onConfirmar={handleConfirmarCompletar}
             onToggleServicio={handleToggleServicioCompletar}
-            onUpdatePrecio={handleUpdatePrecioCompletar}
           />
         )}
       </AnimatePresence>
@@ -2238,7 +2230,6 @@ interface CompletarModalProps {
   onClose: () => void;
   onConfirmar: () => Promise<void>;
   onToggleServicio: (id: number) => void;
-  onUpdatePrecio: (servicioId: number, precio: number) => void;
 }
 
 const RenderCompletarModal: React.FC<CompletarModalProps> = ({
@@ -2251,7 +2242,6 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   onClose,
   onConfirmar,
   onToggleServicio,
-  onUpdatePrecio,
 }) => {
   const [productSearch, setProductSearch] = useState('');
 
@@ -2403,7 +2393,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
               <div style={{ marginBottom: '1rem' }}>
                 <div className={styles.sectionTitle}>Servicios</div>
                 <div>
-                  {/* Original services */}
+                  {/* Original services — prices are read-only; use toggle to mark as "not performed" */}
                   {cita.servicios.map(s => {
                     const currentPrice = form.serviciosPrecios[s.id] ?? s.precio;
                     const isRemoved = currentPrice === 0 && form.serviciosPrecios[s.id] === 0;
@@ -2417,19 +2407,25 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                         }}
                       >
                         <span className={styles.serviceName}>{s.nombre}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={currentPrice}
-                          onChange={(e) => onUpdatePrecio(s.id, Math.max(0, Number(e.target.value)))}
-                          className={`${styles.noSpinner} ${styles.servicePriceInput}`}
-                        />
+                        <span
+                          style={{
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.8125rem',
+                            fontWeight: 600,
+                            color: isRemoved ? 'var(--text-dim)' : 'var(--text-primary)',
+                            minWidth: '80px',
+                            textAlign: 'right',
+                          }}
+                        >
+                          {formatCurrency(currentPrice)}
+                        </span>
                         <button
                           onClick={() => onToggleServicio(s.id)}
                           className={styles.serviceRemoveBtn}
-                          aria-label="Quitar servicio"
+                          aria-label={isRemoved ? 'Restaurar servicio' : 'No realizar servicio'}
+                          title={isRemoved ? 'Restaurar servicio' : 'Marcar como no realizado'}
                         >
-                          ✕
+                          {isRemoved ? '↩' : '✕'}
                         </button>
                       </div>
                     );

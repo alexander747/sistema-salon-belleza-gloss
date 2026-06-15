@@ -150,6 +150,13 @@ const VentasPage: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  /* Discount & Adjustment state (mirrors FinanzasPage and AgendaPage) */
+  const [propina, setPropina] = useState<number>(0);
+  const [descuento, setDescuento] = useState<number>(0);
+  const [ajustarTotal, setAjustarTotal] = useState(false);
+  const [totalPersonalizado, setTotalPersonalizado] = useState<number | null>(null);
+  const [notaAjuste, setNotaAjuste] = useState('');
+
   /* ── Derived ── */
 
   const salonId = useMemo(() => {
@@ -170,22 +177,38 @@ const VentasPage: React.FC = () => {
     return list;
   }, [productos, search, catFilter]);
 
-  const cartTotal = useMemo(() => {
+  const cartSubtotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.precioVenta * item.cantidad, 0);
   }, [cart]);
 
+  const descuentoMonto = useMemo(() => {
+    return cartSubtotal * (descuento / 100);
+  }, [cartSubtotal, descuento]);
+
+  const calculatedTotal = useMemo(() => {
+    return cartSubtotal + propina - descuentoMonto;
+  }, [cartSubtotal, propina, descuentoMonto]);
+
+  const finalTotal = useMemo(() => {
+    return totalPersonalizado !== null ? totalPersonalizado : calculatedTotal;
+  }, [totalPersonalizado, calculatedTotal]);
+
   const cambio = useMemo(() => {
     if (paymentMethod !== 'EFECTIVO') return 0;
-    return Math.max(0, montoRecibido - cartTotal);
-  }, [paymentMethod, montoRecibido, cartTotal]);
+    return Math.max(0, montoRecibido - finalTotal);
+  }, [paymentMethod, montoRecibido, finalTotal]);
+
+  const hasAdjustment = descuento > 0 || totalPersonalizado !== null;
+  const ajusteNoteRequired = hasAdjustment && notaAjuste.trim().length === 0;
 
   const canCobrar = useMemo(() => {
     if (cart.length === 0) return false;
     if (!selectedCustomerId) return false;
     if (!selectedEmployeeId) return false;
-    if (paymentMethod === 'EFECTIVO' && montoRecibido < cartTotal) return false;
+    if (hasAdjustment && notaAjuste.trim().length === 0) return false;
+    if (paymentMethod === 'EFECTIVO' && montoRecibido < finalTotal) return false;
     return true;
-  }, [cart, selectedCustomerId, selectedEmployeeId, paymentMethod, montoRecibido, cartTotal]);
+  }, [cart, selectedCustomerId, selectedEmployeeId, paymentMethod, montoRecibido, finalTotal, hasAdjustment, notaAjuste]);
 
   const hasProductos = filteredProductos.length > 0;
 
@@ -283,6 +306,11 @@ const VentasPage: React.FC = () => {
     setMontoRecibido(0);
     setPaymentRef('');
     setPaymentMethod('EFECTIVO');
+    setPropina(0);
+    setDescuento(0);
+    setAjustarTotal(false);
+    setTotalPersonalizado(null);
+    setNotaAjuste('');
     setSuccessMsg(null);
   };
 
@@ -293,25 +321,41 @@ const VentasPage: React.FC = () => {
     setProcessing(true);
     setSuccessMsg(null);
     try {
+      // Build notas with adjustment info
+      let finalNotas = `Venta directa: ${cart.map((i) => `${i.cantidad}x ${i.nombre}`).join(', ')}`;
+      if (hasAdjustment && notaAjuste.trim()) {
+        const ajusteParts: string[] = [];
+        if (descuento > 0) ajusteParts.push(`descuento ${descuento}%`);
+        if (totalPersonalizado !== null) ajusteParts.push(`total $${totalPersonalizado}`);
+        const prefix = `[AJUSTE: ${ajusteParts.join(' | ')}] Razón: ${notaAjuste.trim()}`;
+        finalNotas = `${prefix}\n${finalNotas}`;
+      }
+
       const payload = {
         salonId,
         clienteId: Number(selectedCustomerId),
         usuarioId: Number(selectedEmployeeId),
         totalServicios: 0,
-        totalProductos: cartTotal,
-        propina: 0,
+        totalProductos: cartSubtotal,
+        propina,
+        montoTotal: finalTotal,
         pagos: [
           {
-            monto: paymentMethod === 'EFECTIVO' ? montoRecibido : cartTotal,
+            monto: paymentMethod === 'EFECTIVO' ? montoRecibido : finalTotal,
             metodoPago: paymentMethod,
             referencia: paymentRef.trim() || undefined,
           },
         ],
-        notas: `Venta directa: ${cart.map((i) => `${i.cantidad}x ${i.nombre}`).join(', ')}`,
+        notas: finalNotas,
         productosVendidos: cart.map((item) => ({
           productoId: item.productoId,
           cantidad: item.cantidad,
         })),
+        // Price adjustment fields (mirroring WalkInModal and AgendaPage)
+        porcentajeDescuento: descuento,
+        precioAjustado: hasAdjustment,
+        valorOriginal: cartSubtotal + propina,
+        valorFinal: finalTotal,
       };
       await api.post(`/salones/${salonId}/registros`, payload);
       setSuccessMsg('Venta registrada con éxito');
@@ -321,6 +365,11 @@ const VentasPage: React.FC = () => {
       setMontoRecibido(0);
       setPaymentRef('');
       setPaymentMethod('EFECTIVO');
+      setPropina(0);
+      setDescuento(0);
+      setAjustarTotal(false);
+      setTotalPersonalizado(null);
+      setNotaAjuste('');
       fetchData();
     } catch {
       setSuccessMsg(null);
@@ -991,7 +1040,7 @@ const VentasPage: React.FC = () => {
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     />
-                    {montoRecibido >= cartTotal && cartTotal > 0 && (
+                    {montoRecibido >= finalTotal && finalTotal > 0 && (
                       <div
                         style={{
                           display: 'flex',
@@ -1055,6 +1104,228 @@ const VentasPage: React.FC = () => {
                 )}
               </div>
 
+              {/* ── Propina ── */}
+              <div
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                <label style={formLabelStyle}>Propina</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={propina || ''}
+                  onChange={(e) => setPropina(Math.max(0, Number(e.target.value)))}
+                  placeholder="0"
+                  style={{
+                    ...searchInputStyle,
+                    maxWidth: '100%',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--accent)';
+                    e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              {/* ── Discount & Price Adjustment ── */}
+              <div
+                style={{
+                  padding: '0.75rem 1.25rem',
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    color: 'var(--text-dim)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    marginBottom: '0.5rem',
+                    display: 'block',
+                  }}
+                >
+                  Ajustes de precio
+                </span>
+
+                {/* Descuento % */}
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <label style={formLabelStyle}>Descuento (%)</label>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={descuento || ''}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setDescuento(Math.min(100, Math.max(0, val)));
+                      }}
+                      placeholder="0"
+                      style={{
+                        ...searchInputStyle,
+                        maxWidth: '100px',
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--accent)';
+                        e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      %
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ajustar valor total toggle */}
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={ajustarTotal}
+                      onChange={(e) => {
+                        setAjustarTotal(e.target.checked);
+                        if (!e.target.checked) setTotalPersonalizado(null);
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    <span
+                      style={{
+                        position: 'relative',
+                        width: '36px',
+                        height: '20px',
+                        background: ajustarTotal ? 'var(--accent)' : 'var(--border)',
+                        borderRadius: '10px',
+                        transition: 'background 0.2s',
+                        flexShrink: 0,
+                        display: 'inline-block',
+                      }}
+                    >
+                      <span
+                        style={{
+                          content: '""',
+                          position: 'absolute',
+                          top: '2px',
+                          left: ajustarTotal ? '18px' : '2px',
+                          width: '16px',
+                          height: '16px',
+                          background: 'var(--bg-root)',
+                          borderRadius: '50%',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </span>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                      Ajustar valor total
+                    </span>
+                  </label>
+                  {ajustarTotal && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <input
+                        type="number"
+                        min={0}
+                        value={totalPersonalizado !== null ? totalPersonalizado : ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTotalPersonalizado(val ? Number(val) : null);
+                        }}
+                        placeholder={formatCurrency(calculatedTotal)}
+                        style={{
+                          ...searchInputStyle,
+                          maxWidth: '100%',
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                          e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--border)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Adjustment note (required if discount or override) */}
+                {hasAdjustment && (
+                  <div>
+                    <label
+                      style={{
+                        ...formLabelStyle,
+                        color: ajusteNoteRequired ? 'var(--danger)' : undefined,
+                      }}
+                    >
+                      ¿Por qué se ajustó el precio? *
+                    </label>
+                    <textarea
+                      value={notaAjuste}
+                      onChange={(e) => setNotaAjuste(e.target.value)}
+                      placeholder="Indicá el motivo del ajuste..."
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        minHeight: '54px',
+                        padding: '0.5rem 0.7rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: `1px solid ${ajusteNoteRequired ? 'var(--danger)' : 'var(--border)'}`,
+                        background: 'var(--bg-base)',
+                        color: 'var(--text-primary)',
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        outline: 'none',
+                        resize: 'vertical',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    {ajusteNoteRequired && (
+                      <span
+                        style={{
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.65rem',
+                          color: 'var(--danger)',
+                          marginTop: '0.2rem',
+                          display: 'block',
+                        }}
+                      >
+                        Este campo es obligatorio cuando hay descuento o ajuste de total.
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Totals */}
               <div
                 style={{
@@ -1087,9 +1358,100 @@ const VentasPage: React.FC = () => {
                       color: 'var(--text-primary)',
                     }}
                   >
-                    {formatCurrency(cartTotal)}
+                    {formatCurrency(cartSubtotal)}
                   </span>
                 </div>
+                {propina > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      Propina
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--success)',
+                      }}
+                    >
+                      +{formatCurrency(propina)}
+                    </span>
+                  </div>
+                )}
+                {descuentoMonto > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      Descuento ({descuento}%)
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--danger)',
+                      }}
+                    >
+                      -{formatCurrency(descuentoMonto)}
+                    </span>
+                  </div>
+                )}
+                {totalPersonalizado !== null && totalPersonalizado !== calculatedTotal && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      Ajuste
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: totalPersonalizado > calculatedTotal ? 'var(--success)' : 'var(--danger)',
+                      }}
+                    >
+                      {totalPersonalizado > calculatedTotal ? '+' : '-'}
+                      {formatCurrency(Math.abs(totalPersonalizado - calculatedTotal))}
+                    </span>
+                  </div>
+                )}
                 <div
                   style={{
                     display: 'flex',
@@ -1114,10 +1476,10 @@ const VentasPage: React.FC = () => {
                       fontFamily: "'DM Sans', sans-serif",
                       fontSize: '1.25rem',
                       fontWeight: 800,
-                      color: 'var(--accent)',
+                      color: totalPersonalizado !== null ? 'var(--warning)' : 'var(--accent)',
                     }}
                   >
-                    {formatCurrency(cartTotal)}
+                    {formatCurrency(finalTotal)}
                   </span>
                 </div>
               </div>
@@ -1154,7 +1516,7 @@ const VentasPage: React.FC = () => {
                 >
                   {processing
                     ? 'Procesando…'
-                    : `Cobrar ${formatCurrency(cartTotal)}`}
+                    : `Cobrar ${formatCurrency(finalTotal)}`}
                 </motion.button>
               </div>
             </div>

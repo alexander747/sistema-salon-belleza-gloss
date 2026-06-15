@@ -1,6 +1,7 @@
 import { injectable, inject } from 'tsyringe';
 import { AppDataSource } from '../../../../../shared/database';
 import { UnprocessableEntityError, ValidationError } from '../../../../../shared/errors';
+import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
@@ -50,13 +51,13 @@ export class LiquidarEmpleadaUseCase {
       throw new Error(`Empleada ${input.usuarioId} no encontrada en el salón`);
     }
 
-    // 2. Get all registros for this employee in the period
-    const allRegistros = await this.registroRepo.search({
+    // 2. Get all NON-ANULADED registros for this employee in the period
+    const allRegistros = (await this.registroRepo.search({
       salonId: input.salonId,
       usuarioId: input.usuarioId,
       desde: input.periodoInicio,
       hasta: input.periodoFin,
-    });
+    })).filter((r) => r.estado !== EstadoRegistro.ANULADO);
 
     // 3. Filter only unpaid registros
     const pendingRegistros = allRegistros.filter(

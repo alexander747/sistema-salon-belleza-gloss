@@ -358,13 +358,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     setCart((prev) => prev.filter((item) => item.servicioId !== servicioId));
   };
 
-  const updatePrice = (servicioId: number, precio: number) => {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.servicioId === servicioId ? { ...item, precio: Math.max(0, precio) } : item,
-      ),
-    );
-  };
+  /* Note: updatePrice function removed — service prices are now read-only.
+     Price adjustments should only be done via Descuento (%) or Ajustar valor total. */
 
   /* ── Product cart helpers ── */
 
@@ -822,24 +817,18 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                                   {item.duracionMinutos} min
                                 </div>
                               </div>
-                              <input
-                                type="number"
-                                min={0}
-                                value={item.precio}
-                                onChange={(e) =>
-                                  updatePrice(item.servicioId, Number(e.target.value))
-                                }
-                                className={`${styles.priceInput} ${styles.noSpinner}`}
-                                onFocus={(e) => {
-                                  e.currentTarget.style.borderColor = 'var(--accent)';
-                                  e.currentTarget.style.boxShadow =
-                                    '0 0 0 2px var(--accent-glow)';
+                              <span
+                                style={{
+                                  fontFamily: "'DM Sans', sans-serif",
+                                  fontSize: '0.8125rem',
+                                  fontWeight: 600,
+                                  color: 'var(--accent)',
+                                  minWidth: '80px',
+                                  textAlign: 'right',
                                 }}
-                                onBlur={(e) => {
-                                  e.currentTarget.style.borderColor = 'var(--border)';
-                                  e.currentTarget.style.boxShadow = 'none';
-                                }}
-                              />
+                              >
+                                {formatCurrency(item.precio)}
+                              </span>
                               <button
                                 onClick={() => removeFromCart(item.servicioId)}
                                 className={styles.removeBtn}

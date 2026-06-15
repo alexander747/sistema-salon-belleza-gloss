@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { ResumenDiaUseCase } from '../../application/use-cases/reporte/ResumenDiaUseCase';
 import { ROIMensualUseCase } from '../../application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../../application/use-cases/reporte/CierreTurnoUseCase';
+import { getColombiaDateString } from '../../../../shared/colombia-date';
 
 @injectable()
 export class ReporteController {
@@ -20,7 +21,7 @@ export class ReporteController {
 
       const result = await this.resumenDiaUseCase.execute({
         salonId: req.salonId!,
-        ...(desde && hasta ? { desde, hasta } : { fecha: fecha ?? new Date().toISOString().slice(0, 10) }),
+        ...(desde && hasta ? { desde, hasta } : { fecha: fecha ?? getColombiaDateString() }),
       });
       res.json(result);
     } catch (error) {

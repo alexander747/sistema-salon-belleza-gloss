@@ -221,6 +221,11 @@
   color: var(--text-secondary);
 }
 
+.badgeEliminado {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
 /* ── Empty state ── */
 .emptyState {
   display: flex;

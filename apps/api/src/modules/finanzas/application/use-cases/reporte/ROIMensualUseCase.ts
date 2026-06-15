@@ -1,4 +1,5 @@
 import { injectable, inject } from 'tsyringe';
+import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
 import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionRepository';
@@ -34,16 +35,18 @@ export class ROIMensualUseCase {
     const inicio = new Date(año, mes, 1, 0, 0, 0, 0);
     const fin = new Date(año, mes + 1, 0, 23, 59, 59, 999);
 
-    // ── Ingresos: sum of servicios + productos of all registros in month ──
+    // ── Ingresos: sum of servicios + productos of all NON-ANULADED registros in month ──
     const registros = await this.registroRepo.findBySalonAndDateRange(
       input.salonId,
       inicio,
       fin,
     );
-    const ingresos = registros.reduce(
-      (sum, r) => sum + Number(r.totalServicios) + Number(r.totalProductos),
-      0,
-    );
+    const ingresos = registros
+      .filter((r) => r.estado !== EstadoRegistro.ANULADO)
+      .reduce(
+        (sum, r) => sum + Number(r.totalServicios) + Number(r.totalProductos),
+        0,
+      );
 
     // ── Gastos: filter by month in-memory ──
     const todosGastos = await this.gastoRepo.findBySalon(input.salonId);

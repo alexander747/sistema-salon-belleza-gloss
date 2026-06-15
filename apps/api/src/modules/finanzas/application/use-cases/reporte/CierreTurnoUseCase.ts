@@ -1,4 +1,5 @@
 import { injectable, inject } from 'tsyringe';
+import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 
 export interface CierreTurnoInput {
@@ -30,12 +31,12 @@ export class CierreTurnoUseCase {
     const fin = new Date(input.fecha);
     fin.setHours(23, 59, 59, 999);
 
-    const registros = await this.registroRepo.search({
+    const registros = (await this.registroRepo.search({
       salonId: input.salonId,
       usuarioId: input.usuarioId,
       desde: inicio,
       hasta: fin,
-    });
+    })).filter((r) => r.estado !== EstadoRegistro.ANULADO);
 
     const serviciosRealizados = registros.length;
 

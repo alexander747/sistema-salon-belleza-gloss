@@ -15,8 +15,15 @@ import { RegistroProductoEntity } from './RegistroProductoEntity';
 import { ClienteEntity } from './ClienteEntity';
 import { SalonEntity } from './SalonEntity';
 
+export enum EstadoRegistro {
+  ACTIVO = 'ACTIVO',
+  ANULADO = 'ANULADO',
+}
+
 @Entity('registros_servicio')
 export class RegistroServicioEntity extends BaseEntity {
+  @Column({ type: 'varchar', length: 20, default: EstadoRegistro.ACTIVO })
+  estado: EstadoRegistro;
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   totalServicios: number;
 

@@ -22,6 +22,7 @@ export interface RegistroServicioDTO {
   salonId: number;
   clienteId: number;
   usuarioId: number;
+  estado: string;
   totalServicios: number;
   totalProductos: number;
   montoTotal: number;
@@ -49,6 +50,7 @@ export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroS
     salonId: entity.salonId,
     clienteId: entity.clienteId,
     usuarioId: entity.usuarioId,
+    estado: entity.estado,
     totalServicios: Number(entity.totalServicios),
     totalProductos: Number(entity.totalProductos),
     montoTotal: Number(entity.montoTotal),

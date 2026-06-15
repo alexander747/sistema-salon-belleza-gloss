@@ -62,6 +62,7 @@ interface Registro {
   esRetoque: boolean;
   descripcionServicio: string | null;
   estaPagadaEmpleada: boolean;
+  estado?: string;
   notas?: string;
   precioAjustado?: boolean;
   porcentajeDescuento?: number;
@@ -245,6 +246,8 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+
+
 function getMonthISO(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -423,13 +426,11 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       if (registroDesde) regParams.desde = registroDesde;
       if (registroHasta) regParams.hasta = registroHasta;
 
-      // Build resumen params: use date range if filtered, otherwise use today
+      // Build resumen params: use date range if filtered, otherwise let backend use Colombia date
       const resumenParams: Record<string, string> = {};
       if (registroDesde && registroHasta) {
         resumenParams.desde = registroDesde;
         resumenParams.hasta = registroHasta;
-      } else {
-        resumenParams.fecha = todayStr;
       }
 
       const promises: Promise<any>[] = [
@@ -535,6 +536,8 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   };
 
   const calcTotal = (r: Registro): number => {
+    // Anulado: todo en cero
+    if (r.estado === 'ANULADO') return 0;
     if (r.precioAjustado && r.valorFinal != null) {
       return r.valorFinal;
     }
@@ -599,7 +602,7 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         animate="show"
       >
         <motion.div variants={itemVariants} className={styles.summaryCard}>
-          <span className={styles.summaryLabel}>💰 Ingresos</span>
+          <span className={styles.summaryLabel}>💰 TOTAL INGRESOS</span>
           <span className={styles.summaryValueAccent}>
             {resumen ? formatCurrency(resumen.totalIngresos) : '$0'}
           </span>
@@ -766,7 +769,6 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 <th>Empleada</th>
                 <th>Servicios</th>
                 <th>Productos</th>
-                <th>Total Original</th>
                 <th>Dto.%</th>
                 <th>Ajustado</th>
                 <th>Total</th>
@@ -808,12 +810,6 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                     {reg.totalProductos > 0 ? formatCurrency(reg.totalProductos) : '---'}
                   </td>
-                  {/* Total Original */}
-                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-                    {reg.precioAjustado && reg.valorOriginal != null
-                      ? formatCurrency(reg.valorOriginal)
-                      : '—'}
-                  </td>
                   {/* Descuento */}
                   <td style={{ textAlign: 'center' }}>
                     {reg.porcentajeDescuento != null && reg.porcentajeDescuento > 0 ? (
@@ -839,7 +835,11 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     </span>
                   </td>
                   <td>
-                    <span className={`${styles.badge} ${styles.badgeServicios}`}>Activo</span>
+                    {reg.estado === 'ANULADO' ? (
+                      <span className={`${styles.badge} ${styles.badgeEliminado}`}>Anulado</span>
+                    ) : (
+                      <span className={`${styles.badge} ${styles.badgeServicios}`}>Activo</span>
+                    )}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.15rem' }}>
@@ -851,14 +851,16 @@ const RegistrosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                       >
                         👁️
                       </button>
-                      <button
-                        className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                        onClick={() => openAnular(reg)}
-                        title="Anular"
-                        aria-label="Anular"
-                      >
-                        🚫
-                      </button>
+                      {reg.estado !== 'ANULADO' ? (
+                        <button
+                          className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
+                          onClick={() => openAnular(reg)}
+                          title="Anular"
+                          aria-label="Anular"
+                        >
+                          🚫
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </motion.tr>
@@ -3627,7 +3629,7 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
           <h4 className={styles.reporteCardTitle}>📈 ROI Mensual — {mes}</h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💰 Ingresos</span>
+          <span className={styles.summaryLabel}>💰 TOTAL INGRESOS</span>
               <span className={styles.summaryValueAccent}>{formatCurrency(roi.ingresos ?? 0)}</span>
             </div>
             <div className={styles.summaryCard}>

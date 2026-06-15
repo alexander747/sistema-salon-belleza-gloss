@@ -60,6 +60,7 @@ export class AnularRegistroUseCase {
     const montoPendienteAnterior = Number(registro.montoPendiente);
 
     await this.registroRepo.update(input.id, {
+      estado: 'ANULADO' as any,
       montoPendiente: 0,
       montoTotal: 0,
       comisionCalculada: 0,

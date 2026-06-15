@@ -1,5 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import { Rol } from '@pos-final/types';
+import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionRepository';
@@ -50,9 +51,9 @@ export class NominaPendienteUseCase {
     const result: NominaPendienteEmpleada[] = [];
 
     for (const empleada of empleadas) {
-      // Get pending (unpaid) registros for this employee
+      // Get pending (unpaid) non-anulled registros for this employee
       let pendingRegistros = allRegistros.filter(
-        (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada,
+        (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada && r.estado !== EstadoRegistro.ANULADO,
       );
 
       if (pendingRegistros.length === 0) {
