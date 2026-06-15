@@ -72,11 +72,11 @@ The system MUST include servicios with NULL `categoriaId` when listing servicios
 
 ### Requirement: Create Servicio
 
-`POST /api/salones/:salonId/servicios` MUST create a servicio. DUEÑA and ADMIN MAY write. `categoriaId` MUST belong to the same salon.
+`POST /api/salones/:salonId/servicios` MUST create a servicio. DUEÑA and ADMIN MAY write. `categoriaId` MUST belong to the same salon. The response MUST include `costoBaseInsumos` (default 0) in the returned object.
 
 | Method | Endpoint | Auth | Body |
 |--------|----------|------|------|
-| POST | `/api/salones/:salonId/servicios` | write roles | nombre*, precioBase*, duracionMinutos*, categoriaId*, descripcion? |
+| POST | `/api/salones/:salonId/servicios` | write roles | nombre*, precioBase*, duracionMinutos*, categoriaId*, descripcion?, costoBaseInsumos? |
 
 #### Scenario: Happy path — create
 
@@ -99,7 +99,7 @@ The system MUST include servicios with NULL `categoriaId` when listing servicios
 
 ### Requirement: Update Servicio
 
-`PUT /api/salones/:salonId/servicios/:id` MUST update partial fields.
+`PUT /api/salones/:salonId/servicios/:id` MUST update partial fields, including `costoBaseInsumos`.
 
 #### Scenario: Happy path
 
@@ -107,6 +107,13 @@ The system MUST include servicios with NULL `categoriaId` when listing servicios
 - WHEN `PUT /api/salones/1/servicios/10` with `{ precioBase: 150 }`
 - THEN status 200
 - AND body.precioBase equals 150
+
+#### Scenario: Update costoBaseInsumos
+
+- GIVEN servicio id=10 with costoBaseInsumos=0
+- WHEN `PUT /api/salones/1/servicios/10` with `{ costoBaseInsumos: 25000 }`
+- THEN status 200
+- AND body.costoBaseInsumos equals 25000
 
 ### Requirement: Delete Servicio (Soft)
 

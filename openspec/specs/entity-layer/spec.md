@@ -88,3 +88,19 @@ The system MUST migrate all 18 entities from pos-ok: Salon, Usuario, Cliente, Ca
 - GIVEN each entity's relationships
 - WHEN comparing to pos-ok
 - THEN `@ManyToOne` and `@OneToMany` relations with `salonId` exist on every tenant-scoped entity
+
+### Requirement: ServicioEntity Costo Base Insumos
+
+The `ServicioEntity` MUST have a `costoBaseInsumos` column (`DECIMAL(12,2)`, default 0) representing the cost of supplies for the service. The `RegistroServicioItemEntity` MUST also have a `costoBaseInsumos` column (`DECIMAL(12,2)`, default 0) as a snapshot of the supply cost at registration time. This enables commission calculation to deduct supply costs from service revenue.
+
+#### Scenario: ServicioEntity has costoBaseInsumos column
+
+- GIVEN the servicios table schema
+- WHEN inspecting columns
+- THEN `costo_base_insumos` exists as `DECIMAL(12,2) NOT NULL DEFAULT 0`
+
+#### Scenario: RegistroServicioItemEntity has costoBaseInsumos column
+
+- GIVEN the registros_servicio_items table schema
+- WHEN inspecting columns
+- THEN `costo_base_insumos` exists as `DECIMAL(12,2) NOT NULL DEFAULT 0`

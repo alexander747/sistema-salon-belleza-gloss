@@ -8,7 +8,7 @@ Per-service detail tracking for financial records. Each `RegistroServicioItem` r
 
 ### Requirement: Servicio Items Persistence
 
-The system MUST persist individual service items as part of registro creation. Each item MUST snapshot `servicioId`, `nombreServicio` (varchar), and `precioServicio` (decimal). This mirrors the `RegistroProductoEntity` pattern.
+The system MUST persist individual service items as part of registro creation. Each item MUST snapshot `servicioId`, `nombreServicio` (varchar), `precioServicio` (decimal), and `costoBaseInsumos` (decimal, default 0). This mirrors the `RegistroProductoEntity` pattern. The `costoBaseInsumos` snapshot is used to compute commission after deducting supply costs.
 
 #### Scenario: Persist items on registration
 - GIVEN a registro with 2 selected services (Corte=$25000, Tintura=$60000)
@@ -27,4 +27,4 @@ The system MUST return `serviciosItems[]` in the `RegistroServicioDTO` response 
 #### Scenario: DTO includes items
 - GIVEN a registro with 2 persisted servicio items
 - WHEN GET /api/salones/:salonId/registros/:id
-- THEN response MUST include `serviciosItems` with `id`, `servicioId`, `nombreServicio`, `precioServicio`
+- THEN response MUST include `serviciosItems` with `id`, `servicioId`, `nombreServicio`, `precioServicio`, `costoBaseInsumos`

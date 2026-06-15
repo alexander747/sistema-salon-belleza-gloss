@@ -9,7 +9,7 @@ Core financial record of services rendered: commission calculation, payment spli
 ### Requirement: POST Crear Registro
 
 The system MUST create a `RegistroServicioEntity` with its `pagos`, `divisiones`, `productosVendidos`, and `serviciosItems` in a single database transaction. Business rules:
-- `comisionCalculada = totalServicios * (porcentajeComisionServicio / 100)`. Productos and propina MUST NOT generate commission.
+- `comisionCalculada = max(0, totalServicios - totalCostoBaseInsumos) * (porcentajeComisionServicio / 100)`. Productos and propina MUST NOT generate commission. `totalCostoBaseInsumos` is computed as the sum of `costoBaseInsumos` across all `serviciosItems`. Uses `max(0, ...)` to prevent negative commission when insumos exceed total.
 - `montoTotal = totalServicios + totalProductos + propina`
 - `montoPendiente = (totalServicios + totalProductos) - SUM(pagos.monto)`. Propina excluded.
 - Propina is 100% employee. It MUST NOT count toward salon revenue.
@@ -50,12 +50,17 @@ The system MUST create a `RegistroServicioEntity` with its `pagos`, `divisiones`
 
 ### Requirement: serviciosItems Input Validation
 
-The `createRegistroSchema` MUST accept an optional `serviciosItems` array. Each item MUST validate: `servicioId` (positive int), `nombreServicio` (string max 200), `precioServicio` (positive number). The field defaults to `[]` when absent.
+The `createRegistroSchema` MUST accept an optional `serviciosItems` array. Each item MUST validate: `servicioId` (positive int), `nombreServicio` (string max 200), `precioServicio` (positive number), `costoBaseInsumos` (number, min 0, optional, defaults 0). The field defaults to `[]` when absent.
 
 #### Scenario: serviciosItems validation passes
 - GIVEN a payload with `serviciosItems: [{servicioId:1, nombreServicio:"Corte", precioServicio:25000}]`
 - WHEN parsed through `createRegistroSchema`
 - THEN validation MUST succeed
+
+#### Scenario: serviciosItems with costoBaseInsumos
+- GIVEN a payload with `serviciosItems: [{servicioId:1, nombreServicio:"Tintura", precioServicio:60000, costoBaseInsumos:40000}]`
+- WHEN parsed through `createRegistroSchema`
+- THEN validation MUST succeed AND costoBaseInsumos must be preserved
 
 #### Scenario: serviciosItems with invalid data
 - GIVEN a payload with `serviciosItems: [{servicioId:0, nombreServicio:"", precioServicio:-1}]`
