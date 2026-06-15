@@ -5,6 +5,7 @@ export interface ServicioResumenDTO {
   nombre: string;
   duracionMinutos: number;
   precioBase: number;
+  costoBaseInsumos: number;
 }
 
 export class CitaDTO {
@@ -27,6 +28,7 @@ export class CitaDTO {
       nombre: s.nombre,
       duracionMinutos: s.duracionMinutos,
       precioBase: Number(s.precioBase),
+      costoBaseInsumos: Number(s.costoBaseInsumos ?? 0),
     }));
 
     const duracionTotalMinutos = servicios.reduce((sum, s) => sum + s.duracionMinutos, 0);

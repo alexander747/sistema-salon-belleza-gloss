@@ -5,6 +5,7 @@ export interface RegistroServicioItemDTO {
   servicioId: number;
   nombreServicio: string;
   precioServicio: number;
+  costoBaseInsumos: number;
 }
 
 export function registroServicioItemToDTO(entity: RegistroServicioItemEntity): RegistroServicioItemDTO {
@@ -13,5 +14,6 @@ export function registroServicioItemToDTO(entity: RegistroServicioItemEntity): R
     servicioId: entity.servicioId,
     nombreServicio: entity.nombreServicio,
     precioServicio: Number(entity.precioServicio),
+    costoBaseInsumos: Number(entity.costoBaseInsumos),
   };
 }

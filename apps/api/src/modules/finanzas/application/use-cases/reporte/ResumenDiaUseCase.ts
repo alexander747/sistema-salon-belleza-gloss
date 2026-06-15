@@ -15,6 +15,7 @@ export interface ResumenDiaOutput {
   totalProductos: number;
   totalPropinas: number;
   totalComisiones: number;
+  totalCostoBaseInsumos: number;
   cantidadAtenciones: number;
   cantidadProductosVendidos: number;
   totalIngresos: number;
@@ -68,6 +69,7 @@ export class ResumenDiaUseCase {
     let totalProductos = 0;
     let totalPropinas = 0;
     let totalComisiones = 0;
+    let totalCostoBaseInsumos = 0;
     let cantidadProductosVendidos = 0;
     let totalIngresos = 0;
 
@@ -92,15 +94,23 @@ export class ResumenDiaUseCase {
       totalComisiones += Number(r.comisionCalculada);
       cantidadProductosVendidos += Number(r.cantidadProductosVendidos ?? 0);
       totalIngresos += Math.round((servBruto + prodBruto) * proporcion);
+
+      // Costo base de insumos es un costo real del salón; se suma sin ajuste por descuento
+      const costoBaseItems = (r.serviciosItems ?? []).reduce(
+        (sum, si) => sum + Number(si.costoBaseInsumos ?? 0),
+        0,
+      );
+      totalCostoBaseInsumos += Math.round(costoBaseItems);
     }
 
-    const balanceNeto = totalIngresos - totalGastos;
+    const balanceNeto = totalIngresos - totalGastos - totalComisiones - totalCostoBaseInsumos;
 
     return {
       totalServicios,
       totalProductos,
       totalPropinas,
       totalComisiones,
+      totalCostoBaseInsumos,
       cantidadAtenciones: registros.filter(
         (r) => r.estado !== 'ANULADO' && Number(r.totalServicios) > 0,
       ).length,

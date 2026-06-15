@@ -24,4 +24,7 @@ export class RegistroServicioItemEntity extends BaseEntity {
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   precioServicio: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  costoBaseInsumos: number;
 }
