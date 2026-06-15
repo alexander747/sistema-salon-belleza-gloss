@@ -68,6 +68,8 @@ describe('RegistroController', () => {
       expect(res.json).toHaveBeenCalledWith(expected);
       expect(mockListUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
+        page: 1,
+        limit: 0,
         desde: undefined,
         hasta: undefined,
         usuarioId: undefined,
@@ -93,8 +95,10 @@ describe('RegistroController', () => {
 
       expect(mockListUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
-        desde: new Date('2026-05-01'),
-        hasta: new Date('2026-05-30'),
+        page: 1,
+        limit: 0,
+        desde: new Date('2026-05-01T00:00:00-05:00'),
+        hasta: new Date('2026-05-30T23:59:59-05:00'),
         usuarioId: 3,
         clienteId: 7,
       });

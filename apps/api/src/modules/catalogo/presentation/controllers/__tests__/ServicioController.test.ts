@@ -42,6 +42,9 @@ describe('ServicioController', () => {
       expect(mockListUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
         categoriaId: undefined,
+        page: 1,
+        limit: 0,
+        q: undefined,
       });
     });
 
@@ -59,6 +62,9 @@ describe('ServicioController', () => {
       expect(mockListUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
         categoriaId: 3,
+        page: 1,
+        limit: 0,
+        q: undefined,
       });
     });
   });

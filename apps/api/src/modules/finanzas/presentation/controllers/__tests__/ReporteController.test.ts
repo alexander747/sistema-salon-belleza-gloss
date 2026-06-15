@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
+import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { ReporteController } from '../ReporteController';
 
 describe('ReporteController', () => {
@@ -45,7 +46,7 @@ describe('ReporteController', () => {
       expect(res.json).toHaveBeenCalledWith(expected);
       expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
-        fecha: new Date('2026-05-30'),
+        fecha: '2026-05-30',
       });
     });
 
@@ -64,14 +65,13 @@ describe('ReporteController', () => {
 
       await controller.resumenDia(req, res, next);
 
-      const today = new Date();
       expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
-        fecha: expect.any(Date),
+        fecha: expect.any(String),
       });
-      // Verify it's today
+      // Verify it's today (Colombia date string)
       const calledArg = mockResumenDiaUseCase.execute.mock.calls[0][0];
-      expect(calledArg.fecha.getDate()).toBe(today.getDate());
+      expect(calledArg.fecha).toBe(getColombiaDateString());
     });
   });
 
