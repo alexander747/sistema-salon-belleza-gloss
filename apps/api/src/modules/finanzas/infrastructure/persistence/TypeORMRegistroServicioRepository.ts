@@ -29,6 +29,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.usuario', 'usuario')
       .leftJoinAndSelect('r.productosVendidos', 'rp')
       .leftJoinAndSelect('rp.producto', 'p')
+      .leftJoinAndSelect('r.serviciosItems', 'si')
       .where('r.id = :id', { id })
       .getOne();
   }
@@ -51,6 +52,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.pagos', 'pago')
       .leftJoinAndSelect('r.divisiones', 'division')
       .leftJoinAndSelect('r.devoluciones', 'devolucion')
+      .leftJoinAndSelect('r.serviciosItems', 'si')
       .where('r.salonId = :salonId', { salonId })
       .andWhere('r.creadoEn >= :fechaInicio', { fechaInicio })
       .andWhere('r.creadoEn <= :fechaFin', { fechaFin })
@@ -74,6 +76,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.cliente', 'cliente')
       .leftJoinAndSelect('r.productosVendidos', 'rp')
       .leftJoinAndSelect('rp.producto', 'p')
+      .leftJoinAndSelect('r.serviciosItems', 'si')
       .where('r.salonId = :salonId', { salonId: params.salonId });
 
     if (params.desde) {

@@ -48,6 +48,13 @@ interface ProductoVendido {
   subtotal: number;
 }
 
+interface ServicioItemDTO {
+  id: number;
+  servicioId: number;
+  nombreServicio: string;
+  precioServicio: number;
+}
+
 interface Registro {
   id: number;
   salonId: number;
@@ -73,6 +80,7 @@ interface Registro {
   pagos: Pago[];
   divisiones: Division[];
   productosVendidos?: ProductoVendido[];
+  serviciosItems?: ServicioItemDTO[];
   /** Computed after data fetch — client name resolved from clientesMap */
   _clienteNombre?: string;
   /** Computed after data fetch — empleada name resolved from empleadasMap */
@@ -1036,31 +1044,52 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
 
             <hr className={styles.sectionDivider} />
 
-            {/* ── Service detail card ── */}
-            {registro.descripcionServicio && (
+            {/* ── Servicio items section (mini-cards matching product pattern) ── */}
+            {registro.serviciosItems && registro.serviciosItems.length > 0 && (
               <div style={{ marginBottom: '0.75rem' }}>
-                <h4 className={styles.sectionSubtitle}>Servicio</h4>
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25 }}
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(92,186,123,0.07), rgba(92,186,123,0.02))',
-                    border: '1px solid rgba(92,186,123,0.18)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '0.6rem 0.9rem',
+                <h4 className={styles.sectionSubtitle}>Servicios realizados</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {registro.serviciosItems.map((si, idx) => (
+                    <motion.div
+                      key={si.id}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2, delay: idx * 0.04 }}
+                      className={styles.miniCard}
+                      style={{
+                        borderLeft: `3px solid ${idx % 2 === 0 ? 'var(--accent)' : 'var(--success)'}`,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {si.nombreServicio}
+                        </div>
+                      </div>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+                        {formatCurrency(si.precioServicio)}
+                      </span>
+                    </motion.div>
+                  ))}
+                  <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                  }}
-                >
-                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                    {registro.descripcionServicio}
-                  </span>
-                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1rem', fontWeight: 700, color: 'var(--success)' }}>
-                    {formatCurrency(registro.totalServicios)}
-                  </span>
-                </motion.div>
+                    padding: '0.4rem 0.6rem 0.2rem',
+                    borderTop: '1px solid var(--border)',
+                    marginTop: '0.1rem',
+                  }}>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Total servicios
+                    </span>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', fontWeight: 700, color: 'var(--accent)' }}>
+                      {formatCurrency(registro.totalServicios)}
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
 

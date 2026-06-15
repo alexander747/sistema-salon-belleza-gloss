@@ -40,6 +40,11 @@ export const createRegistroSchema = z.object({
     productoId: z.number().int().positive(),
     cantidad: z.number().int().positive(),
   })).optional().default([]),
+  serviciosItems: z.array(z.object({
+    servicioId: z.number().int().positive('El servicioId debe ser un entero positivo'),
+    nombreServicio: z.string().min(1, 'El nombre del servicio es requerido').max(200),
+    precioServicio: z.number().min(0, 'El precio del servicio debe ser mayor o igual a 0'),
+  })).optional().default([]),
 });
 
 export type CreateRegistroInput = z.infer<typeof createRegistroSchema>;

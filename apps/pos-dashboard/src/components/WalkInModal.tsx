@@ -453,6 +453,11 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           productoId: p.productoId,
           cantidad: p.cantidad,
         })),
+        serviciosItems: cart.map((item) => ({
+          servicioId: item.servicioId,
+          nombreServicio: item.nombre,
+          precioServicio: item.precio,
+        })),
         // Price adjustment fields
         porcentajeDescuento: descuento,
         precioAjustado: hasAdjustment,

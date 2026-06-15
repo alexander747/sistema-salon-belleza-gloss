@@ -4,6 +4,7 @@ import { MetodoPago } from '../../../../../infrastructure/persistence/entities/P
 import { AppDataSource } from '../../../../../shared/database';
 import { ClienteEntity } from '../../../../../infrastructure/persistence/entities/ClienteEntity';
 import { RegistroProductoEntity } from '../../../../../infrastructure/persistence/entities/RegistroProductoEntity';
+import { RegistroServicioItemEntity } from '../../../../../infrastructure/persistence/entities/RegistroServicioItemEntity';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IPagoTransaccionRepository } from '../../../domain/ports/IPagoTransaccionRepository';
 import type { IDivisionRegistroRepository } from '../../../domain/ports/IDivisionRegistroRepository';
@@ -169,6 +170,20 @@ export class CreateRegistroUseCase {
             pv.cantidad,
             queryRunner,
           );
+        }
+      }
+
+      // ── 11. Persist servicio items ──────────────────────────
+      if (input.serviciosItems && input.serviciosItems.length > 0) {
+        const servicioItemRepo = queryRunner.manager.getRepository(RegistroServicioItemEntity);
+        for (const si of input.serviciosItems) {
+          const item = servicioItemRepo.create({
+            registroServicioId: registro.id,
+            servicioId: si.servicioId,
+            nombreServicio: si.nombreServicio,
+            precioServicio: si.precioServicio,
+          });
+          await servicioItemRepo.save(item);
         }
       }
 

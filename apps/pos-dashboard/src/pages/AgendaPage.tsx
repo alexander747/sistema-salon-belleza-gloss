@@ -580,6 +580,20 @@ const AgendaPage: React.FC = () => {
         montoTotal: finalTotal,
         pagos: [{ monto: finalTotal, metodoPago: completarForm.metodoPago }],
         serviciosIds: [...selectedCita.servicios.map(s => s.id), ...completarForm.nuevosServiciosIds],
+        serviciosItems: [
+          ...selectedCita.servicios.map(s => ({
+            servicioId: s.id,
+            nombreServicio: s.nombre,
+            precioServicio: completarForm.serviciosPrecios[s.id] ?? s.precio,
+          })),
+          ...servicios
+            .filter(s => completarForm.nuevosServiciosIds.includes(s.id))
+            .map(s => ({
+              servicioId: s.id,
+              nombreServicio: s.nombre,
+              precioServicio: s.precioBase ?? 0,
+            })),
+        ],
         notas,
         registradoPorId: user?.id,
         productosVendidos: completarForm.productosVendidos.map(p => ({

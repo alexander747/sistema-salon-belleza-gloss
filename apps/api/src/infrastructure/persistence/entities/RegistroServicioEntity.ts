@@ -12,6 +12,7 @@ import { LiquidacionEntity } from './LiquidacionEntity';
 import { DivisionRegistroEntity } from './DivisionRegistroEntity';
 import { DevolucionEntity } from './DevolucionEntity';
 import { RegistroProductoEntity } from './RegistroProductoEntity';
+import { RegistroServicioItemEntity } from './RegistroServicioItemEntity';
 import { ClienteEntity } from './ClienteEntity';
 import { SalonEntity } from './SalonEntity';
 
@@ -94,6 +95,9 @@ export class RegistroServicioEntity extends BaseEntity {
 
   @Column({ type: 'int' })
   clienteId: number;
+
+  @OneToMany(() => RegistroServicioItemEntity, (si) => si.registroServicio, { cascade: true })
+  serviciosItems: RegistroServicioItemEntity[];
 
   @OneToMany(() => RegistroProductoEntity, (rp) => rp.registroServicio, { cascade: true })
   productosVendidos: RegistroProductoEntity[];
