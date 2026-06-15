@@ -14,6 +14,7 @@ interface UpdateServicioInput {
   precioBase?: number;
   duracionMinutos?: number;
   categoriaId?: number;
+  costoBaseInsumos?: number;
 }
 
 interface ReglaTemporada {
@@ -50,6 +51,7 @@ export class UpdateServicioUseCase {
     if (input.precioBase !== undefined) data.precioBase = input.precioBase;
     if (input.duracionMinutos !== undefined) data.duracionMinutos = input.duracionMinutos;
     if (input.categoriaId !== undefined) data.categoriaId = input.categoriaId;
+    if (input.costoBaseInsumos !== undefined) data.costoBaseInsumos = input.costoBaseInsumos;
 
     const updated = await this.servicioRepo.update(input.id, data);
 

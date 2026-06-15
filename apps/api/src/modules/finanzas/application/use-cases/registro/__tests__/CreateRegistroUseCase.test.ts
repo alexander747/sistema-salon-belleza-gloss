@@ -20,6 +20,7 @@ vi.mock('../../../../../../infrastructure/persistence/entities/RegistroServicioI
     servicioId: number;
     nombreServicio: string;
     precioServicio: number;
+    costoBaseInsumos: number;
   },
 }));
 
@@ -146,7 +147,7 @@ describe('CreateRegistroUseCase', () => {
     expect(mockClienteRepo.findBySalonAndId).toHaveBeenCalledWith(1, 1);
     expect(mockUsuarioRepo.findBySalonAndId).toHaveBeenCalledWith(1, 2);
 
-    expect(mockComisionService.calcularComision).toHaveBeenCalledWith(100000, 60);
+    expect(mockComisionService.calcularComision).toHaveBeenCalledWith(100000, 60, 0);
     expect(mockComisionService.calcularMontoTotal).toHaveBeenCalledWith(100000, 50000, 10000);
     expect(mockComisionService.calcularMontoPendiente).toHaveBeenCalledWith(100000, 50000, 100000);
 
@@ -189,6 +190,66 @@ describe('CreateRegistroUseCase', () => {
 
     await expect(useCase.execute(validInput)).rejects.toThrow(NotFoundError);
     expect(mockRegistroRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('should pass totalCostoBaseInsumos to calcularComision when serviciosItems have costoBaseInsumos', async () => {
+    const mockCliente = { id: 1, totalServicios: 5, deudaTotal: 50000 };
+    const mockUsuario = { id: 2, porcentajeComisionServicio: '60' };
+    const mockSaved = {
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      usuarioId: 2,
+      totalServicios: 100000,
+      totalProductos: 50000,
+      montoTotal: 160000,
+      propina: 10000,
+      comisionCalculada: 36000,
+      esRetoque: false,
+      montoPendiente: 50000,
+      estaPagadaEmpleada: false,
+      notas: null,
+      descripcionServicio: null,
+      pagos: [],
+      divisiones: [],
+      serviciosItems: [
+        { id: 1, servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000, costoBaseInsumos: 10000 },
+        { id: 2, servicioId: 2, nombreServicio: 'Tintura', precioServicio: 60000, costoBaseInsumos: 30000 },
+      ],
+      creadoEn: new Date(),
+      actualizadoEn: new Date(),
+    };
+
+    mockClienteRepo.findBySalonAndId.mockResolvedValue(mockCliente);
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(mockUsuario);
+    mockComisionService.calcularComision.mockReturnValue(36000);
+    mockComisionService.calcularMontoTotal.mockReturnValue(160000);
+    mockComisionService.calcularMontoPendiente.mockReturnValue(50000);
+    mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+    mockRegistroRepo.findById.mockResolvedValue(mockSaved);
+
+    const input = {
+      ...validInput,
+      serviciosItems: [
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000, costoBaseInsumos: 10000 },
+        { servicioId: 2, nombreServicio: 'Tintura', precioServicio: 60000, costoBaseInsumos: 30000 },
+      ],
+    };
+
+    await useCase.execute(input);
+
+    // Verify calcularComision was called with totalCostoBaseInsumos = 10000 + 30000 = 40000
+    expect(mockComisionService.calcularComision).toHaveBeenCalledWith(100000, 60, 40000);
+    expect(mockRepoCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costoBaseInsumos: 10000,
+      }),
+    );
+    expect(mockRepoCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costoBaseInsumos: 30000,
+      }),
+    );
   });
 
   it('should persist serviciosItems when provided', async () => {

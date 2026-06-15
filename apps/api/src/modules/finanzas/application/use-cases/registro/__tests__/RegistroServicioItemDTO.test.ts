@@ -10,6 +10,7 @@ describe('RegistroServicioItemDTO', () => {
       servicioId: 5,
       nombreServicio: 'Corte de cabello',
       precioServicio: 25000,
+      costoBaseInsumos: 5000,
     } as RegistroServicioItemEntity;
 
     const dto = registroServicioItemToDTO(entity);
@@ -19,6 +20,7 @@ describe('RegistroServicioItemDTO', () => {
       servicioId: 5,
       nombreServicio: 'Corte de cabello',
       precioServicio: 25000,
+      costoBaseInsumos: 5000,
     });
   });
 
@@ -29,11 +31,13 @@ describe('RegistroServicioItemDTO', () => {
       servicioId: 3,
       nombreServicio: 'Tintura',
       precioServicio: 60500.50,
+      costoBaseInsumos: 0,
     } as RegistroServicioItemEntity;
 
     const dto = registroServicioItemToDTO(entity);
 
     expect(dto.precioServicio).toBe(60500.50);
     expect(dto.nombreServicio).toBe('Tintura');
+    expect(dto.costoBaseInsumos).toBe(0);
   });
 });

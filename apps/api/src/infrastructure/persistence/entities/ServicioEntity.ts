@@ -29,6 +29,9 @@ export class ServicioEntity extends BaseEntity {
   @Column({ type: 'boolean', default: true })
   activo: boolean;
 
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  costoBaseInsumos: number;
+
   // ---- Relations ----
   @ManyToOne(() => CategoriaServicioEntity, (cat) => cat.servicios, { nullable: true })
   @JoinColumn({ name: 'categoriaId' })

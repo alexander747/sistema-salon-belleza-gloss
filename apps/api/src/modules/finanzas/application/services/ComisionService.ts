@@ -5,9 +5,16 @@ export class ComisionService {
   /**
    * Calcula la comisión sobre el total de servicios.
    * La comisión se aplica SOLO sobre totalServicios, NO sobre productos ni propina.
+   * Si se proporciona totalCostoBaseInsumos, se resta del total antes de aplicar el porcentaje.
+   * Si el resultado es negativo, retorna 0.
    */
-  calcularComision(totalServicios: number, porcentajeComision: number): number {
-    return Number((totalServicios * (porcentajeComision / 100)).toFixed(2));
+  calcularComision(
+    totalServicios: number,
+    porcentajeComision: number,
+    totalCostoBaseInsumos: number = 0,
+  ): number {
+    const base = Math.max(0, totalServicios - totalCostoBaseInsumos);
+    return Number((base * (porcentajeComision / 100)).toFixed(2));
   }
 
   /**

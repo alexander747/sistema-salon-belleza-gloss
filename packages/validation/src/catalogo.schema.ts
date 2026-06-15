@@ -23,6 +23,7 @@ export const createServicioSchema = z.object({
   precioBase: z.number().positive('El precio base debe ser positivo'),
   duracionMinutos: z.number().int().positive().default(60),
   categoriaId: z.number().int().positive().optional(),
+  costoBaseInsumos: z.number().min(0).default(0).optional(),
 });
 
 export type CreateServicioInput = z.infer<typeof createServicioSchema>;

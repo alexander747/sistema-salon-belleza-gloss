@@ -45,9 +45,13 @@ export class CreateRegistroUseCase {
     const porcentaje = Number(usuario.porcentajeComisionServicio);
 
     // ── 4. Calculate financial values ─────────────────────────
+    const totalCostoBaseInsumos = (input.serviciosItems ?? [])
+      .reduce((sum, si) => sum + (si.costoBaseInsumos ?? 0), 0);
+
     const comisionCalculada = this.comisionService.calcularComision(
       input.totalServicios,
       porcentaje,
+      totalCostoBaseInsumos,
     );
     const montoTotal = this.comisionService.calcularMontoTotal(
       input.totalServicios,
@@ -182,6 +186,7 @@ export class CreateRegistroUseCase {
             servicioId: si.servicioId,
             nombreServicio: si.nombreServicio,
             precioServicio: si.precioServicio,
+            costoBaseInsumos: si.costoBaseInsumos ?? 0,
           });
           await servicioItemRepo.save(item);
         }

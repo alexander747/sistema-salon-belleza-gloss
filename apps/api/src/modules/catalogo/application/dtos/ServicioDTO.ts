@@ -8,6 +8,7 @@ export class ServicioDTO {
   precioFinal: number;
   duracionMinutos: number;
   activo: boolean;
+  costoBaseInsumos: number;
   categoriaId: number;
   categoria?: { id: number; nombre: string } | null;
   fotosCount?: number;
@@ -25,6 +26,7 @@ export class ServicioDTO {
     dto.descripcion = entity.descripcion ?? null;
     dto.precioBase = Number(entity.precioBase);
     dto.precioFinal = precioFinal ?? Number(entity.precioBase);
+    dto.costoBaseInsumos = Number(entity.costoBaseInsumos ?? 0);
     dto.duracionMinutos = entity.duracionMinutos;
     dto.activo = entity.activo;
     dto.categoriaId = entity.categoriaId ?? 0;

@@ -13,6 +13,7 @@ interface CreateServicioInput {
   precioBase: number;
   duracionMinutos?: number;
   categoriaId: number;
+  costoBaseInsumos?: number;
 }
 
 interface ReglaTemporada {
@@ -42,6 +43,7 @@ export class CreateServicioUseCase {
       precioBase: input.precioBase,
       duracionMinutos: input.duracionMinutos ?? 60,
       categoriaId: input.categoriaId,
+      costoBaseInsumos: input.costoBaseInsumos ?? 0,
       activo: true,
     });
 

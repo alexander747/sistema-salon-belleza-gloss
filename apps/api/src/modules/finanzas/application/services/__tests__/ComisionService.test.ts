@@ -30,6 +30,38 @@ describe('ComisionService', () => {
       const result = service.calcularComision(100000, 0);
       expect(result).toBe(0);
     });
+
+    // ── New tests: costo base insumos ────────────────────────
+
+    it('should subtract totalCostoBaseInsumos before applying percentage (scenario 1)', () => {
+      const result = service.calcularComision(100000, 60, 40000);
+      expect(result).toBe(36000);  // (100000-40000)*0.6
+    });
+
+    it('should return legacy behavior when totalCostoBaseInsumos=0 (scenario 2)', () => {
+      const result = service.calcularComision(100000, 60, 0);
+      expect(result).toBe(60000);
+    });
+
+    it('should calculate (50000-20000)*50% = 15000 (scenario 3)', () => {
+      const result = service.calcularComision(50000, 50, 20000);
+      expect(result).toBe(15000);
+    });
+
+    it('should return 0 when insumos exceed totalServicios (scenario 4)', () => {
+      const result = service.calcularComision(30000, 50, 35000);
+      expect(result).toBe(0);
+    });
+
+    it('should return 0 when totalServicios is 0 with insumos (scenario 5)', () => {
+      const result = service.calcularComision(0, 60, 0);
+      expect(result).toBe(0);
+    });
+
+    it('should return 0 when porcentaje is 0 even with insumos (scenario 6)', () => {
+      const result = service.calcularComision(100000, 0, 40000);
+      expect(result).toBe(0);
+    });
   });
 
   describe('calcularMontoPendiente', () => {
