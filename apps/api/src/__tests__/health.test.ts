@@ -32,6 +32,14 @@ vi.mock('../modules/finanzas/presentation/routes/finanzas.routes.js', () => ({
   finanzasRouter: express.Router(),
 }));
 
+vi.mock('../modules/prestamos/presentation/routes/prestamoRoutes.js', () => ({
+  prestamoRouter: express.Router(),
+}));
+
+vi.mock('../modules/planes/presentation/routes/planRoutes.js', () => ({
+  default: express.Router(),
+}));
+
 // Mock the shared/container module to avoid side-effect imports (DI registrations, DB connection)
 vi.mock('../shared/container.js', () => ({}));
 
