@@ -1,4 +1,5 @@
 import { injectable } from 'tsyringe';
+import { Like } from 'typeorm';
 import { AppDataSource } from '../../../../shared/database';
 import { UsuarioEntity } from '../../../../infrastructure/persistence/entities/UsuarioEntity';
 import type { IUsuarioRepository } from '../../domain/ports/IUsuarioRepository';
@@ -10,10 +11,11 @@ export class TypeORMUsuarioRepository implements IUsuarioRepository {
     return AppDataSource.getRepository(UsuarioEntity);
   }
 
-  async findBySalon(salonId: number, rol?: Rol, activo?: boolean): Promise<UsuarioEntity[]> {
+  async findBySalon(salonId: number, rol?: Rol, activo?: boolean, q?: string): Promise<UsuarioEntity[]> {
     const where: Record<string, unknown> = { salonId };
     if (rol !== undefined) where.rol = rol;
     if (activo !== undefined) where.activo = activo;
+    if (q) where.nombre = Like(`%${q}%`);
     return this.getRepo().find({ where, order: { nombre: 'ASC' } });
   }
 

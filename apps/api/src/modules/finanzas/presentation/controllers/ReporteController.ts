@@ -1,9 +1,21 @@
 import { injectable, inject } from 'tsyringe';
 import type { Request, Response, NextFunction } from 'express';
-import { ResumenDiaUseCase } from '../../application/use-cases/reporte/ResumenDiaUseCase';
+import { Rol } from '@pos-final/types';
+import { ResumenDiaUseCase, type ResumenDiaInput } from '../../application/use-cases/reporte/ResumenDiaUseCase';
 import { ROIMensualUseCase } from '../../application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../../application/use-cases/reporte/CierreTurnoUseCase';
 import { getColombiaDateString } from '../../../../shared/colombia-date';
+
+// Same role rule as RegistroController.list: only privileged roles can filter
+// the resumen by empleada/cliente; restricted roles see only their own records.
+const REGISTROS_PRIVILEGED_ROLES = new Set<number>([
+  Rol.SUPERADMIN,
+  Rol.DUEÑA,
+  Rol.ADMINISTRADOR,
+  Rol.CONTADOR,
+]);
+
+const TIPO_FILTER_VALUES = ['TODOS', 'SERVICIOS', 'PRODUCTOS'] as const;
 
 @injectable()
 export class ReporteController {
@@ -19,9 +31,28 @@ export class ReporteController {
       const hasta = req.query.hasta as string | undefined;
       const fecha = req.query.fecha as string | undefined;
 
+      // Same role rule as RegistroController.list: restricted roles are forced
+      // to their own usuarioId and can never filter by clienteId.
+      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+      const usuarioId = isPrivileged
+        ? req.query.usuarioId ? Number(req.query.usuarioId) : undefined
+        : req.user!.id;
+      const clienteId = isPrivileged
+        ? req.query.clienteId ? Number(req.query.clienteId) : undefined
+        : undefined;
+
+      // tipo is validated; invalid values fall back to TODOS (existing behavior).
+      const rawTipo = req.query.tipo;
+      const tipo = (TIPO_FILTER_VALUES as readonly string[]).includes(rawTipo as string)
+        ? (rawTipo as ResumenDiaInput['tipo'])
+        : 'TODOS';
+
       const result = await this.resumenDiaUseCase.execute({
         salonId: req.salonId!,
         ...(desde && hasta ? { desde, hasta } : { fecha: fecha ?? getColombiaDateString() }),
+        ...(usuarioId !== undefined ? { usuarioId } : {}),
+        ...(clienteId !== undefined ? { clienteId } : {}),
+        ...(tipo !== 'TODOS' ? { tipo } : {}),
       });
       res.json(result);
     } catch (error) {

@@ -1,60 +1,53 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Rol } from '@pos-final/types';
 import api from '../services/api.js';
 
 /* ── Types ── */
 
-interface Cliente {
+interface Empleada {
   id: number;
   nombre: string;
-  telefono: string;
-  cedula?: string | null;
+  rol?: Rol;
 }
 
-export interface ClienteSearchableSelectProps {
+export interface EmpleadaSearchableSelectProps {
   salonId: number;
   value: number | null;
-  /** Name to display when value was set externally (e.g., from create flow) */
+  /** Name to display when value was set externally */
   selectedName?: string;
-  onSelect: (cliente: {
-    id: number;
-    nombre: string;
-    telefono: string;
-    cedula?: string | null;
-  }) => void;
-  onCreateNew?: () => void;
+  onSelect: (emp: { id: number; nombre: string }) => void;
   placeholder?: string;
   disabled?: boolean;
 }
 
 /* ── Helpers ── */
 
-function formatPhone(phone: string): string {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 10) {
-    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
-  }
-  return phone;
-}
+const ROL_LABELS: Record<number, string> = {
+  [Rol.SUPERADMIN]: 'Superadmin',
+  [Rol.DUEÑA]: 'Dueña',
+  [Rol.ADMINISTRADOR]: 'Administrador',
+  [Rol.MANICURISTA]: 'Manicurista',
+  [Rol.RECEPCIONISTA]: 'Recepcionista',
+  [Rol.CONTADOR]: 'Contador',
+};
 
 /* ── Component ── */
 
-const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
+const EmpleadaSearchableSelect: React.FC<EmpleadaSearchableSelectProps> = ({
   salonId,
   value,
   selectedName,
   onSelect,
-  onCreateNew,
-  placeholder = 'Buscar cliente por nombre, celular o cédula...',
+  placeholder = '🔍 Buscar empleada por nombre...',
   disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Cliente[]>([]);
+  const [results, setResults] = useState<Empleada[]>([]);
   const [loading, setLoading] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
+  const [selectedEmpleada, setSelectedEmpleada] = useState<Empleada | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -63,19 +56,19 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
   /* ── Syncing external value changes ── */
   useEffect(() => {
     if (!value || value <= 0) {
-      setSelectedClient(null);
+      setSelectedEmpleada(null);
     }
   }, [value]);
 
   /* ── API fetch ── */
-  const fetchClients = useCallback(
+  const fetchEmpleadas = useCallback(
     async (searchQuery: string) => {
       setLoading(true);
       try {
         const params: Record<string, unknown> = { limit: 10 };
         if (searchQuery.trim()) params.q = searchQuery.trim();
-        const { data } = await api.get(`/salones/${salonId}/clientes`, { params });
-        const list = Array.isArray(data) ? data : (data as { data?: Cliente[] })?.data ?? [];
+        const { data } = await api.get(`/salones/${salonId}/empleadas`, { params });
+        const list = Array.isArray(data) ? data : (data as { data?: Empleada[] })?.data ?? [];
         setResults(list);
       } catch {
         setResults([]);
@@ -90,19 +83,19 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      fetchClients(query);
+      fetchEmpleadas(query);
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, fetchClients]);
+  }, [query, fetchEmpleadas]);
 
   /* ── Open on focus (load recent) ── */
   const handleFocus = () => {
     if (disabled) return;
     if (!isOpen) {
       setIsOpen(true);
-      if (!query) fetchClients('');
+      if (!query) fetchEmpleadas('');
     }
   };
 
@@ -126,25 +119,20 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
   }, [results]);
 
   /* ── Select ── */
-  const selectClient = (cliente: Cliente) => {
-    setSelectedClient(cliente);
+  const selectEmpleada = (empleada: Empleada) => {
+    setSelectedEmpleada(empleada);
     setQuery('');
     setIsOpen(false);
-    onSelect({
-      id: cliente.id,
-      nombre: cliente.nombre,
-      telefono: cliente.telefono ?? '',
-      cedula: cliente.cedula,
-    });
+    onSelect({ id: empleada.id, nombre: empleada.nombre });
     inputRef.current?.blur();
   };
 
   /* ── Clear selection ── */
   const clearSelection = () => {
-    setSelectedClient(null);
+    setSelectedEmpleada(null);
     setQuery('');
     setResults([]);
-    onSelect({ id: 0, nombre: '', telefono: '' });
+    onSelect({ id: 0, nombre: '' });
     inputRef.current?.focus();
   };
 
@@ -154,7 +142,7 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         setIsOpen(true);
-        if (!query) fetchClients('');
+        if (!query) fetchEmpleadas('');
       }
       return;
     }
@@ -173,7 +161,7 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
       case 'Enter':
         e.preventDefault();
         if (highlightedIndex >= 0 && highlightedIndex < results.length) {
-          selectClient(results[highlightedIndex]);
+          selectEmpleada(results[highlightedIndex]);
         }
         break;
       case 'Escape':
@@ -191,8 +179,8 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
     setIsOpen(true);
     if (value && value > 0) {
       // Clear the previous selection when user types
-      setSelectedClient(null);
-      onSelect({ id: 0, nombre: '', telefono: '' });
+      setSelectedEmpleada(null);
+      onSelect({ id: 0, nombre: '' });
     }
   };
 
@@ -201,7 +189,7 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
     const hasValue = value != null && value > 0;
     if (!hasValue) return query;
     // Show name from local cache, external prop, or fall back to query
-    if (selectedClient?.id === value) return selectedClient.nombre;
+    if (selectedEmpleada?.id === value) return selectedEmpleada.nombre;
     if (selectedName) return selectedName;
     return query;
   })();
@@ -244,7 +232,7 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
           <button
             type="button"
             onClick={clearSelection}
-            aria-label="Limpiar cliente"
+            aria-label="Limpiar empleada"
             style={{
               position: 'absolute',
               right: '8px',
@@ -312,19 +300,19 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
                   color: 'var(--text-dim)',
                 }}
               >
-                No se encontraron clientes
+                No se encontraron empleadas
               </div>
             )}
 
             {/* Results list */}
             {!loading && results.length > 0 && (
               <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-                {results.map((cliente, index) => (
+                {results.map((empleada, index) => (
                   <div
-                    key={cliente.id}
+                    key={empleada.id}
                     role="option"
                     aria-selected={index === highlightedIndex}
-                    onClick={() => selectClient(cliente)}
+                    onClick={() => selectEmpleada(empleada)}
                     onMouseEnter={() => setHighlightedIndex(index)}
                     style={{
                       padding: '0.5rem 0.75rem',
@@ -345,10 +333,9 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.4rem',
-                        marginBottom: 2,
                       }}
                     >
-                      <span style={{ fontSize: '0.8rem' }}>👤</span>
+                      <span style={{ fontSize: '0.8rem' }}>💇</span>
                       <span
                         style={{
                           fontFamily: "'DM Sans', sans-serif",
@@ -357,68 +344,23 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
                           color: 'var(--text-primary)',
                         }}
                       >
-                        {cliente.nombre}
+                        {empleada.nombre}
                       </span>
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '0.75rem',
-                        marginLeft: '1.4rem',
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontSize: '0.7rem',
-                          color: 'var(--text-dim)',
-                        }}
-                      >
-                        🆔 {cliente.cedula || '—'}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontSize: '0.7rem',
-                          color: 'var(--text-dim)',
-                        }}
-                      >
-                        📱 {cliente.telefono ? formatPhone(cliente.telefono) : '—'}
-                      </span>
+                      {empleada.rol != null && ROL_LABELS[empleada.rol] && (
+                        <span
+                          style={{
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.7rem',
+                            color: 'var(--text-dim)',
+                            marginLeft: 'auto',
+                          }}
+                        >
+                          {ROL_LABELS[empleada.rol]}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Create new button */}
-            {onCreateNew && (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={onCreateNew}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onCreateNew();
-                }}
-                style={{
-                  padding: '0.65rem 0.75rem',
-                  cursor: 'pointer',
-                  borderTop: '1px solid var(--border)',
-                  fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  color: 'var(--accent)',
-                  textAlign: 'center',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = 'var(--accent-subtle)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = 'transparent')
-                }
-              >
-                + Crear nuevo cliente
               </div>
             )}
           </motion.div>
@@ -428,4 +370,4 @@ const ClienteSearchableSelect: React.FC<ClienteSearchableSelectProps> = ({
   );
 };
 
-export default ClienteSearchableSelect;
+export default EmpleadaSearchableSelect;

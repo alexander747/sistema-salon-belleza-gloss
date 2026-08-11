@@ -2,7 +2,7 @@ import { UsuarioEntity } from '../../../../infrastructure/persistence/entities/U
 import { Rol } from '@pos-final/types';
 
 export interface IUsuarioRepository {
-  findBySalon(salonId: number, rol?: Rol, activo?: boolean): Promise<UsuarioEntity[]>;
+  findBySalon(salonId: number, rol?: Rol, activo?: boolean, q?: string): Promise<UsuarioEntity[]>;
   findBySalonAndId(salonId: number, id: number): Promise<UsuarioEntity | null>;
   findBySalonAndPhone(salonId: number, phone: string): Promise<UsuarioEntity | null>;
   create(data: Partial<UsuarioEntity>): Promise<UsuarioEntity>;

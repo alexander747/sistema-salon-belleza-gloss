@@ -48,29 +48,40 @@ export class CreateRegistroUseCase {
     const totalCostoBaseInsumos = (input.serviciosItems ?? [])
       .reduce((sum, si) => sum + (si.costoBaseInsumos ?? 0), 0);
 
-    const comisionCalculada = this.comisionService.calcularComision(
-      input.totalServicios,
-      porcentaje,
-      totalCostoBaseInsumos,
-    );
     const montoTotal = this.comisionService.calcularMontoTotal(
       input.totalServicios,
       input.totalProductos,
       input.propina,
     );
+
+    // ── 4a. Price adjustment fields ──────────────────────────
+    const porcentajeDescuento = input.porcentajeDescuento ?? 0;
+    const propina = input.propina ?? 0;
+    const valorOriginal = montoTotal; // sum before any discount
+    const valorFinal = input.valorFinal ?? montoTotal;
+    // Use frontend's explicit flag; fallback to false if not provided
+    const precioAjustado = input.precioAjustado ?? false;
+
+    // ── 4b. Commission on ADJUSTED services total ────────────
+    // Commission is computed on what the client actually paid for services:
+    // prorate totalServicios by (valorFinal - propina) / (montoTotal - propina).
+    const baseBruta = montoTotal - propina;
+    const baseReal = valorFinal - propina;
+    const proporcion = baseBruta > 0 ? baseReal / baseBruta : 1;
+    const totalServiciosAjustado = Math.round(Number(input.totalServicios) * proporcion);
+
+    const comisionCalculada = this.comisionService.calcularComision(
+      totalServiciosAjustado,
+      porcentaje,
+      totalCostoBaseInsumos,
+    );
+
     const totalPagado = (input.pagos ?? []).reduce((sum, p) => sum + p.monto, 0);
     const montoPendiente = this.comisionService.calcularMontoPendiente(
       input.totalServicios,
       input.totalProductos,
       totalPagado,
     );
-
-    // ── 4a. Price adjustment fields ──────────────────────────
-    const porcentajeDescuento = input.porcentajeDescuento ?? 0;
-    const valorOriginal = montoTotal; // sum before any discount
-    const valorFinal = input.valorFinal ?? montoTotal;
-    // Use frontend's explicit flag; fallback to false if not provided
-    const precioAjustado = input.precioAjustado ?? false;
 
     // ── 5. Transaction ────────────────────────────────────────
     const queryRunner = AppDataSource.createQueryRunner();

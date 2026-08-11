@@ -52,6 +52,7 @@ describe('EmpleadaController', () => {
         userRol: Rol.DUEÑA,
         rol: undefined,
         activo: undefined,
+        q: undefined,
       });
     });
 
@@ -72,6 +73,7 @@ describe('EmpleadaController', () => {
         userRol: Rol.DUEÑA,
         rol: 4,
         activo: true,
+        q: undefined,
       });
     });
   });

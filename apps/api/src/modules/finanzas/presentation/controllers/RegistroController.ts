@@ -1,10 +1,18 @@
 import { injectable, inject } from 'tsyringe';
 import type { Request, Response, NextFunction } from 'express';
+import { Rol } from '@pos-final/types';
 import { CreateRegistroUseCase } from '../../application/use-cases/registro/CreateRegistroUseCase';
 import { ListRegistrosUseCase } from '../../application/use-cases/registro/ListRegistrosUseCase';
 import { GetRegistroUseCase } from '../../application/use-cases/registro/GetRegistroUseCase';
 import { AnularRegistroUseCase } from '../../application/use-cases/registro/AnularRegistroUseCase';
 import { paginationSchema } from '@pos-final/validation';
+
+const REGISTROS_PRIVILEGED_ROLES = new Set<number>([
+  Rol.SUPERADMIN,
+  Rol.DUEÑA,
+  Rol.ADMINISTRADOR,
+  Rol.CONTADOR,
+]);
 
 @injectable()
 export class RegistroController {
@@ -21,14 +29,23 @@ export class RegistroController {
       const page = pag.success ? pag.data.page : 1;
       const limit = pag.success ? pag.data.limit : 0;
 
+      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+
+      const usuarioId = isPrivileged
+        ? req.query.usuarioId ? Number(req.query.usuarioId) : undefined
+        : req.user!.id;
+      const clienteId = isPrivileged
+        ? req.query.clienteId ? Number(req.query.clienteId) : undefined
+        : undefined;
+
       const result = await this.listUseCase.execute({
         salonId: req.salonId!,
         page,
         limit,
         desde: req.query.desde ? new Date((req.query.desde as string) + 'T00:00:00-05:00') : undefined,
         hasta: req.query.hasta ? new Date((req.query.hasta as string) + 'T23:59:59-05:00') : undefined,
-        usuarioId: req.query.usuarioId ? Number(req.query.usuarioId) : undefined,
-        clienteId: req.query.clienteId ? Number(req.query.clienteId) : undefined,
+        usuarioId,
+        clienteId,
       });
       res.json(result);
     } catch (error) {

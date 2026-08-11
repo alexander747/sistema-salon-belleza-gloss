@@ -8,6 +8,9 @@ export interface ResumenDiaInput {
   fecha?: string; // YYYY-MM-DD (Colombia date) — single day
   desde?: string; // YYYY-MM-DD — period start
   hasta?: string; // YYYY-MM-DD — period end
+  usuarioId?: number;
+  clienteId?: number;
+  tipo?: 'TODOS' | 'SERVICIOS' | 'PRODUCTOS';
 }
 
 export interface ResumenDiaOutput {
@@ -56,8 +59,22 @@ export class ResumenDiaUseCase {
       fin = new Date(Date.UTC(year, month - 1, day + 1, 5, 0, 0, 0));
     }
 
+    // Decision (documented): totalGastos is NEVER filtered by empleada/cliente.
+    // Expenses belong to the salon — GastoEntity has no usuarioId/clienteId, so
+    // filtering them by an empleada/cliente filter would be semantically wrong.
+    // The sum keeps spanning the full date range regardless of the input filters.
+    const hasFiltroPersona = input.usuarioId !== undefined || input.clienteId !== undefined;
+
     const [registros, totalGastos] = await Promise.all([
-      this.registroRepo.findBySalonAndDateRange(input.salonId, inicio, fin),
+      hasFiltroPersona
+        ? this.registroRepo.search({
+            salonId: input.salonId,
+            desde: inicio,
+            hasta: fin,
+            usuarioId: input.usuarioId,
+            clienteId: input.clienteId,
+          })
+        : this.registroRepo.findBySalonAndDateRange(input.salonId, inicio, fin),
       this.gastoRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
     ]);
 
@@ -88,12 +105,25 @@ export class ResumenDiaUseCase {
       const baseReal = valorFinal - propina;  // serv + prod reales (post-descuento)
       const proporcion = baseBruta > 0 ? baseReal / baseBruta : 1;
 
-      totalServicios += Math.round(servBruto * proporcion);
-      totalProductos += Math.round(prodBruto * proporcion);
+      const servContrib = Math.round(servBruto * proporcion);
+      const prodContrib = Math.round(prodBruto * proporcion);
+
+      // Tipo filter: when SERVICIOS, product contributions are zeroed; when
+      // PRODUCTOS, service contributions are zeroed. TODOS keeps both.
+      totalServicios += input.tipo === 'PRODUCTOS' ? 0 : servContrib;
+      totalProductos += input.tipo === 'SERVICIOS' ? 0 : prodContrib;
       totalPropinas += propina;
       totalComisiones += Number(r.comisionCalculada);
-      cantidadProductosVendidos += Number(r.cantidadProductosVendidos ?? 0);
-      totalIngresos += Math.round((servBruto + prodBruto) * proporcion);
+      cantidadProductosVendidos +=
+        input.tipo === 'SERVICIOS' ? 0 : Number(r.cantidadProductosVendidos ?? 0);
+
+      if (input.tipo === 'SERVICIOS') {
+        totalIngresos += servContrib;
+      } else if (input.tipo === 'PRODUCTOS') {
+        totalIngresos += prodContrib;
+      } else {
+        totalIngresos += Math.round((servBruto + prodBruto) * proporcion);
+      }
 
       // Costo base de insumos es un costo real del salón; se suma sin ajuste por descuento
       const costoBaseItems = (r.serviciosItems ?? []).reduce(
@@ -111,9 +141,12 @@ export class ResumenDiaUseCase {
       totalPropinas,
       totalComisiones,
       totalCostoBaseInsumos,
-      cantidadAtenciones: registros.filter(
-        (r) => r.estado !== 'ANULADO' && Number(r.totalServicios) > 0,
-      ).length,
+      cantidadAtenciones:
+        input.tipo === 'PRODUCTOS'
+          ? 0
+          : registros.filter(
+              (r) => r.estado !== 'ANULADO' && Number(r.totalServicios) > 0,
+            ).length,
       cantidadProductosVendidos,
       totalIngresos,
       totalGastos,

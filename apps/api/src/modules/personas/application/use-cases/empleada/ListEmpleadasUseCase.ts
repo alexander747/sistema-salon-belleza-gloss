@@ -8,6 +8,7 @@ interface ListEmpleadasInput {
   userRol: Rol;
   rol?: Rol;
   activo?: boolean;
+  q?: string;
 }
 
 @injectable()
@@ -21,6 +22,7 @@ export class ListEmpleadasUseCase {
       input.salonId,
       input.rol,
       input.activo,
+      input.q,
     );
 
     return empleadas.map((emp) => EmpleadaDTO.fromEntity(emp, input.userRol));

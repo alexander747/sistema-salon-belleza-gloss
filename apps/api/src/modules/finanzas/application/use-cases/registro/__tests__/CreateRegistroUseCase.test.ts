@@ -177,6 +177,63 @@ describe('CreateRegistroUseCase', () => {
     }));
   });
 
+  it('should calculate commission on the adjusted services total when price is adjusted', async () => {
+    const mockCliente = { id: 1, totalServicios: 5, deudaTotal: 50000 };
+    const mockUsuario = { id: 2, porcentajeComisionServicio: '50' };
+    const mockSaved = {
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      usuarioId: 2,
+      totalServicios: 85000,
+      totalProductos: 0,
+      montoTotal: 85000,
+      propina: 0,
+      comisionCalculada: 40000,
+      esRetoque: false,
+      montoPendiente: 0,
+      estaPagadaEmpleada: false,
+      notas: null,
+      descripcionServicio: null,
+      pagos: [{ id: 1, monto: 80000, metodoPago: 'EFECTIVO', referencia: null, creadoEn: new Date() }],
+      divisiones: [],
+      creadoEn: new Date(),
+      actualizadoEn: new Date(),
+    };
+
+    mockClienteRepo.findBySalonAndId.mockResolvedValue(mockCliente);
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(mockUsuario);
+    mockComisionService.calcularComision.mockReturnValue(40000);
+    mockComisionService.calcularMontoTotal.mockReturnValue(85000);
+    mockComisionService.calcularMontoPendiente.mockReturnValue(0);
+    mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+    mockPagoRepo.bulkCreate.mockResolvedValue([]);
+    mockRegistroRepo.findById.mockResolvedValue(mockSaved);
+
+    const input = {
+      ...validInput,
+      totalServicios: 85000,
+      totalProductos: 0,
+      propina: 0,
+      pagos: [
+        { monto: 80000, metodoPago: 'EFECTIVO' as const },
+      ],
+      porcentajeDescuento: 0,
+      precioAjustado: true,
+      valorOriginal: 85000,
+      valorFinal: 80000,
+      serviciosItems: [
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 85000, costoBaseInsumos: 0 },
+      ],
+    };
+
+    const result = await useCase.execute(input);
+
+    // proportion = (80000 - 0) / (85000 - 0) ≈ 0.941176 → round(85000 × 0.941176) = 80000
+    expect(mockComisionService.calcularComision).toHaveBeenCalledWith(80000, 50, 0);
+    expect(result.comisionCalculada).toBe(40000);
+  });
+
   it('should throw NotFoundError when cliente does not exist', async () => {
     mockClienteRepo.findBySalonAndId.mockResolvedValue(null);
 

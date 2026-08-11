@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
+import { Rol } from '@pos-final/types';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { ReporteController } from '../ReporteController';
 
@@ -38,6 +39,7 @@ describe('ReporteController', () => {
       const req = {
         salonId: 1,
         query: { fecha: '2026-05-30' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
       } as unknown as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
@@ -60,7 +62,11 @@ describe('ReporteController', () => {
         totalIngresos: 0,
       });
 
-      const req = { salonId: 1, query: {} } as Request;
+      const req = {
+        salonId: 1,
+        query: {},
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
       await controller.resumenDia(req, res, next);
@@ -72,6 +78,93 @@ describe('ReporteController', () => {
       // Verify it's today (Colombia date string)
       const calledArg = mockResumenDiaUseCase.execute.mock.calls[0][0];
       expect(calledArg.fecha).toBe(getColombiaDateString());
+    });
+
+    it('should force usuarioId and ignore clienteId for non-privileged roles', async () => {
+      mockResumenDiaUseCase.execute.mockResolvedValue({
+        totalServicios: 0,
+        totalProductos: 0,
+        totalPropinas: 0,
+        totalComisiones: 0,
+        cantidadAtenciones: 0,
+        totalIngresos: 0,
+      });
+
+      const req = {
+        salonId: 1,
+        query: { fecha: '2026-05-30', usuarioId: '99', clienteId: '77', tipo: 'SERVICIOS' },
+        user: { id: 4, email: 'm@t.com', rol: Rol.MANICURISTA, salonId: 1, nombre: 'Manicurista' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenDia(req, res, next);
+
+      expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        fecha: '2026-05-30',
+        usuarioId: 4,
+        tipo: 'SERVICIOS',
+      });
+    });
+
+    it('should honor usuarioId/clienteId/tipo for privileged roles', async () => {
+      mockResumenDiaUseCase.execute.mockResolvedValue({
+        totalServicios: 0,
+        totalProductos: 0,
+        totalPropinas: 0,
+        totalComisiones: 0,
+        cantidadAtenciones: 0,
+        totalIngresos: 0,
+      });
+
+      const req = {
+        salonId: 1,
+        query: {
+          desde: '2026-05-01',
+          hasta: '2026-05-30',
+          usuarioId: '5',
+          clienteId: '9',
+          tipo: 'PRODUCTOS',
+        },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenDia(req, res, next);
+
+      expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-30',
+        usuarioId: 5,
+        clienteId: 9,
+        tipo: 'PRODUCTOS',
+      });
+    });
+
+    it('should fall back to TODOS when tipo is invalid', async () => {
+      mockResumenDiaUseCase.execute.mockResolvedValue({
+        totalServicios: 0,
+        totalProductos: 0,
+        totalPropinas: 0,
+        totalComisiones: 0,
+        cantidadAtenciones: 0,
+        totalIngresos: 0,
+      });
+
+      const req = {
+        salonId: 1,
+        query: { fecha: '2026-05-30', tipo: 'BOGUS' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenDia(req, res, next);
+
+      expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        fecha: '2026-05-30',
+      });
     });
   });
 

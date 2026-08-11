@@ -25,6 +25,7 @@ export class EmpleadaController {
         userRol: req.user!.rol,
         rol: req.query.rol ? Number(req.query.rol) : undefined,
         activo: req.query.activo !== undefined ? req.query.activo === 'true' : undefined,
+        q: (req.query.q as string) || undefined,
       });
       res.json(result);
     } catch (error) {
