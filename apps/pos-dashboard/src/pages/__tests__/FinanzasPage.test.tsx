@@ -550,6 +550,17 @@ describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
     expect(within(mariaRow).getByText('30%')).toBeInTheDocument(); // porcentajeComisionServicio
   });
 
+  it('muestra badge "Al día" cuando pendienteActual es 0 (ya liquidada, solo historial)', async () => {
+    await openCuentasTab();
+
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+
+    const sofia = await screen.findByText('Sofía Ruiz');
+    const sofiaRow = sofia.closest('tr')!;
+    expect(within(sofiaRow).getByText(/al día/i)).toBeInTheDocument();
+    expect(within(sofiaRow).getByText(fmt(200000))).toBeInTheDocument(); // liquidadoAcumulado
+  });
+
   it('NO muestra botones de cobro ni "registrar pago" en la sub-vista Cobrar (v1 read-only)', async () => {
     await openCuentasTab();
     await screen.findByText('Ana Gómez');
