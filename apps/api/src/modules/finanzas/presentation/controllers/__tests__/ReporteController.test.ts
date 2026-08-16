@@ -12,6 +12,7 @@ describe('ReporteController', () => {
   let mockROIMensualUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockCierreTurnoUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockPyLMensualUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockExcelExportService: { exportar: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -19,12 +20,14 @@ describe('ReporteController', () => {
     mockROIMensualUseCase = { execute: vi.fn() };
     mockCierreTurnoUseCase = { execute: vi.fn() };
     mockPyLMensualUseCase = { execute: vi.fn() };
+    mockExcelExportService = { exportar: vi.fn() };
     next = vi.fn();
     controller = new ReporteController(
       mockResumenDiaUseCase as never,
       mockROIMensualUseCase as never,
       mockCierreTurnoUseCase as never,
       mockPyLMensualUseCase as never,
+      mockExcelExportService as never,
     );
   });
 
@@ -352,6 +355,97 @@ describe('ReporteController', () => {
 
       expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
       expect(mockPyLMensualUseCase.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('exportar', () => {
+    const buffer = Buffer.from('PK\x03\x04fake-xlsx');
+
+    it('devuelve el xlsx con headers de descarga y el buffer', async () => {
+      mockExcelExportService.exportar.mockResolvedValue({
+        buffer,
+        filename: 'pyl_2026-05-01_2026-05-31.xlsx',
+      });
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-05-01', hasta: '2026-05-31' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = {
+        setHeader: vi.fn(),
+        send: vi.fn(),
+      } as unknown as Response;
+
+      await controller.exportar(req, res, next);
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="pyl_2026-05-01_2026-05-31.xlsx"',
+      );
+      expect(res.send).toHaveBeenCalledWith(buffer);
+      expect(mockExcelExportService.exportar).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+      });
+    });
+
+    it('rol restringido es forzado a su propio usuarioId e ignora el filtro recibido', async () => {
+      mockExcelExportService.exportar.mockResolvedValue({ buffer, filename: 'pyl.xlsx' });
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-05-01', hasta: '2026-05-31', usuarioId: '99' },
+        user: { id: 4, email: 'm@t.com', rol: Rol.MANICURISTA, salonId: 1, nombre: 'Manicurista' },
+      } as unknown as Request;
+      const res = { setHeader: vi.fn(), send: vi.fn() } as unknown as Response;
+
+      await controller.exportar(req, res, next);
+
+      expect(mockExcelExportService.exportar).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+        usuarioId: 4,
+      });
+    });
+
+    it('rol privilegiado sin usuarioId no envía el filtro', async () => {
+      mockExcelExportService.exportar.mockResolvedValue({ buffer, filename: 'pyl.xlsx' });
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-05-01', hasta: '2026-05-31' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.CONTADOR, salonId: 1, nombre: 'Contador' },
+      } as unknown as Request;
+      const res = { setHeader: vi.fn(), send: vi.fn() } as unknown as Response;
+
+      await controller.exportar(req, res, next);
+
+      expect(mockExcelExportService.exportar).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+      });
+    });
+
+    it('parámetros inválidos lanzan ValidationError (400) sin llamar al servicio', async () => {
+      const req = {
+        salonId: 1,
+        query: { hasta: '2026-05-31', usuarioId: 'no-numero' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { setHeader: vi.fn(), send: vi.fn() } as unknown as Response;
+
+      await controller.exportar(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
+      expect(mockExcelExportService.exportar).not.toHaveBeenCalled();
     });
   });
 });

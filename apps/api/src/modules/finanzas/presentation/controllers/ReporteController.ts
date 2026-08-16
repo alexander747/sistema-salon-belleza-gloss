@@ -6,6 +6,7 @@ import { ResumenDiaUseCase, type ResumenDiaInput } from '../../application/use-c
 import { ROIMensualUseCase } from '../../application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../../application/use-cases/reporte/CierreTurnoUseCase';
 import { PyLMensualUseCase } from '../../application/use-cases/reporte/PyLMensualUseCase';
+import { ExcelExportService } from '../../application/services/ExcelExportService';
 import { ValidationError } from '../../../../shared/errors';
 import { getColombiaDateString } from '../../../../shared/colombia-date';
 
@@ -35,6 +36,7 @@ export class ReporteController {
     @inject(ROIMensualUseCase) private readonly roiMensualUseCase: ROIMensualUseCase,
     @inject(CierreTurnoUseCase) private readonly cierreTurnoUseCase: CierreTurnoUseCase,
     @inject(PyLMensualUseCase) private readonly pylMensualUseCase: PyLMensualUseCase,
+    @inject(ExcelExportService) private readonly excelExportService: ExcelExportService,
   ) {}
 
   resumenDia = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -125,6 +127,36 @@ export class ReporteController {
         ...(usuarioId !== undefined ? { usuarioId } : {}),
       });
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  exportar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = PYL_QUERY_SCHEMA.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError('Parámetros inválidos', parsed.error.flatten().fieldErrors);
+      }
+
+      // Misma regla de roles que pyl: privilegiados pueden filtrar por empleada;
+      // roles restringidos son forzados a su propio usuarioId.
+      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+      const usuarioId = isPrivileged ? parsed.data.usuarioId : req.user!.id;
+
+      const { buffer, filename } = await this.excelExportService.exportar({
+        salonId: req.salonId!,
+        ...(parsed.data.desde ? { desde: parsed.data.desde } : {}),
+        ...(parsed.data.hasta ? { hasta: parsed.data.hasta } : {}),
+        ...(usuarioId !== undefined ? { usuarioId } : {}),
+      });
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(buffer);
     } catch (error) {
       next(error);
     }

@@ -7,10 +7,11 @@
 
 const COLOMBIA_UTC_OFFSET_MS = -5 * 3_600_000; // UTC-5 in milliseconds
 
-/** Returns the current date in Colombia timezone as YYYY-MM-DD. */
-export function getColombiaDateString(): string {
-  const now = new Date();
-  const colombiaTime = new Date(now.getTime() + now.getTimezoneOffset() * 60_000 + COLOMBIA_UTC_OFFSET_MS);
+/** Returns the date in Colombia timezone as YYYY-MM-DD (defaults to now).
+ *  Colombia is UTC-5, so the Colombia date is the UTC date shifted by −5h;
+ *  this is machine-timezone independent (unlike a local-time formula). */
+export function getColombiaDateString(date: Date = new Date()): string {
+  const colombiaTime = new Date(date.getTime() + COLOMBIA_UTC_OFFSET_MS);
   const y = colombiaTime.getUTCFullYear();
   const m = String(colombiaTime.getUTCMonth() + 1).padStart(2, '0');
   const d = String(colombiaTime.getUTCDate()).padStart(2, '0');

@@ -40,13 +40,13 @@ Chain strategy: stacked-to-main
 
 ## PR 2 — Excel export
 
-- [ ] 2.1 Add `exceljs` to `apps/api/package.json` (`npm install exceljs`)
-- [ ] 2.2 Create `ExcelExportService`: pure `buildPyLWorkbook(pyl, movimientos)` (P&L + Movimientos sheets; header fill `#4f46e5`, COP `'$#,##0'`, column widths) + `exportar()` orchestrating `PyLMensualUseCase` + `registroRepo.search`
-- [ ] 2.3 Register `ExcelExportService` in `shared/container.ts`
-- [ ] 2.4 Add `exportar` handler to `ReporteController`: same role rule + safeParse; Content-Type/Content-Disposition; `res.send(buffer)`
-- [ ] 2.5 Add `GET /finanzas/exportar` to `finanzas.routes.ts`
-- [ ] 2.6 Frontend: Export button + `downloadExcel` helper (`responseType: 'blob'`, error branch reads blob text)
-- [ ] 2.7 Tests: `ExcelExportService.test.ts` (sheets, headers, formats) + `ReporteController.test.ts` exportar cases + `FinanzasPage.test.tsx` blob case (mock `createObjectURL`)
+- [x] 2.1 Add `exceljs` to `apps/api/package.json` (`npm install exceljs`)
+- [x] 2.2 Create `ExcelExportService`: pure `buildPyLWorkbook(pyl, movimientos)` (P&L + Movimientos sheets; header fill `#4f46e5`, COP `'$#,##0'`, column widths) + `exportar()` orchestrating `PyLMensualUseCase` + `registroRepo.search`
+- [x] 2.3 Register `ExcelExportService` in `shared/container.ts`
+- [x] 2.4 Add `exportar` handler to `ReporteController`: same role rule + safeParse; Content-Type/Content-Disposition; `res.send(buffer)`
+- [x] 2.5 Add `GET /finanzas/exportar` to `finanzas.routes.ts`
+- [x] 2.6 Frontend: Export button + `downloadExcel` helper (`responseType: 'blob'`, error branch reads blob text)
+- [x] 2.7 Tests: `ExcelExportService.test.ts` (sheets, headers, formats) + `ReporteController.test.ts` exportar cases + `FinanzasPage.test.tsx` blob case (mock `createObjectURL`)
 
 ## Verification (both PRs)
 
