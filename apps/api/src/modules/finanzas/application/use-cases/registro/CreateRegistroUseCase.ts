@@ -12,6 +12,8 @@ import type { IClienteRepository } from '../../../../personas/domain/ports/IClie
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
 import type { IProductoRepository } from '../../../../catalogo/domain/ports/IProductoRepository';
 import { ComisionService } from '../../services/ComisionService';
+import { verificarCajaAbierta } from '../../services/verificarCajaAbierta';
+import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { RegistroServicioDTO } from '../../dtos/RegistroServicioDTO';
 import { registroServicioToDTO } from '../../dtos/RegistroServicioDTO';
 import { NotFoundError } from '../../../../../shared/errors';
@@ -26,9 +28,13 @@ export class CreateRegistroUseCase {
     @inject('IPersonasUsuarioRepository') private readonly usuarioRepo: IUsuarioRepository,
     @inject(ComisionService) private readonly comisionService: ComisionService,
     @inject('IProductoRepository') private readonly productoRepo: IProductoRepository,
+    @inject('ICajaRepository') private readonly cajaRepo: ICajaRepository,
   ) {}
 
   async execute(input: CreateRegistroInput): Promise<RegistroServicioDTO> {
+    // ── 0. Regla de oro: no se vende sin caja abierta ──────────
+    const caja = await verificarCajaAbierta(this.cajaRepo, input.salonId);
+
     // ── 1. Validate cliente exists ────────────────────────────
     const cliente = await this.clienteRepo.findBySalonAndId(input.salonId, input.clienteId);
     if (!cliente) {
@@ -100,6 +106,7 @@ export class CreateRegistroUseCase {
           salonId: input.salonId,
           clienteId: input.clienteId,
           usuarioId: input.usuarioId,
+          cajaId: caja.id,
           totalServicios: input.totalServicios,
           totalProductos: input.totalProductos,
           cantidadProductosVendidos,

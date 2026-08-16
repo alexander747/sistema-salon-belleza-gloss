@@ -48,13 +48,16 @@ vi.mock('../../../../../../shared/database.js', () => ({
 }));
 
 import { CreateRegistroUseCase } from '../CreateRegistroUseCase';
-import { NotFoundError } from '../../../../../../shared/errors';
+import { NotFoundError, CajaCerradaError } from '../../../../../../shared/errors';
 import type { CreateRegistroInput } from '@pos-final/validation';
 
 // ── Mocks ──────────────────────────────────────────────────────
 const mockRegistroRepo = {
   create: vi.fn(),
   findById: vi.fn(),
+};
+const mockCajaRepo = {
+  findAbiertaBySalonYFecha: vi.fn(),
 };
 const mockPagoRepo = {
   bulkCreate: vi.fn(),
@@ -98,6 +101,8 @@ describe('CreateRegistroUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Regla de oro: caja ABIERTA por defecto para que los tests existentes pasen
+    mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 1, estado: 'ABIERTA' });
     useCase = new CreateRegistroUseCase(
       mockRegistroRepo as never,
       mockPagoRepo as never,
@@ -106,7 +111,64 @@ describe('CreateRegistroUseCase', () => {
       mockUsuarioRepo as never,
       mockComisionService as never,
       mockProductoRepo as never,
+      mockCajaRepo as never,
     );
+  });
+
+  describe('regla de oro (caja abierta)', () => {
+    it('should throw CajaCerradaError when no caja ABIERTA exists and not persist', async () => {
+      mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue(null);
+
+      await expect(useCase.execute(validInput)).rejects.toThrow(CajaCerradaError);
+
+      // El guard corre ANTES de validar cliente → ni siquiera se consulta
+      expect(mockClienteRepo.findBySalonAndId).not.toHaveBeenCalled();
+      expect(mockRegistroRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('should persist cajaId from the open caja on the registro', async () => {
+      const mockCliente = { id: 1, totalServicios: 5, deudaTotal: 50000 };
+      const mockUsuario = { id: 2, porcentajeComisionServicio: '60' };
+      const mockSaved = {
+        id: 1,
+        salonId: 1,
+        clienteId: 1,
+        usuarioId: 2,
+        totalServicios: 100000,
+        totalProductos: 50000,
+        montoTotal: 160000,
+        propina: 10000,
+        comisionCalculada: 60000,
+        esRetoque: false,
+        montoPendiente: 50000,
+        estaPagadaEmpleada: false,
+        notas: null,
+        descripcionServicio: null,
+        pagos: [],
+        divisiones: [],
+        creadoEn: new Date(),
+        actualizadoEn: new Date(),
+      };
+
+      mockClienteRepo.findBySalonAndId.mockResolvedValue(mockCliente);
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue(mockUsuario);
+      mockComisionService.calcularComision.mockReturnValue(60000);
+      mockComisionService.calcularMontoTotal.mockReturnValue(160000);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(50000);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue(mockSaved);
+
+      await useCase.execute(validInput);
+
+      expect(mockCajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(
+        1,
+        expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      );
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ cajaId: 5 }),
+        expect.anything(),
+      );
+    });
   });
 
   it('should create a registro with commissions calculated correctly', async () => {
