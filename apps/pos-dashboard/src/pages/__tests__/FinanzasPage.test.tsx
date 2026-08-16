@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 
@@ -440,5 +440,203 @@ describe('FinanzasPage — Exportar Excel', () => {
 
     expect(await screen.findByText(/rango inválido/i)).toBeInTheDocument();
     expect(mockCreateObjectURL).not.toHaveBeenCalled();
+  });
+});
+
+describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
+  const cuentasCobrar = [
+    { clienteId: 1, nombre: 'Ana Gómez', deudaTotal: 120000, cantidadRegistros: 2, antiguedadDias: 45, antiguedadBucket: '31-60' },
+    { clienteId: 2, nombre: 'Lina Pérez', deudaTotal: 40000, cantidadRegistros: 1, antiguedadDias: 5, antiguedadBucket: '0-30' },
+  ];
+
+  const cuentasPagar = [
+    { empleadaId: 3, nombre: 'María Torres', sueldoFijo: 800000, porcentajeComisionServicio: 30, pendienteActual: 298000, liquidadoAcumulado: 550000 },
+    { empleadaId: 4, nombre: 'Sofía Ruiz', sueldoFijo: 0, porcentajeComisionServicio: 40, pendienteActual: 0, liquidadoAcumulado: 200000 },
+  ];
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(n)
+      .replace(/\u00a0/g, ' ');
+
+  const cuentasResponse = (data: unknown[], total: number) => ({
+    data: {
+      ok: true,
+      data: {
+        data,
+        meta: { page: 1, limit: 12, total, totalPages: Math.max(1, Math.ceil(total / 12)) },
+      },
+    },
+  });
+
+  /** Mock base del tab Cuentas: responde los endpoints de cuentas con datos por defecto. */
+  function cuentasApiMock(url: string): Promise<unknown> {
+    if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+    if (url.includes('/caja/actual')) return Promise.reject(error404);
+    if (url.includes('/finanzas/cuentas/cobrar')) {
+      return Promise.resolve(cuentasResponse(cuentasCobrar, cuentasCobrar.length));
+    }
+    if (url.includes('/finanzas/cuentas/pagar')) {
+      return Promise.resolve(cuentasResponse(cuentasPagar, cuentasPagar.length));
+    }
+    if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+    if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+    if (url.includes('/registros')) {
+      return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+    }
+    if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+    return Promise.resolve({ data: {} });
+  }
+
+  async function openCuentasTab(
+    mockImpl: (url: string) => Promise<unknown> = cuentasApiMock,
+  ) {
+    mockGet.mockImplementation(mockImpl);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '💳 Cuentas' }));
+    // Esperar a que el tab dispare la consulta de cuentas por cobrar
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith(
+        expect.stringContaining('/finanzas/cuentas/cobrar'),
+        expect.anything(),
+      );
+    });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  it('agrega el tab "💳 Cuentas" a la navegación para roles privilegiados', async () => {
+    mockGet.mockImplementation(cuentasApiMock);
+    renderPage();
+    expect(await screen.findByRole('button', { name: '💳 Cuentas' })).toBeInTheDocument();
+  });
+
+  it('renderiza la sub-vista Cobrar con cliente, deuda, registros y antigüedad de la API', async () => {
+    await openCuentasTab();
+
+    expect(await screen.findByRole('button', { name: /por cobrar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /por pagar/i })).toBeInTheDocument();
+
+    const ana = await screen.findByText('Ana Gómez');
+    const anaRow = ana.closest('tr')!;
+    expect(within(anaRow).getByText(fmt(120000))).toBeInTheDocument(); // deudaTotal
+    expect(within(anaRow).getByText('2')).toBeInTheDocument(); // cantidadRegistros
+    expect(within(anaRow).getByText('31-60 días')).toBeInTheDocument(); // bucket antigüedad
+
+    const lina = screen.getByText('Lina Pérez');
+    const linaRow = lina.closest('tr')!;
+    expect(within(linaRow).getByText(fmt(40000))).toBeInTheDocument();
+    expect(within(linaRow).getByText('0-30 días')).toBeInTheDocument();
+  });
+
+  it('cambia a la sub-vista Pagar con empleada, pendiente, liquidado, sueldo fijo y comisión', async () => {
+    await openCuentasTab();
+
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+
+    const maria = await screen.findByText('María Torres');
+    const mariaRow = maria.closest('tr')!;
+    expect(within(mariaRow).getByText(fmt(298000))).toBeInTheDocument(); // pendienteActual
+    expect(within(mariaRow).getByText(fmt(550000))).toBeInTheDocument(); // liquidadoAcumulado
+    expect(within(mariaRow).getByText(fmt(800000))).toBeInTheDocument(); // sueldoFijo
+    expect(within(mariaRow).getByText('30%')).toBeInTheDocument(); // porcentajeComisionServicio
+  });
+
+  it('NO muestra botones de cobro ni "registrar pago" en la sub-vista Cobrar (v1 read-only)', async () => {
+    await openCuentasTab();
+    await screen.findByText('Ana Gómez');
+
+    expect(screen.queryByRole('button', { name: 'Cobrar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /registrar pago/i })).toBeNull();
+  });
+
+  it('muestra estado vacío "No hay deudas de clientas" cuando Cobrar viene vacío', async () => {
+    await openCuentasTab((url) => {
+      if (url.includes('/finanzas/cuentas/cobrar')) return Promise.resolve(cuentasResponse([], 0));
+      return cuentasApiMock(url);
+    });
+
+    expect(await screen.findByText(/no hay deudas de clientas/i)).toBeInTheDocument();
+  });
+
+  it('muestra estado vacío "No hay pagos pendientes" cuando Pagar viene vacío', async () => {
+    await openCuentasTab((url) => {
+      if (url.includes('/finanzas/cuentas/pagar')) return Promise.resolve(cuentasResponse([], 0));
+      return cuentasApiMock(url);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+    expect(await screen.findByText(/no hay pagos pendientes/i)).toBeInTheDocument();
+  });
+
+  it('oculta el tab Cuentas para roles restringidos (MANICURISTA)', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: manicurista });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      return cuentasApiMock(url);
+    });
+
+    renderPage();
+    await screen.findByRole('button', { name: '📋 Registros' });
+
+    expect(screen.queryByRole('button', { name: '💳 Cuentas' })).toBeNull();
+  });
+
+  it('navega a la página 2 de Cobrar con el botón Siguiente', async () => {
+    await openCuentasTab((url) => {
+      if (url.includes('/finanzas/cuentas/cobrar')) {
+        return Promise.resolve(cuentasResponse(cuentasCobrar, 25));
+      }
+      return cuentasApiMock(url);
+    });
+
+    await screen.findByText('Ana Gómez');
+    fireEvent.click(screen.getByRole('button', { name: /siguiente/i }));
+
+    await waitFor(() => {
+      const cobrarCalls = mockGet.mock.calls.filter(([u]) =>
+        String(u).includes('/finanzas/cuentas/cobrar'),
+      );
+      expect(cobrarCalls[cobrarCalls.length - 1][1].params).toMatchObject({ page: 2, limit: 12 });
+    });
+  });
+
+  it('navega a la página 2 de Pagar con el botón Siguiente', async () => {
+    await openCuentasTab((url) => {
+      if (url.includes('/finanzas/cuentas/pagar')) {
+        return Promise.resolve(cuentasResponse(cuentasPagar, 25));
+      }
+      return cuentasApiMock(url);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+    await screen.findByText('María Torres');
+    fireEvent.click(screen.getByRole('button', { name: /siguiente/i }));
+
+    await waitFor(() => {
+      const pagarCalls = mockGet.mock.calls.filter(([u]) =>
+        String(u).includes('/finanzas/cuentas/pagar'),
+      );
+      expect(pagarCalls[pagarCalls.length - 1][1].params).toMatchObject({ page: 2, limit: 12 });
+    });
+  });
+
+  it('muestra error y botón Reintentar cuando ambas consultas fallan', async () => {
+    await openCuentasTab((url) => {
+      if (url.includes('/finanzas/cuentas/cobrar')) return Promise.reject(new Error('boom'));
+      if (url.includes('/finanzas/cuentas/pagar')) return Promise.reject(new Error('boom'));
+      return cuentasApiMock(url);
+    });
+
+    expect(await screen.findByText(/error al cargar las cuentas/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
   });
 });

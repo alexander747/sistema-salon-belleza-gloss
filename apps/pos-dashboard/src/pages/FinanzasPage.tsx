@@ -170,7 +170,25 @@ interface PyLData {
   utilidadNeta: number;
 }
 
-type TabKey = 'registros' | 'gastos' | 'devoluciones' | 'nomina' | 'reportes' | 'caja';
+interface CuentaCobrar {
+  clienteId: number;
+  nombre: string;
+  deudaTotal: number;
+  cantidadRegistros: number;
+  antiguedadDias: number;
+  antiguedadBucket: string;
+}
+
+interface CuentaPagar {
+  empleadaId: number;
+  nombre: string;
+  sueldoFijo: number;
+  porcentajeComisionServicio: number;
+  pendienteActual: number;
+  liquidadoAcumulado: number;
+}
+
+type TabKey = 'registros' | 'gastos' | 'devoluciones' | 'nomina' | 'reportes' | 'caja' | 'cuentas';
 
 /* ================================================================ */
 /*  CONSTANTS                                                        */
@@ -185,7 +203,30 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'nomina', label: '👩‍💼 Nómina' },
   { key: 'reportes', label: '📊 Reportes' },
   { key: 'caja', label: '💰 Caja' },
+  { key: 'cuentas', label: '💳 Cuentas' },
 ];
+
+/* ── Tab Cuentas: roles con acceso (misma lista que requireRole del backend) ── */
+const ROLES_CUENTAS: Rol[] = [Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR];
+
+function puedeVerCuentas(user: IUser | null | undefined): boolean {
+  return !!user && ROLES_CUENTAS.includes(user.rol);
+}
+
+const CUENTAS_PAGE_SIZE = 12;
+const CUENTAS_META_VACIO = { page: 1, limit: CUENTAS_PAGE_SIZE, total: 0, totalPages: 0 };
+
+/* Etiquetas legibles para el bucket de antigüedad devuelto por la API. */
+const ANTIGUEDAD_LABELS: Record<string, string> = {
+  '0-30': '0-30 días',
+  '31-60': '31-60 días',
+  '61-90': '61-90 días',
+  '90+': 'Más de 90 días',
+};
+
+function antiguedadLabel(bucket: string): string {
+  return ANTIGUEDAD_LABELS[bucket] ?? bucket;
+}
 
 const GASTO_CATEGORIAS = [
   { value: 'SERVICIOS', label: 'Servicios' },
@@ -413,7 +454,7 @@ const FinanzasPage: React.FC = () => {
 
       {/* ── Tab Navigation ── */}
       <div className={styles.tabsRow}>
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => tab.key !== 'cuentas' || puedeVerCuentas(user)).map((tab) => (
           <button
             key={tab.key}
             className={`${styles.tabBtn} ${activeTab === tab.key ? styles.tabActive : ''}`}
@@ -448,6 +489,9 @@ const FinanzasPage: React.FC = () => {
         )}
         {activeTab === 'caja' && (
           <CajaTab key="caja" salonId={salonId} user={user} />
+        )}
+        {activeTab === 'cuentas' && puedeVerCuentas(user) && (
+          <CuentasTab key="cuentas" salonId={salonId} />
         )}
       </AnimatePresence>
     </>
@@ -4231,6 +4275,310 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           <p className={styles.emptySubtitle}>
             No hay información financiera para los filtros seleccionados. Cambiá la fecha o mes para ver otros períodos.
           </p>
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+/* ================================================================ */
+/*  CUENTAS TAB                                                      */
+/* ================================================================ */
+
+interface CuentasPaginacionProps {
+  page: number;
+  meta: { page: number; limit: number; total: number; totalPages: number };
+  totalLabel: string;
+  onPrev: () => void;
+  onNext: () => void;
+}
+
+/** Controles de paginación del tab Cuentas (mismo patrón visual que CajaTab). */
+const CuentasPaginacion: React.FC<CuentasPaginacionProps> = ({ page, meta, totalLabel, onPrev, onNext }) => {
+  if (meta.totalPages <= 1) return null;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '0.9rem', alignItems: 'center' }}>
+      <button
+        disabled={page <= 1}
+        onClick={onPrev}
+        style={{
+          fontSize: '0.8125rem',
+          padding: '0.35rem 0.85rem',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--bg-surface)',
+          color: 'var(--text-primary)',
+          cursor: page <= 1 ? 'not-allowed' : 'pointer',
+          opacity: page <= 1 ? 0.5 : 1,
+        }}
+      >
+        ← Anterior
+      </button>
+      <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+        Página {meta.page} de {meta.totalPages} ({meta.total} {totalLabel})
+      </span>
+      <button
+        disabled={page >= meta.totalPages}
+        onClick={onNext}
+        style={{
+          fontSize: '0.8125rem',
+          padding: '0.35rem 0.85rem',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--bg-surface)',
+          color: 'var(--text-primary)',
+          cursor: page >= meta.totalPages ? 'not-allowed' : 'pointer',
+          opacity: page >= meta.totalPages ? 0.5 : 1,
+        }}
+      >
+        Siguiente →
+      </button>
+    </div>
+  );
+};
+
+const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
+  /* ── Sub-vistas: Cobrar (clientes con deuda) / Pagar (empleadas) ── */
+  const [cuentasSubtab, setCuentasSubtab] = useState<'cobrar' | 'pagar'>('cobrar');
+
+  const [cobrar, setCobrar] = useState<CuentaCobrar[]>([]);
+  const [cobrarPage, setCobrarPage] = useState(1);
+  const [cobrarMeta, setCobrarMeta] = useState(CUENTAS_META_VACIO);
+
+  const [pagar, setPagar] = useState<CuentaPagar[]>([]);
+  const [pagarPage, setPagarPage] = useState(1);
+  const [pagarMeta, setPagarMeta] = useState(CUENTAS_META_VACIO);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /* ── Fetchers (devuelven éxito para decidir el estado global de error) ── */
+  const loadCobrar = useCallback(async (page: number): Promise<boolean> => {
+    if (salonId == null) return false;
+    try {
+      const { data } = await api.get(`/salones/${salonId}/finanzas/cuentas/cobrar`, {
+        params: { page, limit: CUENTAS_PAGE_SIZE },
+      });
+      const payload = data?.data;
+      setCobrar(Array.isArray(payload?.data) ? payload.data : []);
+      setCobrarMeta(payload?.meta ?? CUENTAS_META_VACIO);
+      return true;
+    } catch {
+      setCobrar([]);
+      setCobrarMeta(CUENTAS_META_VACIO);
+      return false;
+    }
+  }, [salonId]);
+
+  const loadPagar = useCallback(async (page: number): Promise<boolean> => {
+    if (salonId == null) return false;
+    try {
+      const { data } = await api.get(`/salones/${salonId}/finanzas/cuentas/pagar`, {
+        params: { page, limit: CUENTAS_PAGE_SIZE },
+      });
+      const payload = data?.data;
+      setPagar(Array.isArray(payload?.data) ? payload.data : []);
+      setPagarMeta(payload?.meta ?? CUENTAS_META_VACIO);
+      return true;
+    } catch {
+      setPagar([]);
+      setPagarMeta(CUENTAS_META_VACIO);
+      return false;
+    }
+  }, [salonId]);
+
+  const fetchData = useCallback(async () => {
+    if (salonId == null) return;
+    setLoading(true);
+    setError(null);
+    const [cobrarOk, pagarOk] = await Promise.all([loadCobrar(1), loadPagar(1)]);
+    if (!cobrarOk && !pagarOk) {
+      setError('Error al cargar las cuentas');
+    }
+    setLoading(false);
+  }, [salonId, loadCobrar, loadPagar]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  /* ── Paginación por sub-vista (patrón cierres de CajaTab: sin flash global) ── */
+  const goCobrarPage = (next: number) => {
+    setCobrarPage(next);
+    loadCobrar(next);
+  };
+
+  const goPagarPage = (next: number) => {
+    setPagarPage(next);
+    loadPagar(next);
+  };
+
+  if (loading) {
+    return (
+      <motion.div key="cuentas-loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+        <Skeleton height="36px" width="220px" variant="rect" style={{ marginBottom: '1rem' }} />
+        <Skeleton height="260px" variant="rect" />
+      </motion.div>
+    );
+  }
+
+  if (error) {
+    return (
+      <motion.div
+        key="cuentas-error"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={styles.emptyState}
+      >
+        <span className={styles.emptyIcon}>⚠️</span>
+        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', color: 'var(--danger)', marginBottom: '1rem' }}>
+          {error}
+        </p>
+        <Button variant="secondary" size="sm" onClick={fetchData}>
+          Reintentar
+        </Button>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div key="cuentas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
+      {/* ── Sub-tab Navigation ── */}
+      <div style={{
+        display: 'flex',
+        gap: '0.25rem',
+        marginBottom: '1rem',
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        padding: '0.25rem',
+        width: 'fit-content',
+      }}>
+        <button
+          className={`${styles.tabBtn} ${cuentasSubtab === 'cobrar' ? styles.tabActive : ''}`}
+          onClick={() => setCuentasSubtab('cobrar')}
+        >
+          💳 Por cobrar
+        </button>
+        <button
+          className={`${styles.tabBtn} ${cuentasSubtab === 'pagar' ? styles.tabActive : ''}`}
+          onClick={() => setCuentasSubtab('pagar')}
+        >
+          💸 Por pagar
+        </button>
+      </div>
+
+      {cuentasSubtab === 'cobrar' ? (
+        /* ════════════════════════════════════════════════ */
+        /*  POR COBRAR — clientes con deuda                  */
+        /* ════════════════════════════════════════════════ */
+        <div>
+          {cobrar.length === 0 ? (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyIcon}>✅</span>
+              <h3 className={styles.emptyTitle}>No hay deudas de clientas</h3>
+              <p className={styles.emptySubtitle}>
+                Los montos pendientes de clientes aparecerán aquí.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead className={styles.tableHead}>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Deuda total</th>
+                      <th>Registros</th>
+                      <th>Antigüedad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cobrar.map((c) => (
+                      <tr key={c.clienteId} className={styles.tableRow}>
+                        <td style={{ fontWeight: 500 }}>{c.nombre}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--danger)' }}>
+                          {formatCurrency(c.deudaTotal)}
+                        </td>
+                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                          {c.cantidadRegistros}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                          {antiguedadLabel(c.antiguedadBucket)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <CuentasPaginacion
+                page={cobrarPage}
+                meta={cobrarMeta}
+                totalLabel="clientes"
+                onPrev={() => goCobrarPage(cobrarPage - 1)}
+                onNext={() => goCobrarPage(cobrarPage + 1)}
+              />
+            </>
+          )}
+        </div>
+      ) : (
+        /* ════════════════════════════════════════════════ */
+        /*  POR PAGAR — empleadas con obligaciones           */
+        /* ════════════════════════════════════════════════ */
+        <div>
+          {pagar.length === 0 ? (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyIcon}>✅</span>
+              <h3 className={styles.emptyTitle}>No hay pagos pendientes</h3>
+              <p className={styles.emptySubtitle}>
+                Las obligaciones del salón con sus empleadas aparecerán aquí.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead className={styles.tableHead}>
+                    <tr>
+                      <th>Empleada</th>
+                      <th>Pendiente</th>
+                      <th>Liquidado acumulado</th>
+                      <th>Sueldo fijo</th>
+                      <th>Comisión %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagar.map((e) => (
+                      <tr key={e.empleadaId} className={styles.tableRow}>
+                        <td style={{ fontWeight: 500 }}>{e.nombre}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--danger)' }}>
+                          {formatCurrency(e.pendienteActual)}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                          {formatCurrency(e.liquidadoAcumulado)}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                          {formatCurrency(e.sueldoFijo)}
+                        </td>
+                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                          {e.porcentajeComisionServicio}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <CuentasPaginacion
+                page={pagarPage}
+                meta={pagarMeta}
+                totalLabel="empleadas"
+                onPrev={() => goPagarPage(pagarPage - 1)}
+                onNext={() => goPagarPage(pagarPage + 1)}
+              />
+            </>
+          )}
         </div>
       )}
     </motion.div>

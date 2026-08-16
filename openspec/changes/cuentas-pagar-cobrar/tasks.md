@@ -50,14 +50,14 @@ Chain strategy: stacked-to-main
 
 ## Phase 5: Dashboard — Tab Cuentas (PR 2)
 
-- [ ] 5.1 En `FinanzasPage.tsx`: agregar `'cuentas'` a `TabKey` + entrada `'💳 Cuentas'` en `TABS`
-- [ ] 5.2 Crear `CuentasTab` (patrón sub-tabs de `NominaTab`): sub-vista Cobrar (tabla cliente/deuda/registros/antigüedad, paginación 12) + sub-vista Pagar (tabla empleada/pendiente/liquidado); fetch vía `api.get` con `Promise.allSettled`; sin botones de acción
-- [ ] 5.3 Renderizar `CuentasTab` en el switch de tabs
+- [x] 5.1 En `FinanzasPage.tsx`: agregar `'cuentas'` a `TabKey` + entrada `'💳 Cuentas'` en `TABS`
+- [x] 5.2 Crear `CuentasTab` (patrón sub-tabs de `NominaTab`): sub-vista Cobrar (tabla cliente/deuda/registros/antigüedad, paginación 12) + sub-vista Pagar (tabla empleada/pendiente/liquidado); fetch vía `api.get` con `Promise.allSettled`; sin botones de acción
+- [x] 5.3 Renderizar `CuentasTab` en el switch de tabs
 
 ## Phase 6: Dashboard — Tests (PR 2)
 
-- [ ] 6.1 En `FinanzasPage.test.tsx`: tab Cuentas renderiza sub-vistas con datos mockeados (spec Req 4, escenario 1)
-- [ ] 6.2 Test: NO hay botones de cobro en sub-vista Cobrar (spec Req 4, escenario 2)
+- [x] 6.1 En `FinanzasPage.test.tsx`: tab Cuentas renderiza sub-vistas con datos mockeados (spec Req 4, escenario 1)
+- [x] 6.2 Test: NO hay botones de cobro en sub-vista Cobrar (spec Req 4, escenario 2)
 
 ## Dependency Notes
 
