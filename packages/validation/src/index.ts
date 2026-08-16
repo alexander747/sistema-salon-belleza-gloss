@@ -78,3 +78,5 @@ export type {
   CreateDevolucionInput,
   LiquidarEmpleadaInput,
 } from './finanzas.schema.js';
+export { abrirCajaSchema, cerrarCajaSchema } from './caja.schema.js';
+export type { AbrirCajaInput, CerrarCajaInput } from './caja.schema.js';

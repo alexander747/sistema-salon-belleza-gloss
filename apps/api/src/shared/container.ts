@@ -219,6 +219,7 @@ import { TypeORMDivisionRegistroRepository } from '../modules/finanzas/infrastru
 import { TypeORMLiquidacionRepository } from '../modules/finanzas/infrastructure/persistence/TypeORMLiquidacionRepository';
 import { TypeORMGastoRepository } from '../modules/finanzas/infrastructure/persistence/TypeORMGastoRepository';
 import { TypeORMDevolucionRepository } from '../modules/finanzas/infrastructure/persistence/TypeORMDevolucionRepository';
+import { TypeORMCajaRepository } from '../modules/finanzas/infrastructure/persistence/TypeORMCajaRepository';
 
 // Planes Module
 import { TypeORMPlanRepository } from '../modules/planes/infrastructure/repositories/TypeORMPlanRepository';
@@ -260,6 +261,14 @@ import { GastoController } from '../modules/finanzas/presentation/controllers/Ga
 import { DevolucionController } from '../modules/finanzas/presentation/controllers/DevolucionController';
 import { LiquidacionController } from '../modules/finanzas/presentation/controllers/LiquidacionController';
 import { ReporteController } from '../modules/finanzas/presentation/controllers/ReporteController';
+import { CajaController } from '../modules/finanzas/presentation/controllers/CajaController';
+
+// ---- Finanzas Module — Caja (use cases) ----
+import { AbrirCajaUseCase } from '../modules/finanzas/application/use-cases/caja/AbrirCajaUseCase';
+import { CerrarCajaUseCase } from '../modules/finanzas/application/use-cases/caja/CerrarCajaUseCase';
+import { ObtenerCajaActualUseCase } from '../modules/finanzas/application/use-cases/caja/ObtenerCajaActualUseCase';
+import { ObtenerEsperadoCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ObtenerEsperadoCajaUseCase';
+import { ListarCierresCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ListarCierresCajaUseCase';
 
 // ---- Finanzas Module — DI ----
 container.register('IRegistroServicioRepository', { useClass: TypeORMRegistroServicioRepository });
@@ -268,6 +277,7 @@ container.register('IDivisionRegistroRepository', { useClass: TypeORMDivisionReg
 container.register('ILiquidacionRepository', { useClass: TypeORMLiquidacionRepository });
 container.register('IGastoRepository', { useClass: TypeORMGastoRepository });
 container.register('IDevolucionRepository', { useClass: TypeORMDevolucionRepository });
+container.register('ICajaRepository', { useClass: TypeORMCajaRepository });
 container.register(ComisionService, { useClass: ComisionService });
 
 // ---- Finanzas Module — Use Cases (Registros) ----
@@ -301,6 +311,14 @@ container.register(GastoController, { useClass: GastoController });
 container.register(DevolucionController, { useClass: DevolucionController });
 container.register(LiquidacionController, { useClass: LiquidacionController });
 container.register(ReporteController, { useClass: ReporteController });
+container.register(CajaController, { useClass: CajaController });
+
+// ---- Finanzas Module — Caja (use cases) ----
+container.register(AbrirCajaUseCase, { useClass: AbrirCajaUseCase });
+container.register(CerrarCajaUseCase, { useClass: CerrarCajaUseCase });
+container.register(ObtenerCajaActualUseCase, { useClass: ObtenerCajaActualUseCase });
+container.register(ObtenerEsperadoCajaUseCase, { useClass: ObtenerEsperadoCajaUseCase });
+container.register(ListarCierresCajaUseCase, { useClass: ListarCierresCajaUseCase });
 
 // ---- Préstamos Module — Repositories ----
 import { TypeORMPrestamoRepository } from '../modules/prestamos/infrastructure/persistence/TypeORMPrestamoRepository';
