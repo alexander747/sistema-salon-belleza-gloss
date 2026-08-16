@@ -1,6 +1,6 @@
 # Verification Report — caja-apertura-cierre
 
-**Change**: caja-apertura-cierre (PR1–PR4, branch `feat/caja-backend`)
+**Change**: caja-apertura-cierre (PR1–PR5)
 **Mode**: Strict TDD (vitest, jsdom)
 **Verifier**: sdd-verify sub-agent
 **Date**: 2026-08-16
@@ -199,3 +199,100 @@ All other scenario totals (ingresosBrutos=300000, descuentos=10000, ingresosNeto
 ## Verdict
 
 **PASS WITH WARNINGS** — all 8 finanzas-caja requirements (19 scenarios) plus finanzas-registros/gastos deltas are implemented and covered by passing tests; golden rule enforced at all 3 chokepoints with cash-only arqueo per owner decision; zero new test/type errors (only pre-existing failures); the only incomplete item is the manual E2E (task 4.5) requiring environment. Spec scenario "Reporte completo" requires the documented cash-only adjustment (260000 → 170000). Ready for archive after the spec adjustment is applied by the orchestrator.
+
+---
+
+# PR5 — Reapertura de caja (POST /salones/:id/caja/reabrir)
+
+**Verifier**: sdd-verify sub-agent
+**Date**: 2026-08-16
+**Commits**: `fa6cd4d` (backend) + `8587433` (dashboard), merged into `main` (HEAD)
+**Mode**: Standard verify (tests run; pre-existing failures allowed and listed)
+
+## Verdict
+
+**PASS** — PR5 implementation matches spec requirement "POST Reabrir Caja" (3/3 scenarios covered by passing tests) and tasks 5.1–5.6. Race safety and same-caja invariants hold. No new type errors, no new test failures. The only failures in full runs are the documented pre-existing ones (RegistroController ×2 API; CajaCerradaFlows dashboard flake). Real E2E already confirmed by orchestrator: reabrir 200 → ya abierta 409 → vender 201 → esperado 65000 → cerrar diferencia 0.
+
+## Build & Tests Execution (PR5)
+
+**API typecheck** — `cd apps/api && npx tsc --noEmit`
+```text
+3 errors, ALL pre-existing (identical to PR1-4 baseline, zero in PR5 files):
+- seed.ts(238,23); CreateRegistroUseCase.test.ts(86,9); RegistroServicioItemDTO.test.ts(3,44)
+```
+
+**Dashboard typecheck** — `cd apps/pos-dashboard && npx tsc --noEmit`
+```text
+5 errors, ALL pre-existing baseline: AgendaPage.tsx ×3 (istart/setClientes/status),
+DashboardPage.tsx (todayStr), ServiciosPage.tsx (handleToggleActive). Zero in CajaTab/CajaBanner.
+```
+
+**API suite** — `cd apps/api && npx vitest run`
+```text
+✓ 240 passed | ✗ 2 failed (both RegistroController.test.ts — PRE-EXISTING, documented in PR1-4 report;
+confirmed same 2 fail in isolation). Test Files 1 failed | 43 passed (44).
+PR5 added 4 tests → 233 → 240.
+```
+
+**Dashboard suite** — `cd apps/pos-dashboard && npx vitest run`
+```text
+✓ 33 passed | ✗ 1 failed (CajaCerradaFlows.test.tsx:117 — KNOWN LOAD FLAKE documented in PR1-4 report;
+passes in isolation 2/2 and on CajaTab run). Test Files 1 failed | 6 passed (7).
+```
+
+**PR5-focused runs** (all green):
+```text
+ReabrirCajaUseCase.test.ts ......... 4 passed (4)    ✓
+CajaTab.test.tsx ................... 13 passed (13)  ✓  (6 reabrir-specific)
+CajaCerradaFlows.test.tsx (isolado) 2 passed (2)     ✓  (flake confirmed, not regression)
+```
+
+## Spec Compliance Matrix — REQ "POST Reabrir Caja" (3 scenarios)
+
+| Requirement | Scenario | Test | Result |
+|-------------|----------|------|--------|
+| POST Reabrir Caja | Reabrir caja cerrada hoy (id 5, close data cleared, no new row) | `ReabrirCajaUseCase.test.ts > should reabrir la MISMA caja de hoy (id 5) limpiando los datos de cierre, sin crear fila nueva` | ✅ COMPLIANT |
+| POST Reabrir Caja | Reabrir cuando ya está abierta → 409 CAJA_YA_ABIERTA | `ReabrirCajaUseCase.test.ts > should throw CajaYaAbiertaError cuando la caja de hoy ya está ABIERTA` | ✅ COMPLIANT |
+| POST Reabrir Caja | Reabrir sin caja de hoy → 404 CAJA_NO_ABIERTA | `ReabrirCajaUseCase.test.ts > should throw CajaNoAbiertaError cuando no existe caja para hoy` | ✅ COMPLIANT |
+
+**Compliance summary**: 3/3 scenarios compliant (plus 1 extra race test). 0 UNTESTED, 0 FAILING.
+
+## Correctness (Static Evidence)
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| `ReabrirCajaUseCase` busca caja de hoy por `getColombiaDateString()` | ✅ | `ReabrirCajaUseCase.ts:26-27` `findBySalonYFecha(salonId, fechaCaja)` |
+| null → 404 CAJA_NO_ABIERTA | ✅ | `:29-31` `throw new CajaNoAbiertaError()` (errors.ts:106 → 404/CAJA_NO_ABIERTA) |
+| ABIERTA → 409 CAJA_YA_ABIERTA | ✅ | `:32-34` `caja.estado !== 'CERRADA'` → `CajaYaAbiertaError()` (errors.ts:88 → 409/CAJA_YA_ABIERTA) |
+| CERRADA → estado ABIERTA + limpiar montoEsperado/montoRealEfectivo/diferencia/cierrePorId/cierreEn | ✅ | `:44-52` DTO built with all 5 close fields null; repo UPDATE sets them NULL |
+| Misma fila, NO crear nueva | ✅ | `reabrir(id)` es UPDATE por id (nunca insert); test asserts `result.id === 5`; UNIQUE (salonId, fechaCaja) intacto |
+| Race safety (UPDATE condicional estado='CERRADA'→ABIERTA, afectados===1) | ✅ | `TypeORMCajaRepository.ts:53-69` `.where('id = :id AND estado = :estado', { estado: 'CERRADA' })`, `affected === 1`; mismo patrón que `cerrar()` (:30-46); race test: `reabrir` false → CajaYaAbiertaError |
+| Ruta web `POST /salones/:salonId/caja/reabrir` con `requireRole(S,D,A,R)` | ✅ | `finanzas.routes.ts:92-96` `requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA)` |
+| Controller `reabrir` 200 `{ok:true,data}` | ✅ | `CajaController.ts:52-59`; `CajaController.test.ts` describe 'reabrir' (200 + error→next) |
+| Mirror n8n `POST /api/n8n/:salonId/caja/reabrir` | ✅ | `n8n.routes.ts:21` `apiKeyGuard + tenantGuard + cajaController.reabrir` (auditores null vía `req.user?.id ?? null`) |
+| DI registration | ✅ | `container.ts:320` `container.register(ReabrirCajaUseCase, ...)` |
+| Frontend: botón "Reabrir caja" solo si caja de hoy CERRADA, confirm(), POST, caja-refresh | ✅ | `CajaTab.tsx:297-322` (handleReabrir), `:353-357` (hoyCerrada), `:422-431` (render); 6 tests en `CajaTab.test.tsx` (visible/no-visible/confirm-POST/cancel/409/404) |
+
+## Issues Found (PR5)
+
+**CRITICAL**: None.
+
+**WARNING**:
+1. **Dashboard flake (pre-existing, no nuevo)** — `CajaCerradaFlows.test.tsx:117` falló 1 vez en la corrida completa (timeout findByText); pasa en aislamiento 2/2 y en la corrida de CajaTab. Ya documentado en PR1-4; no es regresión de PR5.
+
+**SUGGESTION**:
+1. **Test de ruta n8n reabrir (supertest)** — el mirror `n8n.routes.ts:21` se verifica solo estáticamente + a nivel controller; no hay test de ruta con apiKeyGuard real (misma deuda ya listada en PR1-4, ahora también aplica a reabrir).
+2. **`TypeORMCajaRepository.reabrir` sin test directo** — cubierto vía use case (mock devuelve true/false); no hay patrón de repo tests en el codebase (deuda documentada, consistente).
+3. Tasks.md `5.8` (verificación) queda como ejecutada por este reporte; E2E manual confirmado por orchestrator fuera de banda.
+
+## PR5 Completeness
+
+| Metric | Value |
+|--------|-------|
+| Tasks total (PR5) | 8 (5.1–5.8) |
+| Tasks complete | 7 (5.1–5.7) + 5.8 ejecutada por esta verificación |
+| Tasks incomplete | 0 |
+
+## Verdict
+
+**PASS** — 3/3 escenarios de "POST Reabrir Caja" cumplidos con tests pasando; invariantes de race (UPDATE condicional estado='CERRADA') y de misma-caja (id 5 preservado, sin fila nueva) verificados; ruta web con requireRole S,D,A,R y mirror n8n con apiKeyGuard+tenantGuard presentes; tsc sin errores nuevos (solo baseline pre-existente); 4/4 tests de use case + 13/13 de CajaTab + controller reabrir tests en verde; E2E real confirmado (reabrir 200 → 409 → vender 201 → esperado 65000 → cerrar dif 0). El cambio queda listo para archive.
