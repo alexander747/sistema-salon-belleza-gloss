@@ -125,6 +125,9 @@ interface NominaEmpleado {
   porcentajeComisionServicio: number;
   totalAPagar: number;
   cantidadRegistros: number;
+  periodoInicio: string;
+  periodoFin: string;
+  frecuenciaPago: string;
 }
 
 interface HistorialLiquidacion {
@@ -337,6 +340,23 @@ function toISODate(d: Date): string {
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
   const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/**
+ * Formatea una fecha de período de nómina a dd/mm/yyyy en día de Colombia (UTC-5).
+ * El backend envía el fin de período como límite EXCLUSIVO (colombiaDayEndUTC =
+ * 05:00 UTC del día siguiente): para mostrarlo como día inclusivo, `esFin` resta un día.
+ */
+function formatPeriodoFecha(iso?: string, esFin = false): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const ms = d.getTime() - 5 * 3_600_000 - (esFin ? 24 * 3_600_000 : 0);
+  const cot = new Date(ms);
+  const y = cot.getUTCFullYear();
+  const m = String(cot.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(cot.getUTCDate()).padStart(2, '0');
+  return `${day}/${m}/${y}`;
 }
 
 
@@ -2465,6 +2485,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const handleLiquidar = async (
     empleadaId: number,
+    periodo?: { periodoInicio: string; periodoFin: string },
     totalPagadoOverride?: number,
     descuentos?: Array<{prestamoId: number; monto: number}>,
   ) => {
@@ -2472,13 +2493,19 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     setSubmittingId(empleadaId);
     setError(null);
     try {
-      const now = new Date();
-      const firstDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      // Usar el período de la fila pendiente (calculado por frecuencia en el backend);
+      // fallback al mes actual si la fila no lo trae.
+      const periodoBody = periodo?.periodoInicio && periodo?.periodoFin
+        ? { periodoInicio: periodo.periodoInicio, periodoFin: periodo.periodoFin }
+        : (() => {
+            const now = new Date();
+            const firstDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+            const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            return { periodoInicio: toISODate(firstDay), periodoFin: toISODate(today) };
+          })();
       const body: Record<string, any> = {
         usuarioId: empleadaId,
-        periodoInicio: toISODate(firstDay),
-        periodoFin: toISODate(today),
+        ...periodoBody,
       };
       if (totalPagadoOverride != null) {
         body.totalPagado = totalPagadoOverride;
@@ -2567,6 +2594,10 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     try {
       await handleLiquidar(
         selectedEmpleada.empleadaId,
+        {
+          periodoInicio: selectedEmpleada.periodoInicio,
+          periodoFin: selectedEmpleada.periodoFin,
+        },
         totalPagadoOverride,
         descuentos.length > 0 ? descuentos : undefined,
       );
@@ -2736,6 +2767,14 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                         color: 'var(--text-secondary)',
                       }}>
                         {emp.cantidadRegistros} servicios realizados
+                      </div>
+                      <div style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.6875rem',
+                        color: 'var(--text-dim)',
+                        marginTop: '0.1rem',
+                      }}>
+                        Período {emp.frecuenciaPago} · {formatPeriodoFecha(emp.periodoInicio)} → {formatPeriodoFecha(emp.periodoFin, true)}
                       </div>
                     </div>
                   </div>

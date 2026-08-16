@@ -61,7 +61,7 @@ async function openCreateModal() {
   fireEvent.change(screen.getByPlaceholderText('Contraseña (mín. 6 caracteres)'), {
     target: { value: '123456' },
   });
-  fireEvent.change(screen.getByRole('combobox'), {
+  fireEvent.change(screen.getByLabelText('Rol'), {
     target: { value: String(Rol.MANICURISTA) },
   });
 }
@@ -161,5 +161,91 @@ describe('EmpleadasPage — esquema de pago (tipoPago)', () => {
     // Ambos campos precargados → el modo detectado es MIXTO
     expect(screen.getByDisplayValue('1200000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('30')).toBeInTheDocument();
+  });
+});
+
+describe('EmpleadasPage — frecuencia de pago', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockPatch.mockReset();
+  });
+
+  it('envía frecuenciaPago MENSUAL por defecto al crear', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+    await openCreateModal();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/salones/1/empleadas',
+      expect.objectContaining({ frecuenciaPago: 'MENSUAL' }),
+    );
+  });
+
+  it('envía frecuenciaPago QUINCENAL al seleccionarla', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+    await openCreateModal();
+
+    fireEvent.change(screen.getByLabelText('Frecuencia de pago'), {
+      target: { value: 'QUINCENAL' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/salones/1/empleadas',
+      expect.objectContaining({ frecuenciaPago: 'QUINCENAL' }),
+    );
+  });
+
+  it('precarga la frecuencia de pago al editar una empleada QUINCENAL', async () => {
+    defaultApiMock([
+      {
+        id: 7,
+        nombre: 'Luz',
+        email: 'luz@test.com',
+        numeroWhatsApp: '3000000001',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 1200000,
+        bonoHorario: 0,
+        frecuenciaPago: 'QUINCENAL',
+        activo: true,
+      },
+    ]);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByLabelText('Editar'));
+
+    expect(screen.getByLabelText('Frecuencia de pago')).toHaveValue('QUINCENAL');
+  });
+
+  it('muestra el badge de frecuencia en la columna Pago', async () => {
+    defaultApiMock([
+      {
+        id: 8,
+        nombre: 'Ana',
+        email: 'ana@test.com',
+        numeroWhatsApp: '3000000002',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 0,
+        sueldoFijo: 1200000,
+        bonoHorario: 0,
+        frecuenciaPago: 'QUINCENAL',
+        activo: true,
+      },
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText('QUINCENAL')).toBeInTheDocument();
   });
 });

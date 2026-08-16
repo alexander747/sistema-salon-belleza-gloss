@@ -18,6 +18,7 @@ interface Empleada {
   porcentajeComisionServicio: number;
   sueldoFijo: number;
   bonoHorario: number;
+  frecuenciaPago?: string;
   avatar?: string;
   fechaNacimiento?: string;
   activo: boolean;
@@ -37,6 +38,7 @@ interface EmpleadaForm {
   porcentajeComisionServicio: string;
   sueldoFijo: string;
   bonoHorario: string;
+  frecuenciaPago: 'MENSUAL' | 'QUINCENAL';
   fechaNacimiento: string;
 }
 
@@ -79,6 +81,7 @@ const EMPTY_FORM: EmpleadaForm = {
   porcentajeComisionServicio: '50',
   sueldoFijo: '0',
   bonoHorario: '0',
+  frecuenciaPago: 'MENSUAL',
   fechaNacimiento: '',
 };
 
@@ -233,6 +236,7 @@ const EmpleadasPage: React.FC = () => {
       porcentajeComisionServicio: empleada.porcentajeComisionServicio != null ? String(empleada.porcentajeComisionServicio) : '50',
       sueldoFijo: empleada.sueldoFijo != null ? String(empleada.sueldoFijo) : '0',
       bonoHorario: empleada.bonoHorario != null ? String(empleada.bonoHorario) : '0',
+      frecuenciaPago: empleada.frecuenciaPago === 'QUINCENAL' ? 'QUINCENAL' : 'MENSUAL',
       fechaNacimiento: empleada.fechaNacimiento ? new Date(empleada.fechaNacimiento).toISOString().split('T')[0] : '',
     });
     setModalMode('edit');
@@ -261,6 +265,7 @@ const EmpleadasPage: React.FC = () => {
           ? Number(form.sueldoFijo)
           : 0,
       bonoHorario: Number(form.bonoHorario) || 0,
+      frecuenciaPago: form.frecuenciaPago,
       ...(form.fechaNacimiento ? { fechaNacimiento: form.fechaNacimiento } : {}),
     };
   };
@@ -684,6 +689,9 @@ const RenderTable: React.FC<RenderTableProps> = ({
                   : empleada.porcentajeComisionServicio != null
                     ? `${empleada.porcentajeComisionServicio}%`
                     : '—'}
+              {empleada.frecuenciaPago ? (
+                <span className={styles.frecuenciaBadge}>{empleada.frecuenciaPago}</span>
+              ) : null}
             </td>
             <td>
               <div className={styles.toggleWrapper}>
@@ -867,6 +875,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
           </label>
           <select
             className={styles.formSelect}
+            aria-label="Rol"
             value={form.rol}
             onChange={(e) => onChange({ rol: e.target.value })}
           >
@@ -903,6 +912,22 @@ const RenderFormModal: React.FC<FormModalProps> = ({
               Mixto
             </button>
           </div>
+        </div>
+
+        {/* ── Sección: Frecuencia de Pago ── */}
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>
+            Frecuencia de pago
+          </label>
+          <select
+            className={styles.formSelect}
+            aria-label="Frecuencia de pago"
+            value={form.frecuenciaPago}
+            onChange={(e) => onChange({ frecuenciaPago: e.target.value as 'MENSUAL' | 'QUINCENAL' })}
+          >
+            <option value="MENSUAL">Mensual</option>
+            <option value="QUINCENAL">Quincenal</option>
+          </select>
         </div>
 
         {form.tipoPago === 'COMISION' || form.tipoPago === 'MIXTO' ? (
