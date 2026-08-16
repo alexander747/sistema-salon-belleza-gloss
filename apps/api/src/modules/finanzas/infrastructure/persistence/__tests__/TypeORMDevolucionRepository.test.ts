@@ -3,12 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGetRawOne = vi.fn();
 
+interface MockQueryBuilder {
+  select: ReturnType<typeof vi.fn>;
+  where: ReturnType<typeof vi.fn>;
+  andWhere: ReturnType<typeof vi.fn>;
+  getRawOne: ReturnType<typeof vi.fn>;
+}
+
 const mockQueryBuilder = {
   select: vi.fn(() => mockQueryBuilder),
   where: vi.fn(() => mockQueryBuilder),
   andWhere: vi.fn(() => mockQueryBuilder),
   getRawOne: mockGetRawOne,
-};
+} as unknown as MockQueryBuilder;
 
 vi.mock('../../../../../shared/database', () => ({
   AppDataSource: {
