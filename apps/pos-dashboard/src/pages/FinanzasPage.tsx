@@ -3804,6 +3804,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
   const [roi, setRoi] = useState<ROIData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
 
   // Filtro por empleada: solo roles privilegiados (misma regla que RegistrosTab)
   const [reporteUsuarioId, setReporteUsuarioId] = useState('');
@@ -3901,6 +3902,50 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
     fetchResumen();
   };
 
+  // Descarga el xlsx del período. Los errores de axios con responseType blob
+  // llegan como Blob (no JSON): se lee el texto y se intenta extraer el mensaje.
+  const downloadExcel = useCallback(async () => {
+    if (!salonId || exportando) return;
+    setExportando(true);
+    setError(null);
+    try {
+      const response = await api.get(`/salones/${salonId}/finanzas/exportar`, {
+        params: buildReportParams(),
+        responseType: 'blob',
+      });
+      const blob = response.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pyl_${reporteDesde}_${reporteHasta}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const axiosErr = err as {
+        response?: { data?: unknown };
+        message?: string;
+      };
+      let mensaje = 'No se pudo exportar el reporte';
+      const blobErr = axiosErr.response?.data;
+      if (blobErr instanceof Blob) {
+        try {
+          const texto = await blobErr.text();
+          const parsed = JSON.parse(texto) as { error?: { message?: string }; message?: string };
+          mensaje = parsed.error?.message ?? parsed.message ?? mensaje;
+        } catch {
+          // Blob sin JSON: queda el mensaje por defecto
+        }
+      } else if (axiosErr.message) {
+        mensaje = axiosErr.message;
+      }
+      setError(mensaje);
+    } finally {
+      setExportando(false);
+    }
+  }, [salonId, exportando, buildReportParams, reporteDesde, reporteHasta]);
+
   if (loading && !pyl && !resumen && !roi) {
     return (
       <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -3995,6 +4040,16 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           >
             Generar reporte
           </motion.button>
+          <motion.button
+            style={{ ...primaryBtnStyle, background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={downloadExcel}
+            disabled={exportando}
+            title="Descargar P&L y movimientos en Excel"
+          >
+            {exportando ? 'Exportando…' : '📥 Exportar Excel'}
+          </motion.button>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: 'auto' }}>
             <span className={styles.filterLabel}>ROI mensual:</span>
             <input
@@ -4006,6 +4061,24 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           </div>
         </div>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.8125rem',
+            color: 'var(--danger)',
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.6rem 0.9rem',
+            marginBottom: '0.75rem',
+          }}
+        >
+          ⚠️ {error}
+        </div>
+      )}
 
       {/* ── P&L del período (valores directos del backend) ── */}
       {pyl && (
