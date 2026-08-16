@@ -2,6 +2,7 @@ import { injectable, inject } from 'tsyringe';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
+import { calcularContribucionesRegistro } from './calculo-registro';
 
 export interface ResumenDiaInput {
   salonId: number;
@@ -94,19 +95,18 @@ export class ResumenDiaUseCase {
       // Skip anulled records — they should not contribute to daily summary
       if (r.estado === 'ANULADO') continue;
 
-      const servBruto = Number(r.totalServicios);
-      const prodBruto = Number(r.totalProductos);
       const propina = Number(r.propina);
       const montoTotal = Number(r.montoTotal);
-      const valorFinal = Number(r.valorFinal ?? montoTotal);
 
-      // Proporción del descuento sobre (servicios + productos), excluyendo propina
-      const baseBruta = montoTotal - propina; // serv + prod brutos
-      const baseReal = valorFinal - propina;  // serv + prod reales (post-descuento)
-      const proporcion = baseBruta > 0 ? baseReal / baseBruta : 1;
-
-      const servContrib = Math.round(servBruto * proporcion);
-      const prodContrib = Math.round(prodBruto * proporcion);
+      // Contribuciones post-descuento (misma lógica compartida con el P&L mensual)
+      const { servicios: servContrib, productos: prodContrib } =
+        calcularContribucionesRegistro({
+          totalServicios: Number(r.totalServicios),
+          totalProductos: Number(r.totalProductos),
+          propina,
+          montoTotal,
+          valorFinal: r.valorFinal != null ? Number(r.valorFinal) : montoTotal,
+        });
 
       // Tipo filter: when SERVICIOS, product contributions are zeroed; when
       // PRODUCTOS, service contributions are zeroed. TODOS keeps both.
@@ -122,7 +122,7 @@ export class ResumenDiaUseCase {
       } else if (input.tipo === 'PRODUCTOS') {
         totalIngresos += prodContrib;
       } else {
-        totalIngresos += Math.round((servBruto + prodBruto) * proporcion);
+        totalIngresos += servContrib + prodContrib;
       }
 
       // Costo base de insumos es un costo real del salón; se suma sin ajuste por descuento

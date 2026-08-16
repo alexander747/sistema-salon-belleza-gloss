@@ -14,4 +14,6 @@ export interface IDevolucionRepository {
     salonId: number;
     registroServicioId?: number;
   }): Promise<number>;
+  /** Suma de montoDevolucion en [fechaInicio, fechaFin) por salonId (sobre creadoEn). */
+  sumBySalonAndDateRange(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<number>;
 }

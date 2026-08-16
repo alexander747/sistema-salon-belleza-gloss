@@ -149,6 +149,27 @@ interface ROIData {
   mes: string;
 }
 
+interface PyLData {
+  desde: string;
+  hasta: string;
+  cantidadAtenciones: number;
+  ingresosBrutos: number;
+  descuentos: number;
+  ingresosNetos: number;
+  totalServicios: number;
+  totalProductos: number;
+  propinas: number;
+  costoBaseInsumos: number;
+  margenBruto: number;
+  comisiones: number;
+  gastosFijos: number;
+  gastosOperativos: number;
+  gastosPorCategoria: Record<string, number>;
+  totalGastos: number;
+  devoluciones: number;
+  utilidadNeta: number;
+}
+
 type TabKey = 'registros' | 'gastos' | 'devoluciones' | 'nomina' | 'reportes' | 'caja';
 
 /* ================================================================ */
@@ -423,7 +444,7 @@ const FinanzasPage: React.FC = () => {
           <NominaTab key="nomina" salonId={salonId} />
         )}
         {activeTab === 'reportes' && (
-          <ReportesTab key="reportes" salonId={salonId} />
+          <ReportesTab key="reportes" salonId={salonId} user={user} />
         )}
         {activeTab === 'caja' && (
           <CajaTab key="caja" salonId={salonId} user={user} />
@@ -3769,30 +3790,75 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 /*  REPORTES TAB                                                     */
 /* ================================================================ */
 
-const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
+const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
+  salonId,
+  user,
+}) => {
   const today = useMemo(() => new Date(), []);
   const [reporteDesde, setReporteDesde] = useState(toISODate(today));
   const [reporteHasta, setReporteHasta] = useState(toISODate(today));
   const [mes, setMes] = useState(getMonthISO(today));
 
+  const [pyl, setPyl] = useState<PyLData | null>(null);
   const [resumen, setResumen] = useState<FinanzasResumen | null>(null);
   const [roi, setRoi] = useState<ROIData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Filtro por empleada: solo roles privilegiados (misma regla que RegistrosTab)
+  const [reporteUsuarioId, setReporteUsuarioId] = useState('');
+  const [reporteEmpleadaNombre, setReporteEmpleadaNombre] = useState('');
+
+  const isPrivileged = !!user && (
+    user.rol === Rol.SUPERADMIN ||
+    user.rol === Rol.DUEÑA ||
+    user.rol === Rol.ADMINISTRADOR ||
+    user.rol === Rol.CONTADOR
+  );
+
+  // Params compartidos P&L + resumen: desde + hasta + usuarioId role-scoped.
+  // Los roles restringidos son forzados a su propio usuarioId.
+  const buildReportParams = useCallback((): Record<string, string> => {
+    const params: Record<string, string> = { desde: reporteDesde, hasta: reporteHasta };
+    if (!isPrivileged && user) {
+      params.usuarioId = String(user.id);
+    } else if (reporteUsuarioId) {
+      params.usuarioId = reporteUsuarioId;
+    }
+    return params;
+  }, [reporteDesde, reporteHasta, isPrivileged, user, reporteUsuarioId]);
+
+  const fetchPyl = useCallback(async () => {
+    if (!salonId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.get(`/salones/${salonId}/finanzas/pyl`, {
+        params: buildReportParams(),
+      });
+      setPyl(data);
+    } catch {
+      setPyl(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [salonId, buildReportParams]);
 
   const fetchResumen = useCallback(async () => {
     if (!salonId) return;
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get(`/salones/${salonId}/finanzas/resumen`, { params: { fecha: reporteDesde } });
+      const { data } = await api.get(`/salones/${salonId}/finanzas/resumen`, {
+        params: buildReportParams(),
+      });
       setResumen(data);
     } catch {
       setResumen(null);
     } finally {
       setLoading(false);
     }
-  }, [salonId, reporteDesde]);
+  }, [salonId, buildReportParams]);
 
   const fetchROI = useCallback(async () => {
     if (!salonId) return;
@@ -3809,8 +3875,9 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   }, [salonId, mes]);
 
   useEffect(() => {
+    fetchPyl();
     fetchResumen();
-  }, [fetchResumen]);
+  }, [fetchPyl, fetchResumen]);
 
   useEffect(() => {
     fetchROI();
@@ -3829,7 +3896,12 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     return 0;
   }, [roi, gastosTotales]);
 
-  if (loading && !resumen && !roi) {
+  const generarReportes = () => {
+    fetchPyl();
+    fetchResumen();
+  };
+
+  if (loading && !pyl && !resumen && !roi) {
     return (
       <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <Skeleton height="60px" variant="rect" style={{ marginBottom: '1rem' }} />
@@ -3838,12 +3910,12 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     );
   }
 
-  if (error && !resumen && !roi) {
+  if (error && !pyl && !resumen && !roi) {
     return (
       <motion.div key="error" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={styles.emptyState}>
         <span className={styles.emptyIcon}>⚠️</span>
         <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', color: 'var(--danger)', marginBottom: '1rem' }}>{error}</p>
-        <Button variant="secondary" size="sm" onClick={() => { fetchResumen(); fetchROI(); }}>Reintentar</Button>
+        <Button variant="secondary" size="sm" onClick={generarReportes}>Reintentar</Button>
       </motion.div>
     );
   }
@@ -3874,11 +3946,52 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               onChange={(e) => setReporteHasta(e.target.value)}
             />
           </label>
+          {isPrivileged && salonId && (
+            <label style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.75rem',
+              color: 'var(--text-secondary)',
+              fontWeight: 500,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.3rem',
+              minWidth: '180px',
+            }}>
+              <EmpleadaSearchableSelect
+                salonId={salonId}
+                value={reporteUsuarioId ? Number(reporteUsuarioId) : null}
+                selectedName={reporteEmpleadaNombre || undefined}
+                onSelect={(e) => {
+                  setReporteUsuarioId(e.id ? String(e.id) : '');
+                  setReporteEmpleadaNombre(e.id ? e.nombre : '');
+                }}
+                placeholder="🔍 Buscar empleada..."
+              />
+            </label>
+          )}
+          {!isPrivileged && (
+            <span
+              style={{
+                background: 'var(--bg-surface)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.35rem 0.85rem',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'default',
+              }}
+              title="Solo podés ver tus propios registros"
+            >
+              👤 Solo mis registros
+            </span>
+          )}
           <motion.button
             style={primaryBtnStyle}
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={fetchResumen}
+            onClick={generarReportes}
           >
             Generar reporte
           </motion.button>
@@ -3894,7 +4007,79 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         </div>
       </div>
 
-      {/* ── Resumen del período ── */}
+      {/* ── P&L del período (valores directos del backend) ── */}
+      {pyl && (
+        <div className={styles.reporteCard}>
+          <h4 className={styles.reporteCardTitle}>
+            💰 P&L Mensual — {pyl.desde} a {pyl.hasta}
+            <span style={{ fontWeight: 400, fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>
+              ({pyl.cantidadAtenciones} atenciones)
+            </span>
+          </h4>
+          <div className={styles.summaryGrid}>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>💰 Ingresos brutos</span>
+              <span className={styles.summaryValueAccent}>{formatCurrency(pyl.ingresosBrutos)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>🏷️ Descuentos</span>
+              <span className={styles.summaryValue}>{formatCurrency(pyl.descuentos)}</span>
+            </div>
+            <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
+              <span className={styles.summaryLabel}>💵 Ingresos netos</span>
+              <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.ingresosNetos)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>💇 Total servicios</span>
+              <span className={styles.summaryValue} style={{ color: '#818cf8' }}>{formatCurrency(pyl.totalServicios)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>🛒 Total productos</span>
+              <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.totalProductos)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>🎁 Total propinas</span>
+              <span className={styles.summaryValueSuccess}>{formatCurrency(pyl.propinas)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>📦 Insumos (costo base)</span>
+              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>📊 Margen bruto</span>
+              <span className={styles.summaryValueAccent}>{formatCurrency(pyl.margenBruto)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>👥 Comisiones</span>
+              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>💸 Gastos fijos</span>
+              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.gastosFijos)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>📦 Gastos operativos</span>
+              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.gastosOperativos)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>💸 Total gastos</span>
+              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.totalGastos)}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>↩️ Devoluciones</span>
+              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.devoluciones)}</span>
+            </div>
+            <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.utilidadNeta ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
+              <span className={styles.summaryLabel}>📊 Utilidad neta</span>
+              <span className={styles.summaryValue} style={{ color: (pyl.utilidadNeta ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
+                {formatCurrency(pyl.utilidadNeta)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Resumen del período (desde+hasta; sin ganancia neta client-side) ── */}
       {resumen && (
         <div className={styles.reporteCard}>
           <div className={styles.summaryGrid}>
@@ -3917,23 +4102,8 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               </span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>👥 Nómina</span>
-              <span className={styles.summaryValue}>{formatCurrency(resumen.totalComisiones)}</span>
-            </div>
-            <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>🎁 Propinas</span>
               <span className={styles.summaryValueSuccess}>{formatCurrency(resumen.totalPropinas)}</span>
-            </div>
-          </div>
-
-          <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '0.75rem 0' }} />
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className={styles.summaryCard} style={{ gridColumn: '1 / -1' }}>
-              <span className={styles.summaryLabel}>📊 Ganancia neta</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--success)' }}>
-                {formatCurrency(resumen.totalIngresos - (resumen.totalGastos ?? 0))}
-              </span>
             </div>
           </div>
         </div>
@@ -3945,7 +4115,7 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
           <h4 className={styles.reporteCardTitle}>📈 ROI Mensual — {mes}</h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
             <div className={styles.summaryCard}>
-          <span className={styles.summaryLabel}>💰 TOTAL INGRESOS</span>
+              <span className={styles.summaryLabel}>💰 TOTAL INGRESOS</span>
               <span className={styles.summaryValueAccent}>{formatCurrency(roi.ingresos ?? 0)}</span>
             </div>
             <div className={styles.summaryCard}>
@@ -3981,7 +4151,7 @@ const ReportesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       )}
 
       {/* ── No data state ── */}
-      {!resumen && !roi && (
+      {!pyl && !resumen && !roi && (
         <div className={styles.emptyState}>
           <span className={styles.emptyIcon}>📊</span>
           <h3 className={styles.emptyTitle}>Sin datos disponibles</h3>

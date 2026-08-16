@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 import { Rol } from '@pos-final/types';
+import { ValidationError } from '../../../../../shared/errors';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { ReporteController } from '../ReporteController';
 
@@ -10,17 +11,20 @@ describe('ReporteController', () => {
   let mockResumenDiaUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockROIMensualUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockCierreTurnoUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockPyLMensualUseCase: { execute: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     mockResumenDiaUseCase = { execute: vi.fn() };
     mockROIMensualUseCase = { execute: vi.fn() };
     mockCierreTurnoUseCase = { execute: vi.fn() };
+    mockPyLMensualUseCase = { execute: vi.fn() };
     next = vi.fn();
     controller = new ReporteController(
       mockResumenDiaUseCase as never,
       mockROIMensualUseCase as never,
       mockCierreTurnoUseCase as never,
+      mockPyLMensualUseCase as never,
     );
   });
 
@@ -271,6 +275,83 @@ describe('ReporteController', () => {
         usuarioId: 3,
         fecha: expect.any(Date),
       });
+    });
+  });
+
+  describe('pyl', () => {
+    it('devuelve el P&L y honra el filtro por usuario para roles privilegiados', async () => {
+      const expected = { utilidadNeta: -93000, ingresosNetos: 315000 };
+      mockPyLMensualUseCase.execute.mockResolvedValue(expected);
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-05-01', hasta: '2026-05-31', usuarioId: '5' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.pyl(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expected);
+      expect(mockPyLMensualUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+        usuarioId: 5,
+      });
+    });
+
+    it('rol restringido es forzado a su propio usuarioId e ignora el filtro recibido', async () => {
+      mockPyLMensualUseCase.execute.mockResolvedValue({ utilidadNeta: 0 });
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-05-01', hasta: '2026-05-31', usuarioId: '99' },
+        user: { id: 4, email: 'm@t.com', rol: Rol.MANICURISTA, salonId: 1, nombre: 'Manicurista' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.pyl(req, res, next);
+
+      expect(mockPyLMensualUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+        usuarioId: 4,
+      });
+    });
+
+    it('rol privilegiado sin usuarioId no envía el filtro', async () => {
+      mockPyLMensualUseCase.execute.mockResolvedValue({ utilidadNeta: 0 });
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-05-01', hasta: '2026-05-31' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.CONTADOR, salonId: 1, nombre: 'Contador' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.pyl(req, res, next);
+
+      expect(mockPyLMensualUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+      });
+    });
+
+    it('parámetros inválidos lanzan ValidationError (400)', async () => {
+      const req = {
+        salonId: 1,
+        query: { desde: 'no-es-fecha' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.pyl(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
+      expect(mockPyLMensualUseCase.execute).not.toHaveBeenCalled();
     });
   });
 });

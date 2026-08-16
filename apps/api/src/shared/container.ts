@@ -254,6 +254,7 @@ import { HistorialLiquidacionesUseCase } from '../modules/finanzas/application/u
 import { ResumenDiaUseCase } from '../modules/finanzas/application/use-cases/reporte/ResumenDiaUseCase';
 import { ROIMensualUseCase } from '../modules/finanzas/application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../modules/finanzas/application/use-cases/reporte/CierreTurnoUseCase';
+import { PyLMensualUseCase } from '../modules/finanzas/application/use-cases/reporte/PyLMensualUseCase';
 
 // ---- Finanzas Module — Controllers ----
 import { RegistroController } from '../modules/finanzas/presentation/controllers/RegistroController';
@@ -306,6 +307,7 @@ container.register(HistorialLiquidacionesUseCase, { useClass: HistorialLiquidaci
 container.register(ResumenDiaUseCase, { useClass: ResumenDiaUseCase });
 container.register(ROIMensualUseCase, { useClass: ROIMensualUseCase });
 container.register(CierreTurnoUseCase, { useClass: CierreTurnoUseCase });
+container.register(PyLMensualUseCase, { useClass: PyLMensualUseCase });
 
 // ---- Finanzas Module — Controllers ----
 container.register(RegistroController, { useClass: RegistroController });
