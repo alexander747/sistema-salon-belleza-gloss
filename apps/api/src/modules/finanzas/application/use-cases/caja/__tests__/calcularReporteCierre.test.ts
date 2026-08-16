@@ -143,4 +143,20 @@ describe('calcularReporteCierre', () => {
     expect(reporte.montoReal).toBeNull();
     expect(reporte.diferencia).toBeNull();
   });
+
+  it('should include montoInicial in montoEsperado (el cajero cuenta el cajón completo con el fondo)', () => {
+    const registros = [
+      makeRegistro({
+        totalServicios: 10000,
+        pagos: [{ monto: 10000, metodoPago: 'EFECTIVO' }],
+      }),
+    ];
+    const gastos: never[] = [];
+
+    const reporte = calcularReporteCierre(registros, gastos, 60000, 50000);
+
+    // Fondo 50000 + ventas EFECTIVO 10000 = 60000 esperado en cajón
+    expect(reporte.montoEsperado).toBe(60000);
+    expect(reporte.diferencia).toBe(0);
+  });
 });

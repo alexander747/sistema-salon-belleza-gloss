@@ -49,7 +49,9 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 /**
  * Función pura del reporte de cierre (arqueo).
  *
- * Decisión owner: el arqueo es CASH-ONLY — `montoEsperado = Σ pagos EFECTIVO − Σ gastos EFECTIVO`.
+ * Decisión owner: el arqueo es CASH-ONLY — el cajero cuenta el cajón COMPLETO
+ * al cerrar, que incluye el fondo inicial. Por lo tanto:
+ *   `montoEsperado = montoInicial + Σ pagos EFECTIVO − Σ gastos EFECTIVO`
  * El breakdown por método de pago se reporta completo como información.
  * Los registros ANULADOS se excluyen de todos los totales.
  *
@@ -59,6 +61,7 @@ export function calcularReporteCierre(
   registros: MovimientoCajaInput[],
   gastos: GastoCajaInput[],
   montoRealEfectivo: number | null,
+  montoInicial: number = 0,
 ): ReporteCierre {
   const activos = registros.filter((r) => r.estado !== EstadoRegistro.ANULADO);
 
@@ -89,7 +92,8 @@ export function calcularReporteCierre(
     .filter((g) => (g.metodoPago ?? 'EFECTIVO') === 'EFECTIVO')
     .reduce((sum, g) => sum + Number(g.monto), 0);
 
-  const montoEsperado = round2(porMetodoPago.EFECTIVO - gastosEfectivo);
+  // Arqueo cash-only: el cajero cuenta el cajón completo (fondo inicial + movimientos)
+  const montoEsperado = round2(montoInicial + porMetodoPago.EFECTIVO - gastosEfectivo);
   const diferencia = montoRealEfectivo === null ? null : round2(montoRealEfectivo - montoEsperado);
 
   return {
