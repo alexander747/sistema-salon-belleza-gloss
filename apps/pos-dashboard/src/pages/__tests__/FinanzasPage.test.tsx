@@ -651,3 +651,53 @@ describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
     expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
   });
 });
+
+describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  const nominaApiMock = (url: string): Promise<unknown> => {
+    if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+    if (url.includes('/caja/actual')) return Promise.reject(error404);
+    if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: [] });
+    if (url.includes('/finanzas/nomina')) {
+      return Promise.resolve({
+        data: [
+          {
+            empleadaId: 1,
+            nombre: 'Ana',
+            totalComisionesPendientes: 0,
+            totalPropinas: 0,
+            bonoHorario: 25000,
+            sueldoFijo: 100000,
+            porcentajeComisionServicio: 0,
+            totalAPagar: 125000,
+            cantidadRegistros: 0,
+            periodoInicio: '2026-08-01T05:00:00.000Z',
+            periodoFin: '2026-08-16T05:00:00.000Z',
+            frecuenciaPago: 'QUINCENAL',
+          },
+        ],
+      });
+    }
+    if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+    if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+    if (url.includes('/registros')) {
+      return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+    }
+    return Promise.resolve({ data: {} });
+  };
+
+  it('muestra el período de la quincena en la tarjeta de la empleada', async () => {
+    mockGet.mockImplementation(nominaApiMock);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+
+    expect(
+      await screen.findByText('Período QUINCENAL · 01/08/2026 → 15/08/2026'),
+    ).toBeInTheDocument();
+  });
+});

@@ -11,7 +11,7 @@ import { FotoPortafolioEntity } from './FotoPortafolioEntity';
 import { CitaEntity } from './CitaEntity';
 import { BloqueoAgendaEntity } from './BloqueoAgendaEntity';
 import { SalonEntity } from './SalonEntity';
-import { Rol } from '@pos-final/types';
+import { Rol, type FrecuenciaPago } from '@pos-final/types';
 
 @Entity('usuarios')
 export class UsuarioEntity extends BaseEntity {
@@ -47,6 +47,9 @@ export class UsuarioEntity extends BaseEntity {
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   frecuenciaBono: string;
+
+  @Column({ type: 'varchar', length: 20, default: 'MENSUAL' })
+  frecuenciaPago: FrecuenciaPago;
 
   @Column({ type: 'boolean', default: true })
   activo: boolean;

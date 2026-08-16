@@ -54,6 +54,7 @@ const makeEmpleada = (overrides: Record<string, unknown> = {}) => ({
   sueldoFijo: 0,
   bonoHorario: 0,
   porcentajeComisionServicio: 0,
+  frecuenciaPago: 'MENSUAL',
   ...overrides,
 });
 
@@ -100,8 +101,7 @@ describe('LiquidarEmpleadaUseCase', () => {
     expect(mockRegistroRepo.search).not.toHaveBeenCalled();
   });
 
-  it('liquida a empleada con solo sueldo fijo (0 registros) creando la liquidación con totalPagado = fijo + bono', async () => {
-    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+  it('liquida a empleada con solo sueldo fijo (0 registros) creando la liquidación con totalPagado = fijo + bono', async () => {    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, sueldoFijo: 200000, bonoHorario: 50000 }),
     );
     mockRegistroRepo.search.mockResolvedValue([]);
@@ -385,6 +385,31 @@ describe('LiquidarEmpleadaUseCase', () => {
     expect(mockRegistroRepo.update).toHaveBeenCalledWith(2, expect.anything(), expect.anything());
     expect(mockRegistroRepo.update).not.toHaveBeenCalledWith(1, expect.anything(), expect.anything());
     expect(result).toEqual(expect.objectContaining({ id: 13, totalPagado: 205000 }));
+  });
+
+  it('liquida a empleada QUINCENAL registrando el 50% del comp fijo (coherente con NominaPendiente)', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, frecuenciaPago: 'QUINCENAL', sueldoFijo: 200000, bonoHorario: 50000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 20 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 20, totalPagado: 125000 });
+
+    const result = await useCase.execute(baseInput);
+
+    expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalComisiones: 0,
+        totalPropinas: 0,
+        sueldoFijo: 100000, // 50% de 200000
+        bonoHorario: 25000, // 50% de 50000
+        totalPagado: 125000,
+        estado: 'PAGADA',
+      }),
+      expect.anything(),
+    );
+    expect(result).toEqual(expect.objectContaining({ id: 20, totalPagado: 125000 }));
   });
 
   it('hace rollback y re-lanza el error cuando falla la creación dentro de la transacción', async () => {

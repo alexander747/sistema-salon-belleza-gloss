@@ -1,5 +1,5 @@
 import { injectable, inject } from 'tsyringe';
-import { Rol } from '@pos-final/types';
+import { Rol, type FrecuenciaPago } from '@pos-final/types';
 import type { IUsuarioRepository } from '../../../domain/ports/IUsuarioRepository';
 import type { IBcryptService } from '../../../../../modules/auth/infrastructure/services/BcryptService';
 import { EmpleadaDTO } from '../../dtos/EmpleadaDTO';
@@ -18,6 +18,7 @@ interface CreateEmpleadaInput {
   sueldoFijo?: number;
   bonoHorario?: number;
   frecuenciaBono?: string;
+  frecuenciaPago?: FrecuenciaPago;
   userRol: Rol;
 }
 
@@ -53,6 +54,7 @@ export class CreateEmpleadaUseCase {
       sueldoFijo: input.sueldoFijo ?? 0,
       bonoHorario: input.bonoHorario ?? 0,
       frecuenciaBono: input.frecuenciaBono ?? undefined,
+      frecuenciaPago: input.frecuenciaPago ?? undefined,
       activo: true,
     });
 
