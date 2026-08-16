@@ -5,7 +5,8 @@ import { Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
-import CajaBanner from '../components/caja/CajaBanner.js';
+import CajaBanner, { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
+import { isCajaCerradaError } from '../components/caja/cajaError.js';
 
 /* ── Types ── */
 
@@ -372,9 +373,15 @@ const VentasPage: React.FC = () => {
       setTotalPersonalizado(null);
       setNotaAjuste('');
       fetchData();
-    } catch {
+    } catch (err: unknown) {
       setSuccessMsg(null);
-      setDataError('Error al procesar la venta. Intentá de nuevo.');
+      if (isCajaCerradaError(err)) {
+        // Regla de oro: sin caja abierta no se vende. Mensaje accionable + refresco del banner; el flujo permanece abierto.
+        setDataError('No hay caja abierta. Abrí la caja primero para vender.');
+        dispatchCajaRefresh();
+      } else {
+        setDataError('Error al procesar la venta. Intentá de nuevo.');
+      }
     } finally {
       setProcessing(false);
     }

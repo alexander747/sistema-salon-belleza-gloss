@@ -5,7 +5,8 @@ import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
-import CajaBanner from '../components/caja/CajaBanner.js';
+import CajaBanner, { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
+import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import styles from './AgendaPage.module.css';
 
@@ -269,6 +270,7 @@ const AgendaPage: React.FC = () => {
     montoRecibido: 0,
   });
   const [completando, setCompletando] = useState(false);
+  const [completarError, setCompletarError] = useState<string | null>(null);
 
   /* ── Derived ── */
 
@@ -517,6 +519,7 @@ const AgendaPage: React.FC = () => {
   /* ── Completar (abrir modal) ── */
   const handleAbrirCompletar = async () => {
     if (!selectedCita) return;
+    setCompletarError(null);
     const precios: Record<number, number> = {};
     selectedCita.servicios.forEach(s => { precios[s.id] = s.precio; });
     setCompletarForm({
@@ -618,9 +621,16 @@ const AgendaPage: React.FC = () => {
 
       setShowCompletar(false);
       setSelectedCita(null);
+      setCompletarError(null);
       fetchCitas();
-    } catch (err) {
-      console.error('Error al completar cita:', err);
+    } catch (err: unknown) {
+      if (isCajaCerradaError(err)) {
+        // Regla de oro: sin caja abierta no se completa la cita. Mensaje visible + refresco del banner; el modal permanece abierto.
+        setCompletarError('No hay caja abierta. Abrí la caja primero para completar la cita.');
+        dispatchCajaRefresh();
+      } else {
+        setCompletarError('Error al completar la cita. Intentá de nuevo.');
+      }
     } finally {
       setCompletando(false);
     }
@@ -985,10 +995,12 @@ const AgendaPage: React.FC = () => {
             servicios={servicios}
             productos={productos}
             completando={completando}
+            completarError={completarError}
             form={completarForm}
             onChangeForm={handleCompletarFormChange}
             onClose={() => {
               setShowCompletar(false);
+              setCompletarError(null);
             }}
             onConfirmar={handleConfirmarCompletar}
             onToggleServicio={handleToggleServicioCompletar}
@@ -2237,6 +2249,7 @@ interface CompletarModalProps {
   servicios: ServicioSimple[];
   productos: ProductoSimple[];
   completando: boolean;
+  completarError: string | null;
   form: {
     serviciosPrecios: Record<number, number>;
     nuevosServiciosIds: number[];
@@ -2260,6 +2273,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   servicios,
   productos,
   completando,
+  completarError,
   form,
   onChangeForm,
   onClose,
@@ -2397,6 +2411,26 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
             ✕
           </button>
         </div>
+
+        {/* ── Error de confirmación (CAJA_CERRADA u otro) — el modal permanece abierto ── */}
+        {completarError && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              background: 'rgba(224,85,106,0.12)',
+              borderBottom: '1px solid rgba(224,85,106,0.3)',
+              color: 'var(--danger)',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+            }}
+          >
+            ⚠️ {completarError}
+          </div>
+        )}
 
         <div className={styles.modalBody}>
           <div className={styles.completarGrid}>
