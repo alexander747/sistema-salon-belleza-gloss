@@ -33,7 +33,7 @@ interface EmpleadaForm {
   numeroWhatsApp: string;
   password: string;
   rol: string;
-  tipoPago: 'COMISION' | 'FIJO';
+  tipoPago: 'COMISION' | 'FIJO' | 'MIXTO';
   porcentajeComisionServicio: string;
   sueldoFijo: string;
   bonoHorario: string;
@@ -224,7 +224,12 @@ const EmpleadasPage: React.FC = () => {
       numeroWhatsApp: empleada.numeroWhatsApp || '',
       password: '',
       rol: String(empleada.rol),
-      tipoPago: empleada.sueldoFijo > 0 ? 'FIJO' : 'COMISION',
+      tipoPago:
+        empleada.sueldoFijo > 0 && empleada.porcentajeComisionServicio > 0
+          ? 'MIXTO'
+          : empleada.sueldoFijo > 0
+            ? 'FIJO'
+            : 'COMISION',
       porcentajeComisionServicio: empleada.porcentajeComisionServicio != null ? String(empleada.porcentajeComisionServicio) : '50',
       sueldoFijo: empleada.sueldoFijo != null ? String(empleada.sueldoFijo) : '0',
       bonoHorario: empleada.bonoHorario != null ? String(empleada.bonoHorario) : '0',
@@ -247,8 +252,14 @@ const EmpleadasPage: React.FC = () => {
       email: form.email.trim(),
       password: form.password,
       rol: Number(form.rol),
-      porcentajeComisionServicio: form.tipoPago === 'COMISION' ? Number(form.porcentajeComisionServicio) : 0,
-      sueldoFijo: form.tipoPago === 'FIJO' ? Number(form.sueldoFijo) : 0,
+      porcentajeComisionServicio:
+        form.tipoPago === 'COMISION' || form.tipoPago === 'MIXTO'
+          ? Number(form.porcentajeComisionServicio)
+          : 0,
+      sueldoFijo:
+        form.tipoPago === 'FIJO' || form.tipoPago === 'MIXTO'
+          ? Number(form.sueldoFijo)
+          : 0,
       bonoHorario: Number(form.bonoHorario) || 0,
       ...(form.fechaNacimiento ? { fechaNacimiento: form.fechaNacimiento } : {}),
     };
@@ -666,11 +677,13 @@ const RenderTable: React.FC<RenderTableProps> = ({
               {empleada.numeroWhatsApp ? formatPhone(empleada.numeroWhatsApp) : '—'}
             </td>
             <td>
-              {empleada.sueldoFijo > 0
-                ? formatCurrency(empleada.sueldoFijo)
-                : empleada.porcentajeComisionServicio != null
-                  ? `${empleada.porcentajeComisionServicio}%`
-                  : '—'}
+              {empleada.sueldoFijo > 0 && empleada.porcentajeComisionServicio > 0
+                ? `${formatCurrency(empleada.sueldoFijo)} + ${empleada.porcentajeComisionServicio}%`
+                : empleada.sueldoFijo > 0
+                  ? formatCurrency(empleada.sueldoFijo)
+                  : empleada.porcentajeComisionServicio != null
+                    ? `${empleada.porcentajeComisionServicio}%`
+                    : '—'}
             </td>
             <td>
               <div className={styles.toggleWrapper}>
@@ -883,10 +896,16 @@ const RenderFormModal: React.FC<FormModalProps> = ({
             >
               Sueldo Fijo $
             </button>
+            <button
+              style={toggleBtnStyle(form.tipoPago === 'MIXTO')}
+              onClick={() => onChange({ tipoPago: 'MIXTO' })}
+            >
+              Mixto
+            </button>
           </div>
         </div>
 
-        {form.tipoPago === 'COMISION' ? (
+        {form.tipoPago === 'COMISION' || form.tipoPago === 'MIXTO' ? (
           <div className={styles.formGroup}>
             <label className={styles.formLabel}>
               % Comisión por Servicio
@@ -901,7 +920,9 @@ const RenderFormModal: React.FC<FormModalProps> = ({
               max={100}
             />
           </div>
-        ) : (
+        ) : null}
+
+        {form.tipoPago === 'FIJO' || form.tipoPago === 'MIXTO' ? (
           <div className={styles.formGroup}>
             <label className={styles.formLabel}>
               Sueldo Fijo Mensual
@@ -915,7 +936,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
               min={0}
             />
           </div>
-        )}
+        ) : null}
 
         {/* Bono Horario */}
         <div className={styles.formGroup}>
