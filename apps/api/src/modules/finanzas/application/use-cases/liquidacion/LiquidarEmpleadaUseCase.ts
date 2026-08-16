@@ -1,4 +1,5 @@
 import { injectable, inject } from 'tsyringe';
+import { type FrecuenciaPago } from '@pos-final/types';
 import { AppDataSource } from '../../../../../shared/database';
 import { UnprocessableEntityError, ValidationError } from '../../../../../shared/errors';
 import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
@@ -108,8 +109,11 @@ export class LiquidarEmpleadaUseCase {
       (sum, r) => sum + Number(r.propina),
       0,
     );
-    const bonoHorario = Number(empleada.bonoHorario);
-    const sueldoFijo = Number(empleada.sueldoFijo);
+    // Fixed comp: 100% for MENSUAL, 50% for QUINCENAL.
+    // MUST match NominaPendienteUseCase so the historial never drifts from the UI.
+    const factorFijo = (empleada.frecuenciaPago as FrecuenciaPago | undefined) === 'QUINCENAL' ? 0.5 : 1;
+    const bonoHorario = Number(empleada.bonoHorario) * factorFijo;
+    const sueldoFijo = Number(empleada.sueldoFijo) * factorFijo;
     const calculatedTotal = totalComisiones + totalPropinas + bonoHorario + sueldoFijo;
 
     // 4. Validate descuentos por préstamos
