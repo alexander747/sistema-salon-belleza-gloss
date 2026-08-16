@@ -57,7 +57,7 @@ describe('CerrarCajaUseCase', () => {
     );
   });
 
-  it('should cerrar la caja y devolver el reporte completo (pagos EFECTIVO 180000 − gastos EFECTIVO 20000 = 160000)', async () => {
+  it('should cerrar la caja y devolver el reporte completo (montoInicial 50000 + pagos EFECTIVO 180000 − gastos EFECTIVO 20000 = 210000)', async () => {
     mockCajaRepo.findBySalonYFecha.mockResolvedValue(cajaAbierta);
     mockRegistroRepo.search.mockResolvedValue([
       {
@@ -75,7 +75,7 @@ describe('CerrarCajaUseCase', () => {
     mockGastoRepo.findByCajaId.mockResolvedValue([{ id: 1, monto: 20000, metodoPago: 'EFECTIVO' }]);
     mockCajaRepo.cerrar.mockResolvedValue(true);
 
-    const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 160000, cierrePorId: 3 });
+    const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 210000, cierrePorId: 3 });
 
     expect(mockRegistroRepo.search).toHaveBeenCalledWith(
       expect.objectContaining({ salonId: 1, cajaId: 5 }),
@@ -84,13 +84,13 @@ describe('CerrarCajaUseCase', () => {
     expect(mockCajaRepo.cerrar).toHaveBeenCalledWith(
       5,
       expect.objectContaining({
-        montoEsperado: 160000,
-        montoRealEfectivo: 160000,
+        montoEsperado: 210000,
+        montoRealEfectivo: 210000,
         diferencia: 0,
         cierrePorId: 3,
       }),
     );
-    expect(result.reporte.montoEsperado).toBe(160000);
+    expect(result.reporte.montoEsperado).toBe(210000);
     expect(result.reporte.diferencia).toBe(0);
     expect(result.caja.estado).toBe('CERRADA');
   });
@@ -113,9 +113,9 @@ describe('CerrarCajaUseCase', () => {
     mockGastoRepo.findByCajaId.mockResolvedValue([]);
     mockCajaRepo.cerrar.mockResolvedValue(true);
 
-    const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 175000 });
+    const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 225000 });
 
-    expect(result.reporte.montoEsperado).toBe(180000);
+    expect(result.reporte.montoEsperado).toBe(230000);
     expect(result.reporte.diferencia).toBe(-5000);
   });
 

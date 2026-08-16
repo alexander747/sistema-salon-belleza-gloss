@@ -42,7 +42,7 @@ export class CerrarCajaUseCase {
       this.gastoRepo.findByCajaId(caja.id),
     ]);
 
-    const reporte = calcularReporteCierre(registros, gastos, input.montoRealEfectivo);
+    const reporte = calcularReporteCierre(registros, gastos, input.montoRealEfectivo, Number(caja.montoInicial));
 
     // UPDATE condicional: guard atómico contra doble cierre (race)
     const cerrado = await this.cajaRepo.cerrar(caja.id, {

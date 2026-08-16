@@ -111,7 +111,8 @@ describe('ObtenerEsperadoCajaUseCase', () => {
 
     const result = await useCase.execute({ salonId: 1 });
 
-    expect(result.montoEsperado).toBe(100000);
+    // Fondo 50000 + movimientos EFECTIVO 100000 = 150000 esperado en cajón
+    expect(result.montoEsperado).toBe(150000);
     expect(result.montoReal).toBeNull();
     expect(result.diferencia).toBeNull();
     // preview no debe cerrar la caja

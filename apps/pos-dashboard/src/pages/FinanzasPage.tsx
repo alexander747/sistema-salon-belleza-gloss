@@ -406,7 +406,12 @@ const FinanzasPage: React.FC = () => {
       <AnimatePresence mode="wait">
         {/* ── Tab Content ── */}
         {activeTab === 'registros' && (
-          <RegistrosTab key="registros" salonId={salonId} user={user} />
+          <RegistrosTab
+            key="registros"
+            salonId={salonId}
+            user={user}
+            onNavigateToCaja={() => setActiveTab('caja')}
+          />
         )}
         {activeTab === 'gastos' && (
           <GastosTab key="gastos" salonId={salonId} />
@@ -432,7 +437,14 @@ const FinanzasPage: React.FC = () => {
 /*  REGISTROS TAB                                                    */
 /* ================================================================ */
 
-const RegistrosTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ salonId, user }) => {
+interface RegistrosTabProps {
+  salonId: number | null;
+  user: IUser | null;
+  /** CAJA_CERRADA en WalkInModal: cambia al tab Caja de FinanzasPage */
+  onNavigateToCaja?: () => void;
+}
+
+const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateToCaja }) => {
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [resumen, setResumen] = useState<FinanzasResumen | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1098,6 +1110,10 @@ const RegistrosTab: React.FC<{ salonId: number | null; user: IUser | null }> = (
             onSuccess={() => {
               setWalkInOpen(false);
               fetchData();
+            }}
+            onNavigateToCaja={() => {
+              setWalkInOpen(false);
+              onNavigateToCaja?.();
             }}
           />
         )}

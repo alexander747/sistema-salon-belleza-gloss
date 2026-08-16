@@ -109,10 +109,10 @@ Inicio: branch desde PR2. Fin: abrir/cerrar desde UI + historial paginado + bann
 
 Inicio: branch desde PR3. Fin: vender con caja cerrada muestra mensaje, banner y mantiene modal abierto. Verificación: manual E2E + vitest.
 
-- [ ] 4.1 Modificar `components/WalkInModal.tsx` — catch POST registros: `err.response?.data?.error?.code === 'CAJA_CERRADA'` → mensaje "Abrí la caja primero para vender", modal permanece abierto, `dispatchEvent('caja-refresh')`
-- [ ] 4.2 Modificar `pages/AgendaPage.tsx` — `handleConfirmarCompletar`: nuevo estado `completarError` (reemplaza console.error); CAJA_CERRADA → mensaje visible + caja-refresh
-- [ ] 4.3 Modificar `pages/VentasPage.tsx` — catch POST registros CAJA_CERRADA → mensaje visible + caja-refresh
-- [ ] 4.4 Tests frontend PR4 — casos CAJA_CERRADA en WalkInModal/AgendaPage/VentasPage (modal permanece, banner refrescado)
+- [x] 4.1 Modificar `components/WalkInModal.tsx` — catch POST registros: `err.response?.data?.error?.code === 'CAJA_CERRADA'` → mensaje "Abrí la caja primero para vender", modal permanece abierto, `dispatchEvent('caja-refresh')`
+- [x] 4.2 Modificar `pages/AgendaPage.tsx` — `handleConfirmarCompletar`: nuevo estado `completarError` (reemplaza console.error); CAJA_CERRADA → mensaje visible + caja-refresh
+- [x] 4.3 Modificar `pages/VentasPage.tsx` — catch POST registros CAJA_CERRADA → mensaje visible + caja-refresh
+- [x] 4.4 Tests frontend PR4 — casos CAJA_CERRADA en WalkInModal/AgendaPage/VentasPage (modal permanece, banner refrescado)
 - [ ] 4.5 E2E manual: caja cerrada → intentar vender → banner ámbar + mensaje + modal sigue abierto; abrir caja → banner verde + venta 201
 
 ## Test Inventory

@@ -89,6 +89,25 @@
   font-weight: 500;
 }
 
+/* Acción "Abrir caja" dentro del banner de error (CAJA_CERRADA) */
+.cajaLink {
+  background: rgba(224, 85, 106, 0.15);
+  border: 1px solid rgba(224, 85, 106, 0.4);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.cajaLink:hover {
+  background: rgba(224, 85, 106, 0.25);
+}
+
 /* ── Loading skeleton grid ── */
 .loadingGrid {
   display: grid;

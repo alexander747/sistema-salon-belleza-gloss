@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Skeleton } from '@pos-final/ui';
 import api from '../services/api.js';
+import { dispatchCajaRefresh } from './caja/CajaBanner.js';
+import { isCajaCerradaError } from './caja/cajaError.js';
 import styles from './WalkInModal.module.css';
 
 /* ── Types ── */
@@ -72,6 +75,8 @@ interface WalkInModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** Cuando hay CAJA_CERRADA: navega a la pestaña Caja (FinanzasPage cambia de tab; otras páginas: /finanzas?tab=caja) */
+  onNavigateToCaja?: () => void;
 }
 
 /* ── Constants ── */
@@ -150,7 +155,9 @@ const cardVariants = {
 
 /* ── Component ── */
 
-const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onSuccess }) => {
+const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onSuccess, onNavigateToCaja }) => {
+  const navigate = useNavigate();
+
   /* ── Catalog data ── */
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -185,6 +192,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   /* ── Submission state ── */
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorEsCajaCerrada, setErrorEsCajaCerrada] = useState(false);
 
   /* ── Derived ── */
 
@@ -334,6 +342,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setAjustarTotal(false);
       setNotaAjuste('');
       setError(null);
+      setErrorEsCajaCerrada(false);
       setProcessing(false);
       setDataError(null);
     }
@@ -470,8 +479,16 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       };
       await api.post(`/salones/${salonId}/registros`, payload);
       onSuccess();
-    } catch {
-      setError('Error al registrar el servicio. Intentá de nuevo.');
+    } catch (err: unknown) {
+      if (isCajaCerradaError(err)) {
+        // Regla de oro: sin caja abierta no se vende. Mensaje accionable + refresco del banner; el modal permanece abierto.
+        setError('No hay caja abierta. Abrí la caja primero para registrar la venta.');
+        setErrorEsCajaCerrada(true);
+        dispatchCajaRefresh();
+      } else {
+        setError('Error al registrar el servicio. Intentá de nuevo.');
+        setErrorEsCajaCerrada(false);
+      }
     } finally {
       setProcessing(false);
     }
@@ -516,8 +533,26 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+              }}
             >
-              ⚠️ {error}
+              <span>⚠️ {error}</span>
+              {errorEsCajaCerrada && (
+                <button
+                  className={styles.cajaLink}
+                  onClick={() => {
+                    if (onNavigateToCaja) onNavigateToCaja();
+                    else navigate('/finanzas?tab=caja');
+                  }}
+                >
+                  Abrir caja
+                </button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

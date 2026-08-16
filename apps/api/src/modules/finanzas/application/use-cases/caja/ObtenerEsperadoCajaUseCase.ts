@@ -36,6 +36,6 @@ export class ObtenerEsperadoCajaUseCase {
       this.gastoRepo.findByCajaId(caja.id),
     ]);
 
-    return calcularReporteCierre(registros, gastos, null);
+    return calcularReporteCierre(registros, gastos, null, Number(caja.montoInicial));
   }
 }
