@@ -82,15 +82,29 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
   const navigate = useNavigate();
   const [caja, setCaja] = useState<CajaDTO | null>(null);
   const [loading, setLoading] = useState(true);
+  // La caja de HOY ya fue cerrada (p. ej. para almorzar) → el banner ofrece "Reabrir" en vez de "Abrir"
+  const [hoyCerrada, setHoyCerrada] = useState(false);
 
   const fetchCaja = useCallback(async () => {
     if (!salonId) return;
     try {
       const { data } = await api.get(`/salones/${salonId}/caja/actual`);
       setCaja(data?.data ?? null);
+      setHoyCerrada(false);
     } catch {
-      // 404 CAJA_NO_ABIERTA → caja cerrada (banner ámbar)
+      // 404 CAJA_NO_ABIERTA → sin caja abierta: ver si la de HOY ya se cerró (para ofrecer "Reabrir")
       setCaja(null);
+      try {
+        const { data: hist } = await api.get(`/salones/${salonId}/caja/cierres?page=1&limit=1`);
+        const cierres = Array.isArray(hist?.data?.data) ? hist.data.data : [];
+        setHoyCerrada(
+          cierres.length > 0 &&
+          cierres[0].estado === 'CERRADA' &&
+          cierres[0].fechaCaja === getColombiaDateString(),
+        );
+      } catch {
+        setHoyCerrada(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -148,7 +162,9 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
       <span style={{ lineHeight: 1.5 }}>
         {abierta
           ? `💰 Caja abierta — fondo ${formatCurrency(caja?.montoInicial)}`
-          : 'Caja cerrada — Abrir para vender'}
+          : hoyCerrada
+            ? '💰 Caja cerrada hoy — Reabrir para vender'
+            : 'Caja cerrada — Abrir para vender'}
       </span>
 
       {canManage && (
@@ -167,7 +183,7 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
             whiteSpace: 'nowrap',
           }}
         >
-          {abierta ? 'Cerrar' : 'Abrir'}
+          {abierta ? 'Cerrar' : hoyCerrada ? 'Reabrir' : 'Abrir'}
         </button>
       )}
     </motion.div>
