@@ -18,6 +18,7 @@ router.get('/:salonId/caja/actual', apiKeyGuard, tenantGuard, cajaController.act
 router.get('/:salonId/caja/actual/esperado', apiKeyGuard, tenantGuard, cajaController.actualEsperado);
 router.post('/:salonId/caja/abrir', apiKeyGuard, tenantGuard, cajaController.abrir);
 router.post('/:salonId/caja/cerrar', apiKeyGuard, tenantGuard, cajaController.cerrar);
+router.post('/:salonId/caja/reabrir', apiKeyGuard, tenantGuard, cajaController.reabrir);
 router.get('/:salonId/caja/cierres', apiKeyGuard, tenantGuard, cajaController.cierres);
 
 export { router as n8nRouter };

@@ -266,6 +266,7 @@ import { CajaController } from '../modules/finanzas/presentation/controllers/Caj
 // ---- Finanzas Module — Caja (use cases) ----
 import { AbrirCajaUseCase } from '../modules/finanzas/application/use-cases/caja/AbrirCajaUseCase';
 import { CerrarCajaUseCase } from '../modules/finanzas/application/use-cases/caja/CerrarCajaUseCase';
+import { ReabrirCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ReabrirCajaUseCase';
 import { ObtenerCajaActualUseCase } from '../modules/finanzas/application/use-cases/caja/ObtenerCajaActualUseCase';
 import { ObtenerEsperadoCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ObtenerEsperadoCajaUseCase';
 import { ListarCierresCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ListarCierresCajaUseCase';
@@ -316,6 +317,7 @@ container.register(CajaController, { useClass: CajaController });
 // ---- Finanzas Module — Caja (use cases) ----
 container.register(AbrirCajaUseCase, { useClass: AbrirCajaUseCase });
 container.register(CerrarCajaUseCase, { useClass: CerrarCajaUseCase });
+container.register(ReabrirCajaUseCase, { useClass: ReabrirCajaUseCase });
 container.register(ObtenerCajaActualUseCase, { useClass: ObtenerCajaActualUseCase });
 container.register(ObtenerEsperadoCajaUseCase, { useClass: ObtenerEsperadoCajaUseCase });
 container.register(ListarCierresCajaUseCase, { useClass: ListarCierresCajaUseCase });

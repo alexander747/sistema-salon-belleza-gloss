@@ -45,6 +45,29 @@ export class TypeORMCajaRepository implements ICajaRepository {
     return result.affected === 1;
   }
 
+  /**
+   * UPDATE condicional: reabre solo si la caja sigue CERRADA.
+   * Limpia los datos del cierre intermedio (el cierre final de fin de día los reemplaza).
+   * `result.affected === 1` → ganó la reapertura; `0` → otra request ya la reabrió (race).
+   */
+  async reabrir(id: number): Promise<boolean> {
+    const result = await this.getRepo()
+      .createQueryBuilder()
+      .update(CajaEntity)
+      .set({
+        estado: 'ABIERTA',
+        montoEsperado: null,
+        montoRealEfectivo: null,
+        diferencia: null,
+        cierrePorId: null,
+        cierreEn: null,
+      })
+      .where('id = :id AND estado = :estado', { id, estado: 'CERRADA' })
+      .execute();
+
+    return result.affected === 1;
+  }
+
   async listBySalonPaginated(
     salonId: number,
     page: number,

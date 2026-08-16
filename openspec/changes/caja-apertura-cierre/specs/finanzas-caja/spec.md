@@ -82,6 +82,25 @@ The system MUST close the salon's open caja when `POST /api/salones/:salonId/caj
 - WHEN both call POST /api/salones/:salonId/caja/cerrar
 - THEN exactly one MUST succeed AND the other MUST return 409 CAJA_YA_CERRADA
 
+### Requirement: POST Reabrir Caja
+
+The system MUST allow reopening the salon's caja for today when `POST /api/salones/:salonId/caja/reabrir` is called, IF today's caja is already CERRADA (e.g. closed for lunch, reopened in the afternoon). Only SUPERADMIN, DUEÑA, ADMINISTRADOR, and RECEPCIONISTA MAY reopen. The system MUST find today's caja (fecha_caja = getColombiaDateString()), set estado back to ABIERTA, and CLEAR the close data: montoEsperado, montoRealEfectivo, diferencia, cierrePorId, cierreEn. It MUST NOT create a new caja — the SAME caja is reopened (one caja per day is preserved). The close data from the previous (interim) close is replaced by the final close at end of day.
+
+#### Scenario: Reabrir caja cerrada hoy
+- GIVEN today's caja (id=5) is CERRADA with montoEsperado=60000, montoRealEfectivo=60000, diferencia=0, cierrePorId=2, cierreEn set
+- WHEN POST /api/salones/:salonId/caja/reabrir
+- THEN response MUST be 200 with the caja in estado ABIERTA, montoEsperado=NULL, montoRealEfectivo=NULL, diferencia=NULL, cierrePorId=NULL, cierreEn=NULL AND no new caja row created (caja id stays 5)
+
+#### Scenario: Reabrir cuando ya está abierta
+- GIVEN today's caja is ABIERTA
+- WHEN POST /api/salones/:salonId/caja/reabrir
+- THEN response MUST be 409 with error code CAJA_YA_ABIERTA
+
+#### Scenario: Reabrir sin caja de hoy
+- GIVEN no caja exists for today (fecha_caja)
+- WHEN POST /api/salones/:salonId/caja/reabrir
+- THEN response MUST be 404 with error code CAJA_NO_ABIERTA
+
 ### Requirement: Reporte de Cierre
 
 The close report MUST include: total servicios, total productos, ingresos brutos, descuentos, ingresos netos, breakdown by metodoPago (EFECTIVO, TARJETA, TRANSFERENCIA), comisiones, total gastos, montoEsperado, montoReal, diferencia, and cantidad de movimientos (registros + gastos).

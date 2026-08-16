@@ -2,12 +2,13 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 import { CajaController } from '../CajaController';
-import { CajaNoAbiertaError } from '../../../../../shared/errors';
+import { CajaNoAbiertaError, CajaYaAbiertaError } from '../../../../../shared/errors';
 
 describe('CajaController', () => {
   let controller: CajaController;
   let mockAbrir: { execute: ReturnType<typeof vi.fn> };
   let mockCerrar: { execute: ReturnType<typeof vi.fn> };
+  let mockReabrir: { execute: ReturnType<typeof vi.fn> };
   let mockActual: { execute: ReturnType<typeof vi.fn> };
   let mockEsperado: { execute: ReturnType<typeof vi.fn> };
   let mockCierres: { execute: ReturnType<typeof vi.fn> };
@@ -21,6 +22,7 @@ describe('CajaController', () => {
   beforeEach(() => {
     mockAbrir = { execute: vi.fn() };
     mockCerrar = { execute: vi.fn() };
+    mockReabrir = { execute: vi.fn() };
     mockActual = { execute: vi.fn() };
     mockEsperado = { execute: vi.fn() };
     mockCierres = { execute: vi.fn() };
@@ -28,6 +30,7 @@ describe('CajaController', () => {
     controller = new CajaController(
       mockAbrir as never,
       mockCerrar as never,
+      mockReabrir as never,
       mockActual as never,
       mockEsperado as never,
       mockCierres as never,
@@ -90,6 +93,34 @@ describe('CajaController', () => {
       await controller.cerrar(req, res, next);
 
       expect(mockCerrar.execute).toHaveBeenCalledWith({ salonId: 3, montoRealEfectivo: 160000, cierrePorId: null });
+    });
+  });
+
+  describe('reabrir', () => {
+    it('should return 200 con envelope {ok:true, data} con la caja reabierta ABIERTA', async () => {
+      mockReabrir.execute.mockResolvedValue({ id: 5, salonId: 3, estado: 'ABIERTA' });
+
+      const req = { salonId: 3 } as unknown as Request;
+      const res = makeRes();
+
+      await controller.reabrir(req, res, next);
+
+      expect(mockReabrir.execute).toHaveBeenCalledWith({ salonId: 3 });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ok: true, data: { id: 5, salonId: 3, estado: 'ABIERTA' } });
+    });
+
+    it('should pasar a next el error cuando la caja ya está ABIERTA (409)', async () => {
+      const err = new CajaYaAbiertaError();
+      mockReabrir.execute.mockRejectedValue(err);
+
+      const req = { salonId: 3 } as unknown as Request;
+      const res = makeRes();
+
+      await controller.reabrir(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(err);
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 

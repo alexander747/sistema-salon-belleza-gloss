@@ -89,6 +89,11 @@ router.post(
   validate(cerrarCajaSchema),
   cajaController.cerrar,
 );
+router.post(
+  '/caja/reabrir',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  cajaController.reabrir,
+);
 router.get(
   '/caja/actual',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),

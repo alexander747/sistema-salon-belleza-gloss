@@ -115,6 +115,17 @@ Inicio: branch desde PR3. Fin: vender con caja cerrada muestra mensaje, banner y
 - [x] 4.4 Tests frontend PR4 — casos CAJA_CERRADA en WalkInModal/AgendaPage/VentasPage (modal permanece, banner refrescado)
 - [ ] 4.5 E2E manual: caja cerrada → intentar vender → banner ámbar + mensaje + modal sigue abierto; abrir caja → banner verde + venta 201
 
+## PR 5 — Reapertura de caja (Opción A: misma caja del día)
+
+- [x] 5.1 Backend — `ReabrirCajaUseCase`: buscar caja de hoy por `findBySalonYFecha`; si no existe → 404 CAJA_NO_ABIERTA; si está ABIERTA → 409 CAJA_YA_ABIERTA; si está CERRADA → set estado ABIERTA + limpiar montoEsperado/montoRealEfectivo/diferencia/cierrePorId/cierreEn (mismo id, NO crear nueva)
+- [x] 5.2 Backend — repo: método `reabrir(id)` con UPDATE condicional (estado='CERRADA' → ABIERTA) para evitar race
+- [x] 5.3 Backend — `CajaController` + ruta `POST /salones/:id/caja/reabrir` con `requireRole(S,D,A,R)`
+- [x] 5.4 Backend — mirror n8n `POST /api/n8n/:salonId/caja/reabrir` (auditores null)
+- [x] 5.5 Tests — `ReabrirCajaUseCase.test.ts` (3 escenarios: reabrir OK / ya abierta 409 / sin caja 404) + controller test (no existe patrón de repo test en el codebase — el contrato del repo se cubre vía use case + tsc)
+- [x] 5.6 Frontend — `CajaTab`: botón "Reabrir caja" visible cuando la caja de hoy está CERRADA; confirma y llama POST /caja/reabrir; dispara caja-refresh
+- [x] 5.7 Spec — requisito "POST Reabrir Caja" + 3 escenarios (ya agregado en finanzas-caja/spec.md, verificado consistente)
+- [ ] 5.8 Verificación — tsc ✓ + vitest API ✓ / dashboard ✓ en apply; E2E manual (cerrar → reabrir → vender → cerrar con arqueo correcto) pendiente de sdd-verify (no se levanta server en apply)
+
 ## Test Inventory
 
 **Nuevos:** `use-cases/caja/__tests__/{calcularReporteCierre,AbrirCajaUseCase,CerrarCajaUseCase,ObtenerCajaActualUseCase,ListarCierresCajaUseCase}.test.ts`, `services/__tests__/verificarCajaAbierta.test.ts`, `controllers/__tests__/CajaController.test.ts`, `gasto/__tests__/CreateGastoUseCase.test.ts`, `cita/__tests__/CompletarCitaUseCase.test.ts`, `packages/validation/__tests__/caja.schema.test.ts`, `components/caja/__tests__/{CajaBanner,CajaTab}.test.tsx`, tests PR4.

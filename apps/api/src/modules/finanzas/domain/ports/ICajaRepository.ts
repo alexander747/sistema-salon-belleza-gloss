@@ -18,6 +18,12 @@ export interface ICajaRepository {
    * Devuelve true si 1 fila afectada (el cierre ganó la race), false si ya estaba cerrada.
    */
   cerrar(id: number, data: CerrarCajaData): Promise<boolean>;
+  /**
+   * UPDATE condicional — reabre la MISMA caja SOLO si estado === 'CERRADA'
+   * (mismo id, sin crear fila nueva) y limpia los datos del cierre intermedio.
+   * Devuelve true si 1 fila afectada, false si ya estaba abierta (race de reapertura).
+   */
+  reabrir(id: number): Promise<boolean>;
   listBySalonPaginated(
     salonId: number,
     page: number,
