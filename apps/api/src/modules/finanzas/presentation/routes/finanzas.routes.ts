@@ -5,10 +5,11 @@ import { GastoController } from '../controllers/GastoController';
 import { DevolucionController } from '../controllers/DevolucionController';
 import { LiquidacionController } from '../controllers/LiquidacionController';
 import { ReporteController } from '../controllers/ReporteController';
+import { CajaController } from '../controllers/CajaController';
 import { validate } from '../../../../presentation/middleware/validate';
 import { requireRole } from '../../../../presentation/middleware/requireRole';
 import { Rol } from '@pos-final/types';
-import { createRegistroSchema } from '@pos-final/validation';
+import { createRegistroSchema, abrirCajaSchema, cerrarCajaSchema } from '@pos-final/validation';
 
 const router = Router({ mergeParams: true });
 
@@ -17,6 +18,7 @@ const gastoController = container.resolve(GastoController);
 const devolucionController = container.resolve(DevolucionController);
 const liquidacionController = container.resolve(LiquidacionController);
 const reporteController = container.resolve(ReporteController);
+const cajaController = container.resolve(CajaController);
 
 // ── Registros ─────────────────────────────────────────────────
 
@@ -72,5 +74,35 @@ router.get('/finanzas/nomina/historial', liquidacionController.historial);
 router.get('/finanzas/resumen', reporteController.resumenDia);
 router.get('/finanzas/roi', reporteController.roiMensual);
 router.get('/finanzas/turno/:id', reporteController.cierreTurno);
+
+// ── Caja (apertura / cierre / arqueo) ─────────────────────────
+
+router.post(
+  '/caja/abrir',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  validate(abrirCajaSchema),
+  cajaController.abrir,
+);
+router.post(
+  '/caja/cerrar',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  validate(cerrarCajaSchema),
+  cajaController.cerrar,
+);
+router.get(
+  '/caja/actual',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  cajaController.actual,
+);
+router.get(
+  '/caja/actual/esperado',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  cajaController.actualEsperado,
+);
+router.get(
+  '/caja/cierres',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  cajaController.cierres,
+);
 
 export { router as finanzasRouter };

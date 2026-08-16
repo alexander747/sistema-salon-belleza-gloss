@@ -3,6 +3,7 @@ import type { GastoEntity } from '../../../../infrastructure/persistence/entitie
 export interface IGastoRepository {
   findById(id: number): Promise<GastoEntity | null>;
   findBySalon(salonId: number): Promise<GastoEntity[]>;
+  findByCajaId(cajaId: number): Promise<GastoEntity[]>;
   search(params: {
     salonId: number;
     desde?: Date;

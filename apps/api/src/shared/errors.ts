@@ -71,3 +71,40 @@ export class UnprocessableEntityError extends AppError {
     super(message, 422, 'UNPROCESSABLE_ENTITY', details);
   }
 }
+
+/**
+ * 422 — Regla de oro: no hay caja abierta para el salón (no se vende ni
+ * se completan citas sin caja abierta).
+ */
+export class CajaCerradaError extends AppError {
+  constructor(message = 'No hay caja abierta para el salón', details?: unknown) {
+    super(message, 422, 'CAJA_CERRADA', details);
+  }
+}
+
+/**
+ * 409 — Ya existe una caja ABIERTA para el salón el día comercial actual.
+ */
+export class CajaYaAbiertaError extends AppError {
+  constructor(message = 'Ya existe una caja abierta para hoy', details?: unknown) {
+    super(message, 409, 'CAJA_YA_ABIERTA', details);
+  }
+}
+
+/**
+ * 409 — La caja ya está CERRADA (no se reabre ni se cierra dos veces).
+ */
+export class CajaYaCerradaError extends AppError {
+  constructor(message = 'La caja ya está cerrada', details?: unknown) {
+    super(message, 409, 'CAJA_YA_CERRADA', details);
+  }
+}
+
+/**
+ * 404 — No hay caja ABIERTA para el salón (GET caja actual).
+ */
+export class CajaNoAbiertaError extends AppError {
+  constructor(message = 'No hay caja abierta para el salón', details?: unknown) {
+    super(message, 404, 'CAJA_NO_ABIERTA', details);
+  }
+}

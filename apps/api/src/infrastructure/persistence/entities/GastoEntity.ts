@@ -8,6 +8,7 @@ import { BaseEntity } from './BaseEntity';
 import { MetodoPago } from './PagoTransaccionEntity';
 import { UsuarioEntity } from './UsuarioEntity';
 import { SalonEntity } from './SalonEntity';
+import { CajaEntity } from './CajaEntity';
 
 @Entity('gastos')
 export class GastoEntity extends BaseEntity {
@@ -47,4 +48,12 @@ export class GastoEntity extends BaseEntity {
 
   @Column({ type: 'int', nullable: true })
   reportadoPorId: number | null;
+
+  // Caja diaria asociada (NULL cuando no hay caja abierta al registrar el gasto)
+  @ManyToOne(() => CajaEntity, { nullable: true })
+  @JoinColumn({ name: 'cajaId' })
+  caja: CajaEntity | null;
+
+  @Column({ type: 'int', nullable: true })
+  cajaId: number | null;
 }

@@ -11,6 +11,8 @@ export function errorHandler(
   if (err instanceof AppError) {
     logger.warn({ err, statusCode: err.statusCode, code: err.code }, 'AppError handled');
     res.status(err.statusCode).json({
+      ok: false,
+      data: null,
       error: {
         code: err.code,
         message: err.message,
@@ -23,6 +25,8 @@ export function errorHandler(
   // Unknown error — log full stack, return generic 500
   logger.error({ err }, 'Unhandled error');
   res.status(500).json({
+    ok: false,
+    data: null,
     error: {
       code: 'INTERNAL_ERROR',
       message: 'Error interno del servidor',
