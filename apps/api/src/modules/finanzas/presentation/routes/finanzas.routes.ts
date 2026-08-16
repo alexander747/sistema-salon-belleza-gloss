@@ -6,6 +6,7 @@ import { DevolucionController } from '../controllers/DevolucionController';
 import { LiquidacionController } from '../controllers/LiquidacionController';
 import { ReporteController } from '../controllers/ReporteController';
 import { CajaController } from '../controllers/CajaController';
+import { CuentasController } from '../controllers/CuentasController';
 import { validate } from '../../../../presentation/middleware/validate';
 import { requireRole } from '../../../../presentation/middleware/requireRole';
 import { Rol } from '@pos-final/types';
@@ -19,6 +20,7 @@ const devolucionController = container.resolve(DevolucionController);
 const liquidacionController = container.resolve(LiquidacionController);
 const reporteController = container.resolve(ReporteController);
 const cajaController = container.resolve(CajaController);
+const cuentasController = container.resolve(CuentasController);
 
 // ── Registros ─────────────────────────────────────────────────
 
@@ -68,6 +70,19 @@ router.post(
   liquidacionController.liquidarEmpleada,
 );
 router.get('/finanzas/nomina/historial', liquidacionController.historial);
+
+// ── Cuentas por cobrar / pagar (read-only, deuda sensible) ────
+
+router.get(
+  '/finanzas/cuentas/cobrar',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
+  cuentasController.cobrar,
+);
+router.get(
+  '/finanzas/cuentas/pagar',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
+  cuentasController.pagar,
+);
 
 // ── Reportes ───────────────────────────────────────────────────
 

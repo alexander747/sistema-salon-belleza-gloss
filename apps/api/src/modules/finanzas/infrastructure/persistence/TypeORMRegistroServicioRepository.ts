@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { QueryRunner } from 'typeorm';
 import { AppDataSource } from '../../../../shared/database';
-import { RegistroServicioEntity } from '../../../../infrastructure/persistence/entities/RegistroServicioEntity';
+import { RegistroServicioEntity, EstadoRegistro } from '../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { IRegistroServicioRepository } from '../../domain/ports/IRegistroServicioRepository';
 
 @injectable()
@@ -40,6 +40,17 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       relations: ['pagos', 'divisiones'],
       order: { creadoEn: 'DESC' },
     });
+  }
+
+  async findConDeudaBySalon(salonId: number): Promise<RegistroServicioEntity[]> {
+    return this.getRepo()
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.cliente', 'cliente')
+      .where('r.salonId = :salonId', { salonId })
+      .andWhere('r.montoPendiente > 0')
+      .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
+      .orderBy('r.creadoEn', 'ASC')
+      .getMany();
   }
 
   async findBySalonAndDateRange(
