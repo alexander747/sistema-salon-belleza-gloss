@@ -1,9 +1,12 @@
 import { injectable, inject } from 'tsyringe';
 import type { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { Rol } from '@pos-final/types';
 import { ResumenDiaUseCase, type ResumenDiaInput } from '../../application/use-cases/reporte/ResumenDiaUseCase';
 import { ROIMensualUseCase } from '../../application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../../application/use-cases/reporte/CierreTurnoUseCase';
+import { PyLMensualUseCase } from '../../application/use-cases/reporte/PyLMensualUseCase';
+import { ValidationError } from '../../../../shared/errors';
 import { getColombiaDateString } from '../../../../shared/colombia-date';
 
 // Same role rule as RegistroController.list: only privileged roles can filter
@@ -17,12 +20,21 @@ const REGISTROS_PRIVILEGED_ROLES = new Set<number>([
 
 const TIPO_FILTER_VALUES = ['TODOS', 'SERVICIOS', 'PRODUCTOS'] as const;
 
+// Validación inline (sin tocar @pos-final/validation — evita el rebuild de dist).
+// desde/hasta son fechas Colombia YYYY-MM-DD; usuarioId es un entero positivo.
+const PYL_QUERY_SCHEMA = z.object({
+  desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  usuarioId: z.coerce.number().int().positive().optional(),
+});
+
 @injectable()
 export class ReporteController {
   constructor(
     @inject(ResumenDiaUseCase) private readonly resumenDiaUseCase: ResumenDiaUseCase,
     @inject(ROIMensualUseCase) private readonly roiMensualUseCase: ROIMensualUseCase,
     @inject(CierreTurnoUseCase) private readonly cierreTurnoUseCase: CierreTurnoUseCase,
+    @inject(PyLMensualUseCase) private readonly pylMensualUseCase: PyLMensualUseCase,
   ) {}
 
   resumenDia = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -87,6 +99,30 @@ export class ReporteController {
         salonId: req.salonId!,
         usuarioId,
         fecha,
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  pyl = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = PYL_QUERY_SCHEMA.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError('Parámetros inválidos', parsed.error.flatten().fieldErrors);
+      }
+
+      // Misma regla de roles que resumenDia: roles privilegiados pueden filtrar
+      // por empleada; roles restringidos son forzados a su propio usuarioId.
+      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+      const usuarioId = isPrivileged ? parsed.data.usuarioId : req.user!.id;
+
+      const result = await this.pylMensualUseCase.execute({
+        salonId: req.salonId!,
+        ...(parsed.data.desde ? { desde: parsed.data.desde } : {}),
+        ...(parsed.data.hasta ? { hasta: parsed.data.hasta } : {}),
+        ...(usuarioId !== undefined ? { usuarioId } : {}),
       });
       res.json(result);
     } catch (error) {
