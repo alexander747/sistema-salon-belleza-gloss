@@ -398,7 +398,7 @@ describe('LiquidarEmpleadaUseCase', () => {
     await expect(useCase.execute(baseInput)).rejects.toThrow('db down');
 
     const { AppDataSource } = await import('../../../../../../shared/database.js');
-    const qr = AppDataSource.createQueryRunner.mock.results[0].value;
+    const qr = (AppDataSource.createQueryRunner as unknown as { mock: { results: Array<{ value: { rollbackTransaction: () => unknown; release: () => unknown } }> } }).mock.results[0].value;
     expect(qr.rollbackTransaction).toHaveBeenCalled();
     expect(qr.release).toHaveBeenCalled();
   });
