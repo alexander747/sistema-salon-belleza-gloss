@@ -23,6 +23,8 @@ describe('errorHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      data: null,
       error: {
         code: 'NOT_FOUND',
         message: 'Salón no encontrado',
@@ -40,6 +42,8 @@ describe('errorHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      data: null,
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Datos inválidos',
@@ -56,6 +60,8 @@ describe('errorHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      data: null,
       error: {
         code: 'UNAUTHORIZED',
         message: 'Token requerido',
@@ -72,6 +78,8 @@ describe('errorHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      data: null,
       error: {
         code: 'FORBIDDEN',
         message: 'Acceso denegado',
@@ -88,6 +96,8 @@ describe('errorHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      data: null,
       error: {
         code: 'CONFLICT',
         message: 'El email ya existe',
@@ -104,6 +114,8 @@ describe('errorHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      data: null,
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error interno del servidor',
@@ -119,6 +131,8 @@ describe('errorHandler', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      data: null,
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Error interno del servidor',

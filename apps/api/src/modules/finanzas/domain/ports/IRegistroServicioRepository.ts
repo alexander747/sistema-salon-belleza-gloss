@@ -12,6 +12,7 @@ export interface IRegistroServicioRepository {
     hasta?: Date;
     usuarioId?: number;
     clienteId?: number;
+    cajaId?: number;
     skip?: number;
     take?: number;
   }): Promise<RegistroServicioEntity[]>;
@@ -21,6 +22,7 @@ export interface IRegistroServicioRepository {
     hasta?: Date;
     usuarioId?: number;
     clienteId?: number;
+    cajaId?: number;
   }): Promise<number>;
   update(id: number, data: Partial<RegistroServicioEntity>, queryRunner?: QueryRunner): Promise<RegistroServicioEntity | null>;
 }

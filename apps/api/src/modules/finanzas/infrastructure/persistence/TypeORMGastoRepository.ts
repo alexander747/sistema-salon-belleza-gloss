@@ -20,6 +20,13 @@ export class TypeORMGastoRepository implements IGastoRepository {
     });
   }
 
+  async findByCajaId(cajaId: number): Promise<GastoEntity[]> {
+    return this.getRepo().find({
+      where: { cajaId },
+      order: { fecha: 'DESC' },
+    });
+  }
+
   async search(params: {
     salonId: number;
     desde?: Date;

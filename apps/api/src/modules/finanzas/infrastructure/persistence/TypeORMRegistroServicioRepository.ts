@@ -66,6 +66,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     hasta?: Date;
     usuarioId?: number;
     clienteId?: number;
+    cajaId?: number;
     skip?: number;
     take?: number;
   }): Promise<RegistroServicioEntity[]> {
@@ -91,6 +92,9 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     if (params.clienteId) {
       query.andWhere('r.clienteId = :clienteId', { clienteId: params.clienteId });
     }
+    if (params.cajaId) {
+      query.andWhere('r.cajaId = :cajaId', { cajaId: params.cajaId });
+    }
 
     if (params.skip !== undefined) query.skip(params.skip);
     if (params.take !== undefined && params.take > 0) query.take(params.take);
@@ -104,6 +108,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     hasta?: Date;
     usuarioId?: number;
     clienteId?: number;
+    cajaId?: number;
   }): Promise<number> {
     const query = this.getRepo()
       .createQueryBuilder('r')
@@ -120,6 +125,9 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     }
     if (params.clienteId) {
       query.andWhere('r.clienteId = :clienteId', { clienteId: params.clienteId });
+    }
+    if (params.cajaId) {
+      query.andWhere('r.cajaId = :cajaId', { cajaId: params.cajaId });
     }
 
     return query.getCount();
