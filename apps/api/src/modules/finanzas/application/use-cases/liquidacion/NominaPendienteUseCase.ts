@@ -33,10 +33,10 @@ export class NominaPendienteUseCase {
   ) {}
 
   async execute(input: NominaPendienteInput): Promise<NominaPendienteEmpleada[]> {
-    // 1. Get all active manicuristas in the salon
+    // 1. Get all active employees in the salon (every role paid by the salon)
     const empleadas = await this.usuarioRepo.findBySalon(
       input.salonId,
-      Rol.MANICURISTA,
+      undefined, // todos los roles
       true, // activo
     );
 
@@ -52,12 +52,23 @@ export class NominaPendienteUseCase {
     const result: NominaPendienteEmpleada[] = [];
 
     for (const empleada of empleadas) {
+      // El CONTADOR no es pagado por el salón → nunca aparece en la nómina
+      if (empleada.rol === Rol.CONTADOR) {
+        continue;
+      }
+
       // Get pending (unpaid) non-anulled registros for this employee
       let pendingRegistros = allRegistros.filter(
         (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada && r.estado !== EstadoRegistro.ANULADO,
       );
 
-      if (pendingRegistros.length === 0) {
+      // Skip only when there is NOTHING liquidable: no pending registros
+      // AND no fixed compensation (sueldoFijo / bonoHorario)
+      if (
+        pendingRegistros.length === 0 &&
+        Number(empleada.sueldoFijo) <= 0 &&
+        Number(empleada.bonoHorario) <= 0
+      ) {
         continue;
       }
 
