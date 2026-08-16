@@ -18,6 +18,7 @@ function makeEmpleadaEntity(overrides: Partial<UsuarioEntity> = {}): UsuarioEnti
     sueldoFijo: '50000',
     bonoHorario: '1000',
     frecuenciaBono: 'mensual',
+    frecuenciaPago: 'QUINCENAL',
     salonId: 1,
     creadoEn: new Date(),
     actualizadoEn: new Date(),
@@ -38,6 +39,7 @@ describe('EmpleadaDTO', () => {
       expect(dto.sueldoFijo).toBe(50000);
       expect(dto.bonoHorario).toBe(1000);
       expect(dto.frecuenciaBono).toBe('mensual');
+      expect(dto.frecuenciaPago).toBe('QUINCENAL');
     });
 
     it('should include compensation fields for ADMINISTRADOR', () => {
@@ -48,6 +50,7 @@ describe('EmpleadaDTO', () => {
       expect(dto.sueldoFijo).toBe(50000);
       expect(dto.bonoHorario).toBe(1000);
       expect(dto.frecuenciaBono).toBe('mensual');
+      expect(dto.frecuenciaPago).toBe('QUINCENAL');
     });
 
     it('should strip compensation fields for MANICURISTA', () => {
@@ -58,6 +61,7 @@ describe('EmpleadaDTO', () => {
       expect(dto.sueldoFijo).toBeNull();
       expect(dto.bonoHorario).toBeNull();
       expect(dto.frecuenciaBono).toBeNull();
+      expect(dto.frecuenciaPago).toBeNull();
     });
 
     it('should always include basic fields regardless of role', () => {

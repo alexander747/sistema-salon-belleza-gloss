@@ -1,5 +1,5 @@
 import { injectable, inject } from 'tsyringe';
-import { Rol } from '@pos-final/types';
+import { Rol, type FrecuenciaPago } from '@pos-final/types';
 import type { IUsuarioRepository } from '../../../domain/ports/IUsuarioRepository';
 import type { IBcryptService } from '../../../../../modules/auth/infrastructure/services/BcryptService';
 import { EmpleadaDTO } from '../../dtos/EmpleadaDTO';
@@ -19,6 +19,7 @@ interface UpdateEmpleadaInput {
   sueldoFijo?: number;
   bonoHorario?: number;
   frecuenciaBono?: string;
+  frecuenciaPago?: FrecuenciaPago;
   userRol: Rol;
 }
 
@@ -57,6 +58,7 @@ export class UpdateEmpleadaUseCase {
     if (input.sueldoFijo !== undefined) data.sueldoFijo = input.sueldoFijo;
     if (input.bonoHorario !== undefined) data.bonoHorario = input.bonoHorario;
     if (input.frecuenciaBono !== undefined) data.frecuenciaBono = input.frecuenciaBono;
+    if (input.frecuenciaPago !== undefined) data.frecuenciaPago = input.frecuenciaPago;
 
     // Hash password only if provided
     if (input.password !== undefined) {

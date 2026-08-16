@@ -67,6 +67,31 @@ describe('CreateEmpleadaUseCase', () => {
     );
   });
 
+  it('should pass frecuenciaPago through to the repository', async () => {
+    const mocks = createMocks();
+    mocks.usuarioRepo.findBySalonAndPhone = vi.fn().mockResolvedValue(null);
+    mocks.bcryptService.hashPassword = vi.fn().mockResolvedValue('hashed_password');
+    mocks.usuarioRepo.create = vi.fn().mockResolvedValue(
+      makeMockEmpleada({ frecuenciaPago: 'QUINCENAL' }),
+    );
+
+    const useCase = new CreateEmpleadaUseCase(mocks.usuarioRepo, mocks.bcryptService);
+    await useCase.execute({
+      salonId: 1,
+      nombre: 'Maria',
+      numeroWhatsApp: '+541116789',
+      email: 'maria@test.com',
+      password: 'secreto123',
+      rol: Rol.MANICURISTA,
+      frecuenciaPago: 'QUINCENAL',
+      userRol: Rol.DUEÑA,
+    });
+
+    expect(mocks.usuarioRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ frecuenciaPago: 'QUINCENAL' }),
+    );
+  });
+
   it('should reject duplicate phone number', async () => {
     const mocks = createMocks();
     mocks.usuarioRepo.findBySalonAndPhone = vi.fn().mockResolvedValue(makeMockEmpleada());

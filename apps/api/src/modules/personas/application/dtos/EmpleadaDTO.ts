@@ -14,6 +14,7 @@ export class EmpleadaDTO {
   sueldoFijo: number | null;
   bonoHorario: number | null;
   frecuenciaBono: string | null;
+  frecuenciaPago: string | null;
   salonId: number;
   creadoEn: Date;
   actualizadoEn: Date;
@@ -38,11 +39,13 @@ export class EmpleadaDTO {
       dto.sueldoFijo = Number(entity.sueldoFijo);
       dto.bonoHorario = Number(entity.bonoHorario);
       dto.frecuenciaBono = entity.frecuenciaBono ?? null;
+      dto.frecuenciaPago = entity.frecuenciaPago ?? null;
     } else {
       dto.porcentajeComisionServicio = null;
       dto.sueldoFijo = null;
       dto.bonoHorario = null;
       dto.frecuenciaBono = null;
+      dto.frecuenciaPago = null;
     }
 
     return dto;

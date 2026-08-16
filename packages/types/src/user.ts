@@ -8,6 +8,9 @@ export enum Rol {
   CONTADOR = 6,
 }
 
+/** Frecuencia con la que se liquida el sueldo fijo de una empleada. */
+export type FrecuenciaPago = 'MENSUAL' | 'QUINCENAL';
+
 /** Core user entity shape shared across frontend and backend. */
 export interface IUser {
   id: number;
@@ -23,6 +26,7 @@ export interface IUser {
   sueldoFijo: number;
   bonoHorario: number;
   frecuenciaBono?: string;
+  frecuenciaPago?: FrecuenciaPago;
   activo: boolean;
   refreshToken?: string | null;
   refreshTokenFamily?: string | null;
