@@ -98,12 +98,12 @@ Inicio: branch desde PR1. Fin: POST /registros y completar → 422 CAJA_CERRADA 
 
 Inicio: branch desde PR2. Fin: abrir/cerrar desde UI + historial paginado + banner. Verificación: `cd apps/pos-dashboard && npx vitest run && npx tsc --noEmit` + manual.
 
-- [ ] 3.1 Crear `components/caja/CajaBanner.tsx` — fetch `GET /salones/:id/caja/actual` en mount; verde "Caja abierta 💰 $montoInicial" / ámbar "Caja cerrada — Abrir para vender" (link tab Caja); escucha/dispara custom event `caja-refresh`
-- [ ] 3.2 Crear `components/caja/CajaTab.tsx` — badge estado actual + botón Abrir (modal inline montoInicial → POST /caja/abrir); botón Cerrar → modal arqueo con `GET /caja/actual/esperado` (efectivo esperado + breakdown), input montoRealEfectivo, preview diferencia en vivo, POST /caja/cerrar → render ReporteCierreDTO; dispara caja-refresh
-- [ ] 3.3 En CajaTab: historial paginado `GET /caja/cierres?page=&limit=12` — tabla fecha/apertura/cierre/esperado/real/diferencia/estado
-- [ ] 3.4 Modificar `pages/FinanzasPage.tsx` — TabKey + TABS += `{key:'caja', label:'💰 Caja'}`; render `<CajaTab/>`; montar CajaBanner
-- [ ] 3.5 Montar `CajaBanner` en `pages/AgendaPage.tsx` y `pages/VentasPage.tsx` (bajo header/toolbar)
-- [ ] 3.6 Crear `components/caja/__tests__/CajaBanner.test.tsx` + `CajaTab.test.tsx` (light: render, fetch, estados)
+- [x] 3.1 Crear `components/caja/CajaBanner.tsx` — fetch `GET /salones/:id/caja/actual` en mount; verde "Caja abierta 💰 $montoInicial" / ámbar "Caja cerrada — Abrir para vender" (link tab Caja); escucha/dispara custom event `caja-refresh`
+- [x] 3.2 Crear `components/caja/CajaTab.tsx` — badge estado actual + botón Abrir (modal inline montoInicial → POST /caja/abrir); botón Cerrar → modal arqueo con `GET /caja/actual/esperado` (efectivo esperado + breakdown), input montoRealEfectivo, preview diferencia en vivo, POST /caja/cerrar → render ReporteCierreDTO; dispara caja-refresh
+- [x] 3.3 En CajaTab: historial paginado `GET /caja/cierres?page=&limit=12` — tabla fecha/apertura/cierre/esperado/real/diferencia/estado
+- [x] 3.4 Modificar `pages/FinanzasPage.tsx` — TabKey + TABS += `{key:'caja', label:'💰 Caja'}`; render `<CajaTab/>`; montar CajaBanner
+- [x] 3.5 Montar `CajaBanner` en `pages/AgendaPage.tsx` y `pages/VentasPage.tsx` (bajo header/toolbar)
+- [x] 3.6 Crear `components/caja/__tests__/CajaBanner.test.tsx` + `CajaTab.test.tsx` (light: render, fetch, estados)
 
 ## PR 4 — Manejo CAJA_CERRADA en flujos de venta
 
