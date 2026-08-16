@@ -5,6 +5,8 @@ export interface IRegistroServicioRepository {
   create(data: Partial<RegistroServicioEntity>, queryRunner?: QueryRunner): Promise<RegistroServicioEntity>;
   findById(id: number): Promise<RegistroServicioEntity | null>;
   findBySalon(salonId: number): Promise<RegistroServicioEntity[]>;
+  /** Registros con deuda pendiente (montoPendiente > 0, no ANULADO) con cliente cargado. */
+  findConDeudaBySalon(salonId: number): Promise<RegistroServicioEntity[]>;
   findBySalonAndDateRange(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<RegistroServicioEntity[]>;
   search(params: {
     salonId: number;

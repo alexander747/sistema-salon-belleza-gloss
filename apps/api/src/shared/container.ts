@@ -250,6 +250,10 @@ import { NominaPendienteUseCase } from '../modules/finanzas/application/use-case
 import { LiquidarEmpleadaUseCase } from '../modules/finanzas/application/use-cases/liquidacion/LiquidarEmpleadaUseCase';
 import { HistorialLiquidacionesUseCase } from '../modules/finanzas/application/use-cases/liquidacion/HistorialLiquidacionesUseCase';
 
+// ---- Finanzas Module — Use Cases (Cuentas) ----
+import { CuentasCobrarUseCase } from '../modules/finanzas/application/use-cases/cuentas/CuentasCobrarUseCase';
+import { CuentasPagarUseCase } from '../modules/finanzas/application/use-cases/cuentas/CuentasPagarUseCase';
+
 // ---- Finanzas Module — Use Cases (Reportes) ----
 import { ResumenDiaUseCase } from '../modules/finanzas/application/use-cases/reporte/ResumenDiaUseCase';
 import { ROIMensualUseCase } from '../modules/finanzas/application/use-cases/reporte/ROIMensualUseCase';
@@ -264,6 +268,7 @@ import { DevolucionController } from '../modules/finanzas/presentation/controlle
 import { LiquidacionController } from '../modules/finanzas/presentation/controllers/LiquidacionController';
 import { ReporteController } from '../modules/finanzas/presentation/controllers/ReporteController';
 import { CajaController } from '../modules/finanzas/presentation/controllers/CajaController';
+import { CuentasController } from '../modules/finanzas/presentation/controllers/CuentasController';
 
 // ---- Finanzas Module — Caja (use cases) ----
 import { AbrirCajaUseCase } from '../modules/finanzas/application/use-cases/caja/AbrirCajaUseCase';
@@ -304,6 +309,10 @@ container.register(NominaPendienteUseCase, { useClass: NominaPendienteUseCase })
 container.register(LiquidarEmpleadaUseCase, { useClass: LiquidarEmpleadaUseCase });
 container.register(HistorialLiquidacionesUseCase, { useClass: HistorialLiquidacionesUseCase });
 
+// ---- Finanzas Module — Use Cases (Cuentas) ----
+container.register(CuentasCobrarUseCase, { useClass: CuentasCobrarUseCase });
+container.register(CuentasPagarUseCase, { useClass: CuentasPagarUseCase });
+
 // ---- Finanzas Module — Use Cases (Reportes) ----
 container.register(ResumenDiaUseCase, { useClass: ResumenDiaUseCase });
 container.register(ROIMensualUseCase, { useClass: ROIMensualUseCase });
@@ -318,6 +327,7 @@ container.register(DevolucionController, { useClass: DevolucionController });
 container.register(LiquidacionController, { useClass: LiquidacionController });
 container.register(ReporteController, { useClass: ReporteController });
 container.register(CajaController, { useClass: CajaController });
+container.register(CuentasController, { useClass: CuentasController });
 
 // ---- Finanzas Module — Caja (use cases) ----
 container.register(AbrirCajaUseCase, { useClass: AbrirCajaUseCase });
