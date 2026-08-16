@@ -84,15 +84,15 @@ Inicio: `git checkout -b feat/caja-backend`. Fin: API sirve los 5 endpoints con 
 
 Inicio: branch desde PR1. Fin: POST /registros y completar → 422 CAJA_CERRADA sin caja; gasto con cajaId cuando hay. Verificación: vitest + curl.
 
-- [ ] 2.1 Modificar `CreateRegistroUseCase.ts` — @inject('ICajaRepository'); paso 0 antes de validar cliente: `verificarCajaAbierta`; `cajaId: caja.id` en create() dentro de la transacción existente
-- [ ] 2.2 Modificar `CreateGastoUseCase.ts` — `findAbiertaBySalonYFecha` → `cajaId: caja?.id ?? null` (NO lanza 422, spec gastos)
-- [ ] 2.3 Modificar `CompletarCitaUseCase.ts` — tras findById, antes de cambiarEstado: `verificarCajaAbierta(repo, cita.salonId)`; cita permanece en estado previo
-- [ ] 2.4 Modificar `CambiarEstadoCitaUseCase.ts` — verificar solo si `input.estado === 'COMPLETADA'` (tras validarTransicion); otros estados no bloqueados
-- [ ] 2.5 Actualizar `CreateRegistroUseCase.test.ts` — mock ICajaRepository; casos: sin caja→422 CAJA_CERRADA sin persistir, con caja id=5→cajaId=5
-- [ ] 2.6 Actualizar `CambiarEstadoCitaUseCase.test.ts` — nueva dep; COMPLETADA→422 y estado intacto; CANCELADA sin caja→200
-- [ ] 2.7 Crear `cita/__tests__/CompletarCitaUseCase.test.ts` (no existe, gotcha #5) — 422 CAJA_CERRADA, cita queda CONFIRMADA
-- [ ] 2.8 Crear `gasto/__tests__/CreateGastoUseCase.test.ts` (no existe, gotcha #5) — cajaId=5 con caja, NULL sin caja
-- [ ] 2.9 Verificar PR2: `npx vitest run` + curls (sin caja → 422 CAJA_CERRADA; abrir → POST registros 201 con cajaId)
+- [x] 2.1 Modificar `CreateRegistroUseCase.ts` — @inject('ICajaRepository'); paso 0 antes de validar cliente: `verificarCajaAbierta`; `cajaId: caja.id` en create() dentro de la transacción existente
+- [x] 2.2 Modificar `CreateGastoUseCase.ts` — `findAbiertaBySalonYFecha` → `cajaId: caja?.id ?? null` (NO lanza 422, spec gastos)
+- [x] 2.3 Modificar `CompletarCitaUseCase.ts` — tras findById, antes de cambiarEstado: `verificarCajaAbierta(repo, cita.salonId)`; cita permanece en estado previo
+- [x] 2.4 Modificar `CambiarEstadoCitaUseCase.ts` — verificar solo si `input.estado === 'COMPLETADA'` (tras validarTransicion); otros estados no bloqueados
+- [x] 2.5 Actualizar `CreateRegistroUseCase.test.ts` — mock ICajaRepository; casos: sin caja→422 CAJA_CERRADA sin persistir, con caja id=5→cajaId=5
+- [x] 2.6 Actualizar `CambiarEstadoCitaUseCase.test.ts` — nueva dep; COMPLETADA→422 y estado intacto; CANCELADA sin caja→200
+- [x] 2.7 Crear `cita/__tests__/CompletarCitaUseCase.test.ts` (no existe, gotcha #5) — 422 CAJA_CERRADA, cita queda CONFIRMADA
+- [x] 2.8 Crear `gasto/__tests__/CreateGastoUseCase.test.ts` (no existe, gotcha #5) — cajaId=5 con caja, NULL sin caja
+- [x] 2.9 Verificar PR2: `npx vitest run` + curls (sin caja → 422 CAJA_CERRADA; abrir → POST registros 201 con cajaId) — vitest ✓ (233 pass, 2 fallas pre-existentes RegistroController); curls pendientes de entorno con server/DB (sdd-verify)
 
 ## PR 3 — Frontend Caja (CajaTab + CajaBanner)
 
