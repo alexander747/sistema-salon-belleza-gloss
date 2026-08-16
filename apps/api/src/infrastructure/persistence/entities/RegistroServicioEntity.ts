@@ -15,6 +15,7 @@ import { RegistroProductoEntity } from './RegistroProductoEntity';
 import { RegistroServicioItemEntity } from './RegistroServicioItemEntity';
 import { ClienteEntity } from './ClienteEntity';
 import { SalonEntity } from './SalonEntity';
+import { CajaEntity } from './CajaEntity';
 
 export enum EstadoRegistro {
   ACTIVO = 'ACTIVO',
@@ -117,4 +118,12 @@ export class RegistroServicioEntity extends BaseEntity {
 
   @Column({ type: 'int', nullable: true })
   liquidacionId: number;
+
+  // Caja diaria asociada (NULL para registros legacy anteriores a cajas)
+  @ManyToOne(() => CajaEntity, { nullable: true })
+  @JoinColumn({ name: 'cajaId' })
+  caja: CajaEntity | null;
+
+  @Column({ type: 'int', nullable: true })
+  cajaId: number | null;
 }
