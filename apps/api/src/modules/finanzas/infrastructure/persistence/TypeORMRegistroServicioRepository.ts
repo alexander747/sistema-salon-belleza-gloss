@@ -75,6 +75,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.pagos', 'pago')
       .leftJoinAndSelect('r.divisiones', 'division')
       .leftJoinAndSelect('r.cliente', 'cliente')
+      .leftJoinAndSelect('r.usuario', 'usuario')
       .leftJoinAndSelect('r.productosVendidos', 'rp')
       .leftJoinAndSelect('rp.producto', 'p')
       .leftJoinAndSelect('r.serviciosItems', 'si')
