@@ -227,8 +227,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
     vi.useRealTimers();
   });
 
-  it('QUINCENAL día 10: período [1,15], comp fijo al 50% y registros filtrados por quincena', async () => {
-    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08
+  it('QUINCENAL día 10: período [1,15], comp fijo al 50% y registros filtrados por quincena', async () => {    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({
         id: 1,
@@ -267,6 +266,37 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
       1,
       colombiaDayStartUTC('2026-08-01'),
       colombiaDayEndUTC('2026-08-15'),
+    );
+  });
+
+  it('QUINCENAL sin registros: paga el 50% del comp fijo (totalAPagar=125000)', async () => {
+    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({
+        id: 4,
+        nombre: 'Q0',
+        frecuenciaPago: 'QUINCENAL',
+        sueldoFijo: 200000,
+        bonoHorario: 50000,
+      }),
+    ]);
+    mockRegistroRepo.findBySalon.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        nombre: 'Q0',
+        totalComisionesPendientes: 0,
+        totalPropinas: 0,
+        sueldoFijo: 100000, // 50% de 200000
+        bonoHorario: 25000, // 50% de 50000
+        totalAPagar: 125000,
+        cantidadRegistros: 0,
+        frecuenciaPago: 'QUINCENAL',
+      }),
     );
   });
 
