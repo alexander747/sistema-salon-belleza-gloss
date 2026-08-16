@@ -120,6 +120,7 @@ interface NominaEmpleado {
   totalPropinas: number;
   bonoHorario: number;
   sueldoFijo: number;
+  porcentajeComisionServicio: number;
   totalAPagar: number;
   cantidadRegistros: number;
 }
@@ -2998,6 +2999,53 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                         const fd = new Date(d.getFullYear(), d.getMonth(), 1);
                         return `${toISODate(fd)} — ${toISODate(d)}`;
                       })()}
+                    </div>
+                    <div style={{
+                      display: 'flex', gap: '0.35rem', flexWrap: 'wrap',
+                      marginTop: '0.3rem',
+                    }}>
+                      {selectedEmpleada.sueldoFijo > 0 && (
+                        <span style={{
+                          background: 'rgba(92,186,123,0.12)',
+                          color: 'var(--success)',
+                          padding: '0.1rem 0.5rem',
+                          borderRadius: '999px',
+                          fontSize: '0.65rem',
+                          fontWeight: 600,
+                          fontFamily: "'DM Sans', sans-serif",
+                          whiteSpace: 'nowrap',
+                        }}>
+                          💼 Sueldo fijo: {formatCurrency(selectedEmpleada.sueldoFijo)}
+                        </span>
+                      )}
+                      {selectedEmpleada.porcentajeComisionServicio > 0 && (
+                        <span style={{
+                          background: 'rgba(212,168,83,0.15)',
+                          color: 'var(--accent)',
+                          padding: '0.1rem 0.5rem',
+                          borderRadius: '999px',
+                          fontSize: '0.65rem',
+                          fontWeight: 600,
+                          fontFamily: "'DM Sans', sans-serif",
+                          whiteSpace: 'nowrap',
+                        }}>
+                          💰 Comisión: {selectedEmpleada.porcentajeComisionServicio}%
+                        </span>
+                      )}
+                      {selectedEmpleada.sueldoFijo <= 0 && selectedEmpleada.porcentajeComisionServicio <= 0 && (
+                        <span style={{
+                          background: 'rgba(148,163,184,0.12)',
+                          color: 'var(--text-dim)',
+                          padding: '0.1rem 0.5rem',
+                          borderRadius: '999px',
+                          fontSize: '0.65rem',
+                          fontWeight: 600,
+                          fontFamily: "'DM Sans', sans-serif",
+                          whiteSpace: 'nowrap',
+                        }}>
+                          ⚪ Sin esquema de pago definido
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div style={{

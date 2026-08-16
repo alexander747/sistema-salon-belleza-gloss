@@ -12,6 +12,7 @@ export interface NominaPendienteEmpleada {
   totalPropinas: number;
   bonoHorario: number;
   sueldoFijo: number;
+  porcentajeComisionServicio: number;
   totalAPagar: number;
   cantidadRegistros: number;
 }
@@ -95,6 +96,7 @@ export class NominaPendienteUseCase {
         totalPropinas,
         bonoHorario: Number(empleada.bonoHorario),
         sueldoFijo: Number(empleada.sueldoFijo),
+        porcentajeComisionServicio: Number(empleada.porcentajeComisionServicio),
         totalAPagar:
           totalComisionesPendientes +
           totalPropinas +
