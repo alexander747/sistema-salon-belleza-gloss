@@ -41,6 +41,22 @@ export interface ReporteCierreDTO {
   reporte: ReporteCierre;
 }
 
+/** Movimiento individual del detalle de un cierre (registro SERVICIO o gasto GASTO). */
+export interface MovimientoDetalle {
+  id: number;
+  tipo: 'SERVICIO' | 'GASTO';
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  metodoPago: string | null;
+}
+
+export interface DetalleCierreDTO {
+  caja: CajaDTO;
+  reporte: ReporteCierre;
+  movimientos: MovimientoDetalle[];
+}
+
 /* ================================================================ */
 /*  HELPERS                                                          */
 /* ================================================================ */
@@ -51,6 +67,20 @@ function formatFechaCaja(fechaCaja?: string): string {
   const [y, m, d] = fechaCaja.split('-');
   if (!y || !m || !d) return fechaCaja;
   return `${d}/${m}/${y}`;
+}
+
+/** Fecha de movimiento: 'YYYY-MM-DD' (gasto) → 'DD/MM/YYYY'; ISO datetime (registro) → fecha+hora local. */
+function formatFechaMovimiento(fecha: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return formatFechaCaja(fecha);
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-CO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 const METODO_LABELS: Record<string, string> = {
@@ -182,6 +212,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   const [cierresMeta, setCierresMeta] = useState({ page: 1, limit: 12, total: 0, totalPages: 0 });
   const [empleadasMap, setEmpleadasMap] = useState<Map<number, string>>(new Map());
 
+  /* ── Modal Detalle de Cierre ── */
+  const [detalleOpen, setDetalleOpen] = useState(false);
+  const [detalleCierre, setDetalleCierre] = useState<CajaDTO | null>(null);
+  const [detalleReporte, setDetalleReporte] = useState<ReporteCierre | null>(null);
+  const [detalleMovimientos, setDetalleMovimientos] = useState<MovimientoDetalle[]>([]);
+  const [detalleLoading, setDetalleLoading] = useState(false);
+
   const canManage = puedeGestionarCaja(user);
 
   /* ── Fetchers ── */
@@ -243,6 +280,28 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
       setEsperadoLoading(false);
     }
   }, [salonId]);
+
+  /* Abre el modal de detalle: caja del historial + reporte recomputado + movimientos. */
+  const handleVerDetalle = useCallback(
+    async (c: CajaDTO) => {
+      if (!salonId) return;
+      setDetalleCierre(c);
+      setDetalleReporte(null);
+      setDetalleMovimientos([]);
+      setDetalleOpen(true);
+      setDetalleLoading(true);
+      try {
+        const { data } = await api.get(`/salones/${salonId}/caja/${c.id}/cierre`);
+        setDetalleReporte(data?.data?.reporte ?? null);
+        setDetalleMovimientos(data?.data?.movimientos ?? []);
+      } catch {
+        // Error visible en el modal ("No se pudo cargar el detalle")
+      } finally {
+        setDetalleLoading(false);
+      }
+    },
+    [salonId],
+  );
 
   const refreshAll = useCallback(() => {
     fetchCaja();
@@ -448,7 +507,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
               <thead>
                 <tr>
-                  {['Fecha', 'Abierta por', 'Cerrada por', 'Inicial', 'Esperado', 'Real', 'Diferencia', 'Estado'].map((h) => (
+                  {['Fecha', 'Abierta por', 'Cerrada por', 'Inicial', 'Esperado', 'Real', 'Diferencia', 'Estado', 'Acción'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -473,7 +532,12 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                   const diff = c.diferencia;
                   const diffColor = diff == null ? 'var(--text-dim)' : diff < 0 ? 'var(--danger)' : diff > 0 ? '#fbbf24' : 'var(--success)';
                   return (
-                    <tr key={c.id}>
+                    <motion.tr
+                      key={c.id}
+                      onClick={() => handleVerDetalle(c)}
+                      whileHover={{ backgroundColor: 'rgba(212,168,83,0.07)' }}
+                      style={{ cursor: 'pointer', transition: 'background 0.15s' }}
+                    >
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatFechaCaja(c.fechaCaja)}</td>
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{nombreAuditor(c.aperturaPorId)}</td>
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{nombreAuditor(c.cierrePorId)}</td>
@@ -484,7 +548,29 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.75rem' }}>
                         <span style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>{c.estado}</span>
                       </td>
-                    </tr>
+                      <td style={{ padding: '0.55rem 0.6rem', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleVerDetalle(c);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--accent)',
+                            padding: '0.25rem 0.6rem',
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Ver
+                        </button>
+                      </td>
+                    </motion.tr>
                   );
                 })}
               </tbody>
@@ -744,6 +830,153 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.25rem', borderTop: '1px solid var(--border)' }}>
                 <button onClick={() => setReporte(null)} style={primaryBtnStyle}>Listo</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal Detalle de Cierre (historial) ── */}
+      <AnimatePresence>
+        {detalleOpen && (
+          <motion.div data-testid="detalle-cierre-modal" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setDetalleOpen(false); }}>
+            <motion.div
+              style={{ ...modalStyle, maxWidth: 640 }}
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>Detalle del cierre</span>
+                <button onClick={() => setDetalleOpen(false)} aria-label="Cerrar" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: '1rem', cursor: 'pointer' }}>✕</button>
+              </div>
+              <div style={{ padding: '1.25rem', overflowY: 'auto' }}>
+                {detalleLoading ? (
+                  <div style={{ color: 'var(--text-dim)', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem' }}>
+                    Cargando detalle…
+                  </div>
+                ) : detalleCierre && detalleReporte ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                      <span style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>CERRADA</span>
+                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                        {formatFechaCaja(detalleCierre.fechaCaja)} · {nombreAuditor(detalleCierre.aperturaPorId)} → {nombreAuditor(detalleCierre.cierrePorId)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
+                      {[
+                        { label: 'Servicios', value: detalleReporte.totalServicios },
+                        { label: 'Productos', value: detalleReporte.totalProductos },
+                        { label: 'Ingresos brutos', value: detalleReporte.ingresosBrutos },
+                        { label: 'Descuentos', value: detalleReporte.descuentos },
+                        { label: 'Ingresos netos', value: detalleReporte.ingresosNetos },
+                        { label: 'Comisiones', value: detalleReporte.comisiones },
+                        { label: 'Gastos', value: detalleReporte.totalGastos },
+                        { label: 'Movimientos', value: detalleReporte.cantidadMovimientos },
+                      ].map((f) => (
+                        <div key={f.label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.8rem' }}>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.2rem' }}>{f.label}</div>
+                          <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(f.value)}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
+                      {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((met) => (
+                        <div key={met} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{METODO_LABELS[met]}</span>
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(detalleReporte.porMetodoPago?.[met])}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px solid var(--border)', paddingTop: '0.9rem', marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Efectivo esperado</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(detalleReporte.montoEsperado)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Monto real</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(detalleReporte.montoReal)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Diferencia</span>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            color: (detalleReporte.diferencia ?? 0) < 0 ? 'var(--danger)' : (detalleReporte.diferencia ?? 0) > 0 ? '#fbbf24' : 'var(--success)',
+                          }}
+                        >
+                          {formatCurrency(detalleReporte.diferencia)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                        <thead>
+                          <tr>
+                            {['Tipo', 'Fecha', 'Descripción', 'Método', 'Monto'].map((h) => (
+                              <th
+                                key={h}
+                                style={{
+                                  textAlign: 'left',
+                                  padding: '0.45rem 0.6rem',
+                                  fontSize: '0.65rem',
+                                  fontWeight: 600,
+                                  color: 'var(--text-dim)',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.06em',
+                                  borderBottom: '1px solid var(--border)',
+                                  whiteSpace: 'nowrap',
+                                  background: 'var(--bg-elevated)',
+                                }}
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detalleMovimientos.map((m) => {
+                            const metodoLabel = m.metodoPago ? METODO_LABELS[m.metodoPago] ?? m.metodoPago : '—';
+                            return (
+                              <tr key={`${m.tipo}-${m.id}`}>
+                                <td style={{ padding: '0.45rem 0.6rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                  <span
+                                    style={{
+                                      background: m.tipo === 'SERVICIO' ? 'rgba(92,186,123,0.12)' : 'rgba(224,85,106,0.12)',
+                                      color: m.tipo === 'SERVICIO' ? 'var(--success)' : 'var(--danger)',
+                                      padding: '0.15rem 0.5rem',
+                                      borderRadius: '999px',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {m.tipo}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.45rem 0.6rem', fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatFechaMovimiento(m.fecha)}</td>
+                                <td style={{ padding: '0.45rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{m.descripcion}</td>
+                                <td style={{ padding: '0.45rem 0.6rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{metodoLabel}</td>
+                                <td style={{ padding: '0.45rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatCurrency(m.monto)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ color: 'var(--danger)', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem' }}>
+                    No se pudo cargar el detalle.
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.25rem', borderTop: '1px solid var(--border)' }}>
+                <button onClick={() => setDetalleOpen(false)} style={primaryBtnStyle}>Listo</button>
               </div>
             </motion.div>
           </motion.div>

@@ -6,6 +6,7 @@ import { ReabrirCajaUseCase } from '../../application/use-cases/caja/ReabrirCaja
 import { ObtenerCajaActualUseCase } from '../../application/use-cases/caja/ObtenerCajaActualUseCase';
 import { ObtenerEsperadoCajaUseCase } from '../../application/use-cases/caja/ObtenerEsperadoCajaUseCase';
 import { ListarCierresCajaUseCase } from '../../application/use-cases/caja/ListarCierresCajaUseCase';
+import { ObtenerDetalleCierreCajaUseCase } from '../../application/use-cases/caja/ObtenerDetalleCierreCajaUseCase';
 import { paginationSchema } from '@pos-final/validation';
 import type { EstadoCaja } from '../../../../infrastructure/persistence/entities/CajaEntity';
 
@@ -18,6 +19,7 @@ export class CajaController {
     @inject(ObtenerCajaActualUseCase) private readonly actualUseCase: ObtenerCajaActualUseCase,
     @inject(ObtenerEsperadoCajaUseCase) private readonly esperadoUseCase: ObtenerEsperadoCajaUseCase,
     @inject(ListarCierresCajaUseCase) private readonly cierresUseCase: ListarCierresCajaUseCase,
+    @inject(ObtenerDetalleCierreCajaUseCase) private readonly detalleUseCase: ObtenerDetalleCierreCajaUseCase,
   ) {}
 
   /** POST /salones/:salonId/caja/abrir — auditor = req.user?.id (null en n8n). */
@@ -89,6 +91,19 @@ export class CajaController {
         estadoParam === 'ABIERTA' || estadoParam === 'CERRADA' ? estadoParam : undefined;
 
       const result = await this.cierresUseCase.execute({ salonId: req.salonId!, page, limit, estado });
+      res.status(200).json({ ok: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** GET /salones/:salonId/caja/:id/cierre — detalle read-only de un cierre (historial). */
+  detalleCierre = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.detalleUseCase.execute({
+        salonId: req.salonId!,
+        cajaId: Number(req.params.id),
+      });
       res.status(200).json({ ok: true, data: result });
     } catch (error) {
       next(error);

@@ -270,6 +270,7 @@ import { ReabrirCajaUseCase } from '../modules/finanzas/application/use-cases/ca
 import { ObtenerCajaActualUseCase } from '../modules/finanzas/application/use-cases/caja/ObtenerCajaActualUseCase';
 import { ObtenerEsperadoCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ObtenerEsperadoCajaUseCase';
 import { ListarCierresCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ListarCierresCajaUseCase';
+import { ObtenerDetalleCierreCajaUseCase } from '../modules/finanzas/application/use-cases/caja/ObtenerDetalleCierreCajaUseCase';
 
 // ---- Finanzas Module — DI ----
 container.register('IRegistroServicioRepository', { useClass: TypeORMRegistroServicioRepository });
@@ -321,6 +322,7 @@ container.register(ReabrirCajaUseCase, { useClass: ReabrirCajaUseCase });
 container.register(ObtenerCajaActualUseCase, { useClass: ObtenerCajaActualUseCase });
 container.register(ObtenerEsperadoCajaUseCase, { useClass: ObtenerEsperadoCajaUseCase });
 container.register(ListarCierresCajaUseCase, { useClass: ListarCierresCajaUseCase });
+container.register(ObtenerDetalleCierreCajaUseCase, { useClass: ObtenerDetalleCierreCajaUseCase });
 
 // ---- Préstamos Module — Repositories ----
 import { TypeORMPrestamoRepository } from '../modules/prestamos/infrastructure/persistence/TypeORMPrestamoRepository';

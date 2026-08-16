@@ -10,6 +10,10 @@ export class TypeORMCajaRepository implements ICajaRepository {
     return AppDataSource.getRepository(CajaEntity);
   }
 
+  async findById(id: number): Promise<CajaEntity | null> {
+    return this.getRepo().findOne({ where: { id } });
+  }
+
   async findBySalonYFecha(salonId: number, fechaCaja: string): Promise<CajaEntity | null> {
     return this.getRepo().findOne({ where: { salonId, fechaCaja } });
   }

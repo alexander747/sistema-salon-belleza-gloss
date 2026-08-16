@@ -497,4 +497,110 @@ describe('CajaTab', () => {
 
     expect(await screen.findByText(/no hay caja de hoy/i)).toBeInTheDocument();
   });
+
+  it('abre el detalle del cierre al hacer clic en "Ver": muestra loading, luego modal con reporte y movimientos', async () => {
+    let resolveDetail!: (value: unknown) => void;
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/1/cierre')) {
+        return new Promise((res) => {
+          resolveDetail = res;
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierre], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver' }));
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/1/cierre');
+    });
+    // Estado de carga mientras llega la respuesta
+    expect(await screen.findByText(/cargando detalle/i)).toBeInTheDocument();
+
+    resolveDetail({
+      data: {
+        ok: true,
+        data: {
+          caja: cierre,
+          reporte: { ...reporteEsperado, montoReal: 170000, diferencia: 0 },
+          movimientos: [
+            {
+              id: 1,
+              tipo: 'SERVICIO',
+              fecha: '2026-08-15T14:00:00.000Z',
+              descripcion: 'Manicure',
+              monto: 120000,
+              metodoPago: 'EFECTIVO',
+            },
+            {
+              id: 9,
+              tipo: 'GASTO',
+              fecha: '2026-08-15',
+              descripcion: 'Insumos',
+              monto: 10000,
+              metodoPago: 'EFECTIVO',
+            },
+          ],
+        },
+      },
+    });
+
+    // Modal con reporte del arqueo + tabla de movimientos (SERVICIO y GASTO)
+    const modal = await screen.findByTestId('detalle-cierre-modal');
+    expect(within(modal).getByText(/detalle del cierre/i)).toBeInTheDocument();
+    expect(within(modal).getByText(/140\.000/)).toBeInTheDocument(); // montoEsperado
+    // 170.000 aparece como ingresosBrutos y como montoReal del arqueo
+    expect(within(modal).getAllByText(/170\.000/).length).toBeGreaterThanOrEqual(1);
+    expect(within(modal).getByText('SERVICIO')).toBeInTheDocument();
+    expect(within(modal).getByText('GASTO')).toBeInTheDocument();
+    expect(within(modal).getByText('Manicure')).toBeInTheDocument();
+    expect(within(modal).getByText('Insumos')).toBeInTheDocument();
+    // 120.000 aparece como totalServicios y como monto del movimiento; 10.000 como totalGastos y monto del gasto
+    expect(within(modal).getAllByText(/120\.000/).length).toBeGreaterThanOrEqual(1);
+    expect(within(modal).getAllByText(/10\.000/).length).toBeGreaterThanOrEqual(1);
+
+    // Cerrar el modal (AnimatePresence anima la salida → esperar a que se desmonte)
+    fireEvent.click(within(modal).getByRole('button', { name: /listo/i }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('detalle-cierre-modal')).not.toBeInTheDocument();
+    });
+  });
+
+  it('muestra mensaje de error cuando el detalle del cierre no se puede cargar', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/1/cierre')) {
+        return Promise.reject(new Error('network'));
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierre], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver' }));
+
+    const modal = await screen.findByTestId('detalle-cierre-modal');
+    expect(await within(modal).findByText(/no se pudo cargar/i)).toBeInTheDocument();
+  });
 });

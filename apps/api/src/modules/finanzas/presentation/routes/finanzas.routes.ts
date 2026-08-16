@@ -109,5 +109,11 @@ router.get(
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
   cajaController.cierres,
 );
+// Detalle read-only de un cierre (historial): incluye CONTADOR — no modifica nada
+router.get(
+  '/caja/:id/cierre',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR, Rol.RECEPCIONISTA),
+  cajaController.detalleCierre,
+);
 
 export { router as finanzasRouter };

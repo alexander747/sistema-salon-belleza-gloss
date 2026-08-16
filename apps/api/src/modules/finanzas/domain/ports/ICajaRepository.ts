@@ -8,6 +8,8 @@ export interface CerrarCajaData {
 }
 
 export interface ICajaRepository {
+  /** Caja por id (cualquier estado) — para detalle de cierre. */
+  findById(id: number): Promise<CajaEntity | null>;
   /** Cualquier estado (ABIERTA o CERRADA) para salon+fecha. */
   findBySalonYFecha(salonId: number, fechaCaja: string): Promise<CajaEntity | null>;
   /** Solo caja ABIERTA para salon+fecha. */

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 import { CajaController } from '../CajaController';
-import { CajaNoAbiertaError, CajaYaAbiertaError } from '../../../../../shared/errors';
+import { CajaNoAbiertaError, CajaYaAbiertaError, NotFoundError } from '../../../../../shared/errors';
 
 describe('CajaController', () => {
   let controller: CajaController;
@@ -12,6 +12,7 @@ describe('CajaController', () => {
   let mockActual: { execute: ReturnType<typeof vi.fn> };
   let mockEsperado: { execute: ReturnType<typeof vi.fn> };
   let mockCierres: { execute: ReturnType<typeof vi.fn> };
+  let mockDetalle: { execute: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   const makeRes = () => {
@@ -26,6 +27,7 @@ describe('CajaController', () => {
     mockActual = { execute: vi.fn() };
     mockEsperado = { execute: vi.fn() };
     mockCierres = { execute: vi.fn() };
+    mockDetalle = { execute: vi.fn() };
     next = vi.fn();
     controller = new CajaController(
       mockAbrir as never,
@@ -34,6 +36,7 @@ describe('CajaController', () => {
       mockActual as never,
       mockEsperado as never,
       mockCierres as never,
+      mockDetalle as never,
     );
   });
 
@@ -200,6 +203,45 @@ describe('CajaController', () => {
         ok: true,
         data: { data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 1 } },
       });
+    });
+  });
+
+  describe('detalleCierre', () => {
+    it('should return 200 con {ok:true, data} pasando salonId y cajaId del :id', async () => {
+      mockDetalle.execute.mockResolvedValue({
+        caja: { id: 5, estado: 'CERRADA' },
+        reporte: { montoEsperado: 135000 },
+        movimientos: [{ id: 1, tipo: 'SERVICIO' }],
+      });
+
+      const req = { salonId: 3, params: { id: '5' } } as unknown as Request;
+      const res = makeRes();
+
+      await controller.detalleCierre(req, res, next);
+
+      expect(mockDetalle.execute).toHaveBeenCalledWith({ salonId: 3, cajaId: 5 });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        ok: true,
+        data: {
+          caja: { id: 5, estado: 'CERRADA' },
+          reporte: { montoEsperado: 135000 },
+          movimientos: [{ id: 1, tipo: 'SERVICIO' }],
+        },
+      });
+    });
+
+    it('should pasar a next el error cuando la caja no existe (404)', async () => {
+      const err = new NotFoundError('Caja no encontrada');
+      mockDetalle.execute.mockRejectedValue(err);
+
+      const req = { salonId: 3, params: { id: '999' } } as unknown as Request;
+      const res = makeRes();
+
+      await controller.detalleCierre(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(err);
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 });
