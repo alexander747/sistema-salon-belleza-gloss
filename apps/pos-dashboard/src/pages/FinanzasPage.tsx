@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
@@ -8,6 +8,8 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import WalkInModal from '../components/WalkInModal.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import EmpleadaSearchableSelect from '../components/EmpleadaSearchableSelect.js';
+import CajaBanner from '../components/caja/CajaBanner.js';
+import CajaTab from '../components/caja/CajaTab.js';
 import styles from './FinanzasPage.module.css';
 
 /* ================================================================ */
@@ -147,7 +149,7 @@ interface ROIData {
   mes: string;
 }
 
-type TabKey = 'registros' | 'gastos' | 'devoluciones' | 'nomina' | 'reportes';
+type TabKey = 'registros' | 'gastos' | 'devoluciones' | 'nomina' | 'reportes' | 'caja';
 
 /* ================================================================ */
 /*  CONSTANTS                                                        */
@@ -161,6 +163,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'devoluciones', label: '↩️ Devoluciones' },
   { key: 'nomina', label: '👩‍💼 Nómina' },
   { key: 'reportes', label: '📊 Reportes' },
+  { key: 'caja', label: '💰 Caja' },
 ];
 
 const GASTO_CATEGORIAS = [
@@ -336,13 +339,15 @@ const itemVariants = {
 
 const FinanzasPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   /* ── Auth state ── */
   const [user, setUser] = useState<IUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  /* ── Tab state ── */
-  const [activeTab, setActiveTab] = useState<TabKey>('registros');
+  /* ── Tab state (soporta ?tab=caja desde CajaBanner de otras páginas) ── */
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<TabKey>(tabParam === 'caja' ? 'caja' : 'registros');
 
   const salonId = useMemo(() => {
     if (!user) return null;
@@ -382,6 +387,9 @@ const FinanzasPage: React.FC = () => {
         </motion.div>
       )}
 
+      {/* CajaBanner: estado de caja global (abierta/cerrada) con acción al tab Caja */}
+      <CajaBanner salonId={salonId} user={user} onNavigateToCaja={() => setActiveTab('caja')} />
+
       {/* ── Tab Navigation ── */}
       <div className={styles.tabsRow}>
         {TABS.map((tab) => (
@@ -411,6 +419,9 @@ const FinanzasPage: React.FC = () => {
         )}
         {activeTab === 'reportes' && (
           <ReportesTab key="reportes" salonId={salonId} />
+        )}
+        {activeTab === 'caja' && (
+          <CajaTab key="caja" salonId={salonId} user={user} />
         )}
       </AnimatePresence>
     </>

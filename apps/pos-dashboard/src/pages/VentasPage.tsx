@@ -5,6 +5,7 @@ import { Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import CajaBanner from '../components/caja/CajaBanner.js';
 
 /* ── Types ── */
 
@@ -422,6 +423,9 @@ const VentasPage: React.FC = () => {
               <SalonSwitcher userSalonId={user!.salonId} />
             </motion.div>
           )}
+
+          {/* CajaBanner: estado de caja global (abierta/cerrada) con acceso al tab Caja */}
+          <CajaBanner salonId={salonId} user={user} />
 
           {/* Success message */}
           <AnimatePresence>
