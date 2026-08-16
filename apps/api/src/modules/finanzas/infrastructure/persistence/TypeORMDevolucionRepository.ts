@@ -69,4 +69,19 @@ export class TypeORMDevolucionRepository implements IDevolucionRepository {
 
     return query.getCount();
   }
+
+  async sumBySalonAndDateRange(
+    salonId: number,
+    fechaInicio: Date,
+    fechaFin: Date,
+  ): Promise<number> {
+    const result = await this.getRepo()
+      .createQueryBuilder('d')
+      .select('COALESCE(SUM(d.montoDevolucion), 0)', 'total')
+      .where('d.salonId = :salonId', { salonId })
+      .andWhere('d.creadoEn >= :fechaInicio', { fechaInicio })
+      .andWhere('d.creadoEn < :fechaFin', { fechaFin })
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
 }
