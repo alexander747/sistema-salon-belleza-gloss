@@ -12,6 +12,7 @@ vi.mock('../../../services/api.js', () => ({
 }));
 
 import CajaTab from '../CajaTab';
+import { getColombiaDateString } from '../CajaBanner';
 
 const duena: IUser = {
   id: 2,
@@ -323,5 +324,177 @@ describe('CajaTab', () => {
     await waitFor(() => {
       expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/cierres?page=2&limit=12');
     });
+  });
+
+  it('muestra botón "Reabrir caja" cuando la caja de HOY está CERRADA (y NO muestra "Abrir")', async () => {
+    const cierreHoy = { ...cierre, id: 9, fechaCaja: getColombiaDateString() };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierreHoy], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    expect(await screen.findByRole('button', { name: 'Reabrir caja' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abrir' })).not.toBeInTheDocument();
+  });
+
+  it('muestra "Abrir" (no "Reabrir caja") cuando el último cierre es de un día anterior', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierre], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    expect(await screen.findByRole('button', { name: 'Abrir' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reabrir caja' })).not.toBeInTheDocument();
+  });
+
+  it('reabre la caja: confirm + POST /caja/reabrir → estado ABIERTA + caja-refresh', async () => {
+    const cierreHoy = { ...cierre, id: 9, fechaCaja: getColombiaDateString() };
+    const cajaReabierta = { ...cajaAbierta, id: 9, fechaCaja: getColombiaDateString() };
+    let abierta = false;
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) {
+        return abierta
+          ? Promise.resolve({ data: { ok: true, data: cajaReabierta } })
+          : Promise.reject(error404);
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierreHoy], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+    mockPost.mockImplementation((url: string) => {
+      if (url.includes('/caja/reabrir')) {
+        abierta = true;
+        return Promise.resolve({ data: { ok: true, data: cajaReabierta } });
+      }
+      return Promise.resolve({ data: { ok: true, data: {} } });
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const spy = vi.spyOn(window, 'dispatchEvent');
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reabrir caja' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/caja/reabrir');
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(await screen.findByText('ABIERTA')).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'caja-refresh' }));
+  });
+
+  it('no llama POST /caja/reabrir si el usuario cancela la confirmación', async () => {
+    const cierreHoy = { ...cierre, id: 9, fechaCaja: getColombiaDateString() };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierreHoy], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reabrir caja' }));
+
+    await waitFor(() => {
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+  });
+
+  it('muestra error visible cuando reabrir responde 409 CAJA_YA_ABIERTA', async () => {
+    const cierreHoy = { ...cierre, id: 9, fechaCaja: getColombiaDateString() };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierreHoy], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+    mockPost.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { ok: false, error: { code: 'CAJA_YA_ABIERTA', message: 'Ya existe una caja abierta' } },
+      },
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reabrir caja' }));
+
+    expect(await screen.findByText(/ya está abierta/i)).toBeInTheDocument();
+  });
+
+  it('muestra error visible cuando reabrir responde 404 CAJA_NO_ABIERTA', async () => {
+    const cierreHoy = { ...cierre, id: 9, fechaCaja: getColombiaDateString() };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierreHoy], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+    mockPost.mockRejectedValue({
+      response: {
+        status: 404,
+        data: { ok: false, error: { code: 'CAJA_NO_ABIERTA', message: 'No hay caja abierta' } },
+      },
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reabrir caja' }));
+
+    expect(await screen.findByText(/no hay caja de hoy/i)).toBeInTheDocument();
   });
 });

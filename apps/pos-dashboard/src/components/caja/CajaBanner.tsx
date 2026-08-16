@@ -31,6 +31,19 @@ export function dispatchCajaRefresh(): void {
   window.dispatchEvent(new CustomEvent(CAJA_REFRESH_EVENT));
 }
 
+/**
+ * Día comercial Colombia (UTC-5, sin DST) como YYYY-MM-DD.
+ * Espejo del backend (shared/colombia-date.ts): la frontera del día es 05:00 UTC.
+ */
+export function getColombiaDateString(): string {
+  const now = new Date();
+  const colombiaTime = new Date(now.getTime() + now.getTimezoneOffset() * 60_000 - 5 * 3_600_000);
+  const y = colombiaTime.getUTCFullYear();
+  const m = String(colombiaTime.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(colombiaTime.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 const ROLES_CAJA: Rol[] = [Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA];
 
 /** Solo estos roles pueden abrir/cerrar caja (spec finanzas-caja). */

@@ -6,6 +6,7 @@ import {
   CAJA_REFRESH_EVENT,
   dispatchCajaRefresh,
   formatCurrency,
+  getColombiaDateString,
   puedeGestionarCaja,
   type CajaDTO,
 } from './CajaBanner.js';
@@ -171,6 +172,10 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   const [cerrarSubmitting, setCerrarSubmitting] = useState(false);
   const [reporte, setReporte] = useState<ReporteCierreDTO | null>(null);
 
+  /* ── Reabrir (caja de hoy cerrada) ── */
+  const [reabrirSubmitting, setReabrirSubmitting] = useState(false);
+  const [reabrirError, setReabrirError] = useState<string | null>(null);
+
   /* ── Historial paginado ── */
   const [cierres, setCierres] = useState<CajaDTO[]>([]);
   const [cierresPage, setCierresPage] = useState(1);
@@ -289,6 +294,33 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
     }
   };
 
+  const handleReabrir = async () => {
+    if (!salonId) return;
+    if (!confirm('¿Reabrir la caja de hoy? Se descarta el cierre anterior.')) return;
+    setReabrirError(null);
+    setReabrirSubmitting(true);
+    try {
+      const { data } = await api.post(`/salones/${salonId}/caja/reabrir`);
+      setCaja(data?.data ?? null);
+      dispatchCajaRefresh();
+      fetchCierres(1);
+    } catch (err) {
+      const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data
+        ?.error?.code;
+      if (code === 'CAJA_YA_ABIERTA') {
+        // Ya la abrió otra persona/flujo → refrescar el estado real
+        setReabrirError('La caja ya está abierta (se actualizó el estado).');
+        fetchCaja();
+      } else if (code === 'CAJA_NO_ABIERTA') {
+        setReabrirError('No hay caja de hoy para reabrir.');
+      } else {
+        setReabrirError('No se pudo reabrir la caja. Intentá de nuevo.');
+      }
+    } finally {
+      setReabrirSubmitting(false);
+    }
+  };
+
   const abrirModal = () => {
     setMontoInicial('');
     setAbrirOpen(true);
@@ -316,6 +348,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   /* ================================================================ */
 
   const abierta = !!caja && caja.estado === 'ABIERTA';
+  // La caja de HOY ya fue cerrada (p. ej. para almorzar) → se puede reabrir.
+  // El historial trae las CERRADA más recientes primero; si la primera es de hoy, es esta caja.
+  const hoyCerrada =
+    !abierta &&
+    cierres.length > 0 &&
+    cierres[0].estado === 'CERRADA' &&
+    cierres[0].fechaCaja === getColombiaDateString();
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -370,14 +409,26 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                 Caja cerrada
               </span>
               <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)', margin: '0.5rem 0 0' }}>
-                No hay caja abierta hoy. Abrí la caja para registrar ventas.
+                {hoyCerrada
+                  ? 'La caja de hoy está cerrada. Reabrí para seguir registrando ventas.'
+                  : 'No hay caja abierta hoy. Abrí la caja para registrar ventas.'}
               </p>
+              {reabrirError && (
+                <p role="alert" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--danger)', margin: '0.5rem 0 0' }}>
+                  {reabrirError}
+                </p>
+              )}
             </div>
-            {canManage && (
-              <button onClick={abrirModal} style={primaryBtnStyle}>
-                Abrir
-              </button>
-            )}
+            {canManage &&
+              (hoyCerrada ? (
+                <button onClick={handleReabrir} disabled={reabrirSubmitting} style={{ ...primaryBtnStyle, opacity: reabrirSubmitting ? 0.6 : 1 }}>
+                  {reabrirSubmitting ? 'Reabriendo…' : 'Reabrir caja'}
+                </button>
+              ) : (
+                <button onClick={abrirModal} style={primaryBtnStyle}>
+                  Abrir
+                </button>
+              ))}
           </div>
         )}
       </div>
