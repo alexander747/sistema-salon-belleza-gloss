@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 
@@ -27,6 +27,14 @@ const duena: IUser = {
   activo: true,
   creadoEn: new Date(),
   actualizadoEn: new Date(),
+};
+
+const manicurista: IUser = {
+  ...duena,
+  id: 4,
+  nombre: 'Manicurista Test',
+  email: 'manicurista@test.com',
+  rol: Rol.MANICURISTA,
 };
 
 const error404 = {
@@ -109,5 +117,194 @@ describe('FinanzasPage — tab Caja', () => {
     fireEvent.click(screen.getByRole('button', { name: '📋 Registros' }));
     // El estado vacío del tab Registros confirma que el contenido del tab sigue montándose
     expect(await screen.findByText(/no hay registros para este período/i)).toBeInTheDocument();
+  });
+});
+
+describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const pylData = {
+    desde: '2026-05-01',
+    hasta: '2026-05-31',
+    cantidadAtenciones: 3,
+    ingresosBrutos: 350000,
+    descuentos: 35000,
+    ingresosNetos: 315000,
+    totalServicios: 270000,
+    totalProductos: 45000,
+    propinas: 15000,
+    costoBaseInsumos: 60000,
+    margenBruto: 255000,
+    comisiones: 48000,
+    gastosFijos: 200000,
+    gastosOperativos: 80000,
+    gastosPorCategoria: { ARRIENDO: 200000, SERVICIOS_PUBLICOS: 80000 },
+    totalGastos: 280000,
+    devoluciones: 20000,
+    utilidadNeta: -93000,
+  };
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(n)
+      // getByText normaliza el texto del nodo (NBSP → espacio) pero compara
+      // contra el matcher sin normalizar: usar espacio regular en el esperado.
+      .replace(/\u00a0/g, ' ');
+
+  const getPylCall = () =>
+    mockGet.mock.calls.find(([url]) => String(url).includes('/finanzas/pyl'));
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  async function openReportesTab(mockImpl: (url: string) => Promise<unknown>) {
+    mockGet.mockImplementation(mockImpl);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '📊 Reportes' }));
+    // Esperar a que el tab dispare las llamadas de reporte
+    await waitFor(() => expect(getPylCall()).toBeTruthy());
+  }
+
+  it('envía desde y hasta al pedir el P&L (y no rompe el ROI)', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    const pylCall = getPylCall()!;
+    expect(pylCall[1].params).toEqual({ desde: todayStr, hasta: todayStr });
+  });
+
+  it('renderiza las tarjetas del P&L con los valores de la API', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    expect(await screen.findByText('💰 Ingresos brutos')).toBeInTheDocument();
+    expect(screen.getByText(fmt(350000))).toBeInTheDocument(); // ingresos brutos
+    expect(screen.getByText(fmt(315000))).toBeInTheDocument(); // ingresos netos
+    expect(screen.getByText(fmt(35000))).toBeInTheDocument(); // descuentos
+    expect(screen.getByText(fmt(60000))).toBeInTheDocument(); // insumos
+    expect(screen.getByText(fmt(20000))).toBeInTheDocument(); // devoluciones
+    expect(screen.getByText(fmt(-93000))).toBeInTheDocument(); // utilidad neta
+  });
+
+  it('el resumen del período envía desde y hasta (el input hasta ya no está muerto)', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/resumen')) {
+        return Promise.resolve({ data: { totalServicios: 100000 } });
+      }
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    // El tab Registros (tab activo por defecto) también consulta /finanzas/resumen
+    // al montar; tomar la última llamada (la del ReportesTab, con desde+hasta).
+    const resumenCalls = mockGet.mock.calls.filter(([url]) =>
+      String(url).includes('/finanzas/resumen'),
+    );
+    expect(resumenCalls.length).toBeGreaterThan(0);
+    const resumenCall = resumenCalls[resumenCalls.length - 1];
+    expect(resumenCall[1].params).toMatchObject({ desde: todayStr, hasta: todayStr });
+  });
+
+  it('rol restringido es forzado a su propio usuarioId y no muestra el filtro de empleada', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: manicurista });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    const pylCall = getPylCall()!;
+    expect(pylCall[1].params).toMatchObject({ desde: todayStr, hasta: todayStr, usuarioId: '4' });
+    expect(await screen.findByText('👤 Solo mis registros')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('🔍 Buscar empleada...')).toBeNull();
+  });
+
+  it('rol privilegiado ve el filtro de empleada y lo envía al P&L', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    expect(await screen.findByPlaceholderText('🔍 Buscar empleada...')).toBeInTheDocument();
+    expect(screen.queryByText('👤 Solo mis registros')).toBeNull();
+  });
+
+  it('Generar reporte envía las fechas elegidas al P&L', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    // Ambos date inputs arrancan en hoy
+    const dateInputs = await screen.findAllByDisplayValue(todayStr);
+    fireEvent.change(dateInputs[0], { target: { value: '2026-05-01' } });
+    fireEvent.change(dateInputs[1], { target: { value: '2026-05-31' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generar reporte' }));
+
+    await waitFor(() => {
+      const calls = mockGet.mock.calls.filter(([url]) =>
+        String(url).includes('/finanzas/pyl'),
+      );
+      expect(calls.length).toBeGreaterThan(0);
+      const last = calls[calls.length - 1][1].params;
+      expect(last).toMatchObject({ desde: '2026-05-01', hasta: '2026-05-31' });
+    });
   });
 });
