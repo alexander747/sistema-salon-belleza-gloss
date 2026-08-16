@@ -64,7 +64,13 @@ export class LiquidarEmpleadaUseCase {
       (r) => !r.estaPagadaEmpleada,
     );
 
-    if (pendingRegistros.length === 0) {
+    // Only reject when there is NOTHING liquidable: no pending registros
+    // AND no fixed compensation (sueldoFijo / bonoHorario)
+    if (
+      pendingRegistros.length === 0 &&
+      Number(empleada.sueldoFijo) <= 0 &&
+      Number(empleada.bonoHorario) <= 0
+    ) {
       throw new UnprocessableEntityError('No hay registros pendientes para liquidar');
     }
 
