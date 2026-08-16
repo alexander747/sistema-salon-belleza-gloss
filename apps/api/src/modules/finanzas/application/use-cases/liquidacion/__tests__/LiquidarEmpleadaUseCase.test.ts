@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockRepoCreate = vi.fn();
 const mockRepoSave = vi.fn();
 const mockRepoUpdate = vi.fn();
+const mockRepoFindOneBy = vi.fn();
 vi.mock('../../../../../../shared/database.js', () => ({
   AppDataSource: {
     createQueryRunner: vi.fn(() => ({
@@ -18,6 +19,7 @@ vi.mock('../../../../../../shared/database.js', () => ({
           update: mockRepoUpdate,
           create: mockRepoCreate,
           save: mockRepoSave,
+          findOneBy: mockRepoFindOneBy,
         })),
       },
     })),
@@ -87,6 +89,15 @@ describe('LiquidarEmpleadaUseCase', () => {
       mockPrestamoRepo as never,
       mockPagoPrestamoRepo as never,
     );
+  });
+
+  it('lanza error cuando la empleada no existe en el salón', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(null);
+
+    await expect(useCase.execute(baseInput)).rejects.toThrow(
+      'Empleada 2 no encontrada en el salón',
+    );
+    expect(mockRegistroRepo.search).not.toHaveBeenCalled();
   });
 
   it('liquida a empleada con solo sueldo fijo (0 registros) creando la liquidación con totalPagado = fijo + bono', async () => {
@@ -187,5 +198,208 @@ describe('LiquidarEmpleadaUseCase', () => {
     // createQueryRunner solo se invoca dentro del try de la transacción
     const { AppDataSource } = await import('../../../../../../shared/database.js');
     expect(AppDataSource.createQueryRunner).not.toHaveBeenCalled();
+  });
+
+  it('aplica descuentos por préstamos y descuenta del total dentro de la transacción', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([
+      makeRegistro({ id: 1, comisionCalculada: 30000 }),
+    ]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 12 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 12, totalPagado: 180000 });
+    mockPrestamoRepo.findById.mockResolvedValue({
+      id: 7,
+      usuarioId: 2,
+      estado: 'ACTIVO',
+      saldoPendiente: 100000,
+    });
+    mockRepoFindOneBy.mockResolvedValue({ id: 7, saldoPendiente: 100000 });
+
+    const result = await useCase.execute({
+      ...baseInput,
+      descuentosPrestamos: [{ prestamoId: 7, monto: 50000 }],
+    });
+
+    // calculatedTotal = 30000 + 200000 = 230000 → neto = 230000 - 50000 = 180000
+    expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ totalPagado: 180000 }),
+      expect.anything(),
+    );
+    // PagoPrestamo creado y guardado con el monto del descuento
+    expect(mockRepoCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prestamoId: 7,
+        monto: 50000,
+        tipoPago: 'LIQUIDACION',
+        liquidacionId: 12,
+      }),
+    );
+    expect(mockRepoSave).toHaveBeenCalled();
+    // Saldo del préstamo actualizado: 100000 - 50000 = 50000 (sigue ACTIVO)
+    expect(mockRepoUpdate).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ saldoPendiente: 50000, estado: 'ACTIVO' }),
+    );
+    expect(result).toEqual(expect.objectContaining({ id: 12, totalPagado: 180000 }));
+  });
+
+  it('rechaza descuentos que exceden el total a liquidar', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockPrestamoRepo.findById.mockResolvedValue({
+      id: 7,
+      usuarioId: 2,
+      estado: 'ACTIVO',
+      saldoPendiente: 300000,
+    });
+
+    await expect(
+      useCase.execute({
+        ...baseInput,
+        descuentosPrestamos: [{ prestamoId: 7, monto: 300000 }],
+      }),
+    ).rejects.toThrow(UnprocessableEntityError);
+
+    expect(mockLiquidacionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza descuento mayor al saldo pendiente del préstamo', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockPrestamoRepo.findById.mockResolvedValue({
+      id: 7,
+      usuarioId: 2,
+      estado: 'ACTIVO',
+      saldoPendiente: 100000,
+    });
+
+    await expect(
+      useCase.execute({
+        ...baseInput,
+        descuentosPrestamos: [{ prestamoId: 7, monto: 300000 }],
+      }),
+    ).rejects.toThrow('excede el saldo pendiente');
+
+    expect(mockLiquidacionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza descuento de un préstamo inexistente', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockPrestamoRepo.findById.mockResolvedValue(null);
+
+    await expect(
+      useCase.execute({
+        ...baseInput,
+        descuentosPrestamos: [{ prestamoId: 99, monto: 10000 }],
+      }),
+    ).rejects.toThrow('Préstamo ID 99 no encontrado');
+
+    expect(mockLiquidacionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza descuento de un préstamo no activo', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockPrestamoRepo.findById.mockResolvedValue({
+      id: 7,
+      usuarioId: 2,
+      estado: 'PAGADO',
+      saldoPendiente: 100000,
+    });
+
+    await expect(
+      useCase.execute({
+        ...baseInput,
+        descuentosPrestamos: [{ prestamoId: 7, monto: 10000 }],
+      }),
+    ).rejects.toThrow('no está activo');
+
+    expect(mockLiquidacionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza descuento de un préstamo que no pertenece a la empleada', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockPrestamoRepo.findById.mockResolvedValue({
+      id: 7,
+      usuarioId: 999,
+      estado: 'ACTIVO',
+      saldoPendiente: 100000,
+    });
+
+    await expect(
+      useCase.execute({
+        ...baseInput,
+        descuentosPrestamos: [{ prestamoId: 7, monto: 10000 }],
+      }),
+    ).rejects.toThrow('no pertenece a esta empleada');
+
+    expect(mockLiquidacionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('liquida registros NUEVOS posteriores a una liquidación previa en el período', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    // Dos registros: uno viejo (antes de la liquidación previa) y uno nuevo (después)
+    mockRegistroRepo.search.mockResolvedValue([
+      makeRegistro({ id: 1, comisionCalculada: 30000, creadoEn: new Date('2026-08-01T10:00:00') }),
+      makeRegistro({ id: 2, comisionCalculada: 5000, creadoEn: new Date('2026-08-15T10:00:00') }),
+    ]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
+      { id: 10, creadoEn: new Date('2026-08-10T10:00:00') },
+    ]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 13 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 13, totalPagado: 205000 });
+
+    const result = await useCase.execute(baseInput);
+
+    // Solo el registro nuevo (5000) entra: 5000 + 200000 = 205000
+    expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalComisiones: 5000,
+        totalPagado: 205000,
+      }),
+      expect.anything(),
+    );
+    // Solo se marca pagado el registro nuevo
+    expect(mockRegistroRepo.update).toHaveBeenCalledWith(2, expect.anything(), expect.anything());
+    expect(mockRegistroRepo.update).not.toHaveBeenCalledWith(1, expect.anything(), expect.anything());
+    expect(result).toEqual(expect.objectContaining({ id: 13, totalPagado: 205000 }));
+  });
+
+  it('hace rollback y re-lanza el error cuando falla la creación dentro de la transacción', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.create.mockRejectedValue(new Error('db down'));
+
+    await expect(useCase.execute(baseInput)).rejects.toThrow('db down');
+
+    const { AppDataSource } = await import('../../../../../../shared/database.js');
+    const qr = AppDataSource.createQueryRunner.mock.results[0].value;
+    expect(qr.rollbackTransaction).toHaveBeenCalled();
+    expect(qr.release).toHaveBeenCalled();
   });
 });
