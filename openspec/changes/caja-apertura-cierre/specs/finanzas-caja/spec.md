@@ -87,9 +87,11 @@ The system MUST close the salon's open caja when `POST /api/salones/:salonId/caj
 The close report MUST include: total servicios, total productos, ingresos brutos, descuentos, ingresos netos, breakdown by metodoPago (EFECTIVO, TARJETA, TRANSFERENCIA), comisiones, total gastos, montoEsperado, montoReal, diferencia, and cantidad de movimientos (registros + gastos).
 
 #### Scenario: Reporte completo
-- GIVEN caja with 3 registros: servicios=240000, productos=60000, descuentos=10000, comisiones=96000, pagos EFECTIVO=200000 + TARJETA=90000; and 2 gastos=30000
+- GIVEN caja with 3 registros: servicios=240000, productos=60000, descuentos=10000, comisiones=96000, pagos EFECTIVO=200000 + TARJETA=90000; and 2 gastos=30000 (EFECTIVO)
 - WHEN the caja is closed
-- THEN report MUST show ingresosBrutos=300000, descuentos=10000, ingresosNetos=290000, porMetodoPago={EFECTIVO:200000, TARJETA:90000}, comisiones=96000, gastos=30000, montoEsperado=260000, cantidadMovimientos=5
+- THEN report MUST show ingresosBrutos=300000, descuentos=10000, ingresosNetos=290000, porMetodoPago={EFECTIVO:200000, TARJETA:90000}, comisiones=96000, gastos=30000, montoEsperado=170000, cantidadMovimientos=5
+
+> **Nota (decisión owner)**: el arqueo audita SOLO efectivo. `montoEsperado = Σ pagos EFECTIVO − Σ gastos EFECTIVO = 200000 − 30000 = 170000`. El desglose por método completo (TARJETA etc.) se muestra como información, pero no suma al arqueo.
 
 ### Requirement: GET Caja Actual
 
