@@ -255,6 +255,7 @@ import { ResumenDiaUseCase } from '../modules/finanzas/application/use-cases/rep
 import { ROIMensualUseCase } from '../modules/finanzas/application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../modules/finanzas/application/use-cases/reporte/CierreTurnoUseCase';
 import { PyLMensualUseCase } from '../modules/finanzas/application/use-cases/reporte/PyLMensualUseCase';
+import { ExcelExportService } from '../modules/finanzas/application/services/ExcelExportService';
 
 // ---- Finanzas Module — Controllers ----
 import { RegistroController } from '../modules/finanzas/presentation/controllers/RegistroController';
@@ -308,6 +309,7 @@ container.register(ResumenDiaUseCase, { useClass: ResumenDiaUseCase });
 container.register(ROIMensualUseCase, { useClass: ROIMensualUseCase });
 container.register(CierreTurnoUseCase, { useClass: CierreTurnoUseCase });
 container.register(PyLMensualUseCase, { useClass: PyLMensualUseCase });
+container.register(ExcelExportService, { useClass: ExcelExportService });
 
 // ---- Finanzas Module — Controllers ----
 container.register(RegistroController, { useClass: RegistroController });
