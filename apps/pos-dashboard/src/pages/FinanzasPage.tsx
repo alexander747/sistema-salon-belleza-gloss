@@ -4377,7 +4377,15 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         params: { page, limit: CUENTAS_PAGE_SIZE },
       });
       const payload = data?.data;
-      setPagar(Array.isArray(payload?.data) ? payload.data : []);
+      const rows = Array.isArray(payload?.data) ? payload.data : [];
+      // Pendientes primero (deuda desc), "al día" (pendienteActual=0) al final
+      rows.sort((a: CuentaPagar, b: CuentaPagar) => {
+        const aPend = a.pendienteActual > 0 ? 0 : 1;
+        const bPend = b.pendienteActual > 0 ? 0 : 1;
+        if (aPend !== bPend) return aPend - bPend;
+        return b.pendienteActual - a.pendienteActual;
+      });
+      setPagar(rows);
       setPagarMeta(payload?.meta ?? CUENTAS_META_VACIO);
       return true;
     } catch {
@@ -4552,8 +4560,26 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     {pagar.map((e) => (
                       <tr key={e.empleadaId} className={styles.tableRow}>
                         <td style={{ fontWeight: 500 }}>{e.nombre}</td>
-                        <td style={{ fontWeight: 600, color: 'var(--danger)' }}>
-                          {formatCurrency(e.pendienteActual)}
+                        <td>
+                          {e.pendienteActual > 0 ? (
+                            <span style={{ fontWeight: 600, color: 'var(--danger)' }}>
+                              {formatCurrency(e.pendienteActual)}
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                background: 'rgba(92,186,123,0.15)',
+                                color: 'var(--success)',
+                                padding: '0.15rem 0.6rem',
+                                borderRadius: '999px',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              ✅ Al día
+                            </span>
+                          )}
                         </td>
                         <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                           {formatCurrency(e.liquidadoAcumulado)}
