@@ -10,3 +10,4 @@ mysql_data/
 .tmp/
 tokengithub.txt
 kimi.txt
+apps/api/coverage/
