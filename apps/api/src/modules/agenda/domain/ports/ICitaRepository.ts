@@ -1,3 +1,4 @@
+import type { QueryRunner } from 'typeorm';
 import type { CitaEntity, EstadoCita } from '../../../../infrastructure/persistence/entities/CitaEntity';
 
 export interface ICitaRepository {
@@ -6,5 +7,10 @@ export interface ICitaRepository {
   findActiveByUsuario(usuarioId: number, fecha: Date): Promise<CitaEntity[]>;
   create(data: Partial<CitaEntity>): Promise<CitaEntity>;
   update(id: number, data: Partial<CitaEntity>): Promise<CitaEntity | null>;
-  cambiarEstado(id: number, estado: EstadoCita, extraData?: Partial<CitaEntity>): Promise<CitaEntity | null>;
+  cambiarEstado(
+    id: number,
+    estado: EstadoCita,
+    extraData?: Partial<CitaEntity>,
+    queryRunner?: QueryRunner,
+  ): Promise<CitaEntity | null>;
 }

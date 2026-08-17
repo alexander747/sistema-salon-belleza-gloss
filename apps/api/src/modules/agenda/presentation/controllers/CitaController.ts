@@ -92,6 +92,7 @@ export class CitaController {
       const result = await this.completarUseCase.execute({
         id: Number(req.params.id),
         usuarioId: req.user?.id,
+        registro: req.body?.registro,
       });
       res.json(result);
     } catch (error) {

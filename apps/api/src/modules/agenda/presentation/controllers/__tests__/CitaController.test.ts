@@ -197,13 +197,13 @@ describe('CitaController', () => {
   });
 
   describe('completar', () => {
-    it('should complete and return cita', async () => {
+    it('should complete and return cita (legacy, sin registro)', async () => {
       mockCompletarUseCase.execute.mockResolvedValue({
         ...mockCita,
         estado: 'COMPLETADA',
       });
 
-      const req = { params: { id: '1' }, user: { id: 1 } } as unknown as Request;
+      const req = { params: { id: '1' }, user: { id: 1 }, body: {} } as unknown as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
       await controller.completar(req, res, next);
@@ -211,7 +211,56 @@ describe('CitaController', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ estado: 'COMPLETADA' }),
       );
-      expect(mockCompletarUseCase.execute).toHaveBeenCalledWith({ id: 1, usuarioId: 1 });
+      expect(mockCompletarUseCase.execute).toHaveBeenCalledWith({
+        id: 1,
+        usuarioId: 1,
+        registro: undefined,
+      });
+    });
+
+    it('should forward the registro payload and return { cita, registro }', async () => {
+      const registro = {
+        salonId: 1,
+        clienteId: 1,
+        usuarioId: 2,
+        totalServicios: 50000,
+        totalProductos: 0,
+        propina: 0,
+        pagos: [{ monto: 50000, metodoPago: 'EFECTIVO' }],
+      };
+      const result = {
+        cita: { ...mockCita, estado: 'COMPLETADA' },
+        registro: { id: 99 },
+      };
+      mockCompletarUseCase.execute.mockResolvedValue(result);
+
+      const req = {
+        params: { id: '1' },
+        user: { id: 1 },
+        body: { registro },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.completar(req, res, next);
+
+      expect(mockCompletarUseCase.execute).toHaveBeenCalledWith({
+        id: 1,
+        usuarioId: 1,
+        registro,
+      });
+      expect(res.json).toHaveBeenCalledWith(result);
+    });
+
+    it('should call next on error', async () => {
+      const error = new Error('DB error');
+      mockCompletarUseCase.execute.mockRejectedValue(error);
+
+      const req = { params: { id: '1' }, user: { id: 1 } } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.completar(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
     });
   });
 });

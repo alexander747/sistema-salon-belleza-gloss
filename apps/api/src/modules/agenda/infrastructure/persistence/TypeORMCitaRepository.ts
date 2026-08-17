@@ -1,4 +1,5 @@
 import { injectable } from 'tsyringe';
+import type { QueryRunner } from 'typeorm';
 import { AppDataSource } from '../../../../shared/database';
 import { CitaEntity, EstadoCita } from '../../../../infrastructure/persistence/entities/CitaEntity';
 import type { ICitaRepository } from '../../domain/ports/ICitaRepository';
@@ -58,7 +59,18 @@ export class TypeORMCitaRepository implements ICitaRepository {
     return this.findById(id);
   }
 
-  async cambiarEstado(id: number, estado: EstadoCita, extraData?: Partial<CitaEntity>): Promise<CitaEntity | null> {
+  async cambiarEstado(
+    id: number,
+    estado: EstadoCita,
+    extraData?: Partial<CitaEntity>,
+    queryRunner?: QueryRunner,
+  ): Promise<CitaEntity | null> {
+    if (queryRunner) {
+      // Transacción compartida: el caller (CompletarCitaUseCase) es dueño del
+      // commit y del re-fetch post-commit.
+      await queryRunner.manager.getRepository(CitaEntity).update(id, { estado, ...extraData });
+      return queryRunner.manager.findOne(CitaEntity, { where: { id }, relations: ['servicios'] });
+    }
     await this.getRepo().update(id, { estado, ...extraData });
     return this.findById(id);
   }

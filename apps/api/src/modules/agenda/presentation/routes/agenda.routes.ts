@@ -12,6 +12,7 @@ import {
   cambiarEstadoSchema,
   createBloqueoSchema,
   updateHorariosSchema,
+  completarCitaSchema,
 } from '@pos-final/validation';
 
 const router = Router({ mergeParams: true });
@@ -45,6 +46,7 @@ router.post(
 router.post(
   '/agenda/citas/:id/completar',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  validate(completarCitaSchema),
   citaController.completar,
 );
 
