@@ -415,7 +415,7 @@ const EmpleadasPage: React.FC = () => {
               whileTap={{ scale: 0.97 }}
             >
               <button onClick={openCreate} style={primaryBtnStyle}>
-                + Nueva empleada
+                + Nuevo empleado
               </button>
             </motion.div>
           </motion.div>
@@ -444,14 +444,14 @@ const EmpleadasPage: React.FC = () => {
       <AnimatePresence>
         {modalMode === 'create' && (
           <RenderFormModal
-            title="Nueva empleada"
+            title="Nuevo empleado"
             form={form}
             onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
             onCancel={closeModal}
             onSubmit={handleCreate}
             submitting={submitting}
             valid={isCreateValid}
-            submitLabel="Crear empleada"
+            submitLabel="Crear empleado"
             isEdit={false}
           />
         )}
@@ -461,7 +461,7 @@ const EmpleadasPage: React.FC = () => {
       <AnimatePresence>
         {modalMode === 'edit' && selectedEmpleada && (
           <RenderFormModal
-            title="Editar empleada"
+            title="Editar empleado"
             form={form}
             onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
             onCancel={closeModal}
@@ -578,15 +578,15 @@ const RenderEmpty: React.FC<RenderEmptyProps> = ({ search, onCreate }) => (
             color: 'var(--text-secondary)',
           }}
         >
-          No se encontraron empleadas para «{search}»
+          No se encontraron empleados para «{search}»
         </p>
       </div>
     ) : (
       <div className={styles.emptyState}>
         <span className={styles.emptyIcon}>👩‍💼</span>
-        <h3 className={styles.emptyTitle}>No hay empleadas registradas</h3>
+        <h3 className={styles.emptyTitle}>No hay empleados registrados</h3>
         <p className={styles.emptySubtitle}>
-          Agregá tu primera empleada para gestionar turnos, comisiones y roles
+          Agregá tu primer empleado para gestionar turnos, comisiones y roles
           dentro del salón.
         </p>
         <motion.button
@@ -595,7 +595,7 @@ const RenderEmpty: React.FC<RenderEmptyProps> = ({ search, onCreate }) => (
           whileTap={{ scale: 0.97 }}
           onClick={onCreate}
         >
-          Crear primera empleada
+          Crear primer empleado
         </motion.button>
       </div>
     )}
@@ -700,7 +700,7 @@ const RenderTable: React.FC<RenderTableProps> = ({
                   className={`${styles.toggle} ${empleada.activo ? styles.toggleActive : ''}`}
                   onClick={() => onToggleActivo(empleada)}
                   disabled={togglingId === empleada.id}
-                  aria-label={empleada.activo ? 'Desactivar empleada' : 'Activar empleada'}
+                  aria-label={empleada.activo ? 'Desactivar empleado' : 'Activar empleado'}
                   title={empleada.activo ? 'Desactivar' : 'Activar'}
                 >
                   <span className={styles.toggleKnob} />
@@ -725,14 +725,6 @@ const RenderTable: React.FC<RenderTableProps> = ({
                   aria-label="Editar"
                 >
                   ✏️
-                </button>
-                <button
-                  className={`${styles.actionBtn} ${styles.actionBtnDisabled}`}
-                  disabled
-                  title="Eliminar no disponible"
-                  aria-label="Eliminar no disponible"
-                >
-                  🗑️
                 </button>
               </div>
             </td>

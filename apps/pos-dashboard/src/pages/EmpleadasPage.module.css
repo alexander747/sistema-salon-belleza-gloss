@@ -178,17 +178,6 @@
   transform: scale(1.1);
 }
 
-.actionBtnDisabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.actionBtnDisabled:hover {
-  background: none;
-  color: var(--text-secondary);
-  transform: none;
-}
-
 /* ── Toggle switch ── */
 .toggleWrapper {
   display: inline-flex;

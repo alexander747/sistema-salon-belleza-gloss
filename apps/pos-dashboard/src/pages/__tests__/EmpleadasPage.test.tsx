@@ -48,7 +48,7 @@ function renderPage() {
 }
 
 async function openCreateModal() {
-  fireEvent.click(await screen.findByRole('button', { name: '+ Nueva empleada' }));
+  fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo empleado' }));
   fireEvent.change(screen.getByPlaceholderText('Nombre completo'), {
     target: { value: 'Marta' },
   });
@@ -85,7 +85,7 @@ describe('EmpleadasPage — esquema de pago (tipoPago)', () => {
     fireEvent.change(screen.getByPlaceholderText('Ej: 50'), { target: { value: '30' } });
     fireEvent.change(screen.getByPlaceholderText('Ej: 1200000'), { target: { value: '1200000' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleado' }));
 
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/empleadas',
@@ -105,7 +105,7 @@ describe('EmpleadasPage — esquema de pago (tipoPago)', () => {
 
     fireEvent.change(screen.getByPlaceholderText('Ej: 50'), { target: { value: '40' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleado' }));
 
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/empleadas',
@@ -128,7 +128,7 @@ describe('EmpleadasPage — esquema de pago (tipoPago)', () => {
       target: { value: '1200000' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleado' }));
 
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/empleadas',
@@ -179,7 +179,7 @@ describe('EmpleadasPage — frecuencia de pago', () => {
     renderPage();
     await openCreateModal();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleado' }));
 
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/empleadas',
@@ -197,7 +197,7 @@ describe('EmpleadasPage — frecuencia de pago', () => {
     fireEvent.change(screen.getByLabelText('Frecuencia de pago'), {
       target: { value: 'QUINCENAL' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleado' }));
 
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/empleadas',
@@ -270,7 +270,7 @@ describe('EmpleadasPage — frecuencia de pago', () => {
     fireEvent.change(screen.getByLabelText('Frecuencia de pago'), {
       target: { value: 'SEMANAL' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleado' }));
 
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/empleadas',

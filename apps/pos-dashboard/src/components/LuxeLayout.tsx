@@ -66,7 +66,7 @@ const NAV_ITEMS = [
   { label: 'Citas', href: '/agenda', icon: <CalendarMonth /> },
   { label: 'Clientes', href: '/clientes', icon: <Group /> },
   { label: 'Servicios', href: '/servicios', icon: <ContentCut /> },
-  { label: 'Empleadas', href: '/empleadas', icon: <BadgeIcon /> },
+  { label: 'Empleados', href: '/empleadas', icon: <BadgeIcon /> },
   { label: 'Productos', href: '/productos', icon: <Inventory2 /> },
   { label: 'Categorías', href: '/categorias', icon: <Category /> },
   { label: 'Ventas', href: '/ventas', icon: <ShoppingCart /> },
