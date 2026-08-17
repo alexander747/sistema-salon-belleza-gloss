@@ -16,6 +16,7 @@ import { RegistroServicioItemEntity } from './RegistroServicioItemEntity';
 import { ClienteEntity } from './ClienteEntity';
 import { SalonEntity } from './SalonEntity';
 import { CajaEntity } from './CajaEntity';
+import { CitaEntity } from './CitaEntity';
 
 export enum EstadoRegistro {
   ACTIVO = 'ACTIVO',
@@ -126,4 +127,12 @@ export class RegistroServicioEntity extends BaseEntity {
 
   @Column({ type: 'int', nullable: true })
   cajaId: number | null;
+
+  // Cita de origen (NULL para registros creados fuera del flujo completar cita)
+  @ManyToOne(() => CitaEntity, { nullable: true })
+  @JoinColumn({ name: 'citaId' })
+  cita: CitaEntity | null;
+
+  @Column({ type: 'int', nullable: true })
+  citaId: number | null;
 }
