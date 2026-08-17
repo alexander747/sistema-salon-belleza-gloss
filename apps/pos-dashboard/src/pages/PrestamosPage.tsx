@@ -6,6 +6,7 @@ import { prestamoService, type Prestamo, type PagoPrestamo } from '../services/p
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import { formatCurrency } from '../utils/format.js';
 import styles from './PrestamosPage.module.css';
 
 /* ── Types ── */
@@ -18,13 +19,6 @@ interface Empleada {
 /* ── Constants ── */
 
 const PAGE_SIZE = 12;
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 const primaryBtnStyle: React.CSSProperties = {
   background: 'var(--accent)',
@@ -324,13 +318,13 @@ const PrestamosPage: React.FC = () => {
         <div className={styles.summaryCard}>
           <span className={styles.summaryLabel}>Monto total prestado</span>
           <span className={`${styles.summaryValue} ${styles.summaryValueAccent}`}>
-            {currencyFormatter.format(stats.totalMonto)}
+            {formatCurrency(stats.totalMonto)}
           </span>
         </div>
         <div className={styles.summaryCard}>
           <span className={styles.summaryLabel}>Saldo pendiente</span>
           <span className={`${styles.summaryValue} ${styles.summaryValueDanger}`}>
-            {currencyFormatter.format(stats.totalSaldoPendiente)}
+            {formatCurrency(stats.totalSaldoPendiente)}
           </span>
         </div>
         <div className={styles.summaryCard}>
@@ -442,7 +436,7 @@ const PrestamosPage: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td>{currencyFormatter.format(Number(p.monto))}</td>
+                    <td>{formatCurrency(Number(p.monto))}</td>
                     <td>
                       <span
                         style={{
@@ -453,7 +447,7 @@ const PrestamosPage: React.FC = () => {
                               : 'var(--success)',
                         }}
                       >
-                        {currencyFormatter.format(Number(p.saldoPendiente))}
+                        {formatCurrency(Number(p.saldoPendiente))}
                       </span>
                     </td>
                     <td>
@@ -714,7 +708,7 @@ const PrestamosPage: React.FC = () => {
                     <div className={styles.pagoResumenLabel}>Saldo pendiente</div>
                   </div>
                   <div className={styles.pagoResumenValue}>
-                    {currencyFormatter.format(Number(selectedPrestamo.saldoPendiente))}
+                    {formatCurrency(Number(selectedPrestamo.saldoPendiente))}
                   </div>
                 </div>
 
@@ -747,7 +741,7 @@ const PrestamosPage: React.FC = () => {
                               })}
                             </td>
                             <td style={{ fontWeight: 600 }}>
-                              {currencyFormatter.format(Number(pago.monto))}
+                              {formatCurrency(Number(pago.monto))}
                             </td>
                             <td>
                               <span className={getTipoPagoBadgeClass(pago.tipoPago)}>

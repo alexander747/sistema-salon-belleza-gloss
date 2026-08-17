@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../../services/api.js';
+import { formatCurrency } from '../../utils/format.js';
+
+export { formatCurrency };
 
 /* ================================================================ */
 /*  TIPOS COMPARTIDOS DE CAJA                                        */
@@ -54,18 +57,6 @@ export function puedeGestionarCaja(user: IUser | null | undefined): boolean {
 /* ================================================================ */
 /*  HELPERS                                                          */
 /* ================================================================ */
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
-export function formatCurrency(n: number | null | undefined): string {
-  if (n == null) return '$0';
-  return currencyFormatter.format(n);
-}
 
 /* ================================================================ */
 /*  CAJA BANNER                                                      */

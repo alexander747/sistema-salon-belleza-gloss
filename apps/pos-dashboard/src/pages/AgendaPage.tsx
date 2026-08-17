@@ -8,6 +8,7 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
+import { formatCurrency } from '../utils/format.js';
 import styles from './AgendaPage.module.css';
 
 /* ── Types ── */
@@ -204,11 +205,6 @@ function countMaxOverlap(citas: Cita[]): number {
     max = Math.max(max, count);
   }
   return max;
-}
-
-function formatCurrency(n: number | null | undefined): string {
-  if (n == null) return '$0';
-  return `$${n.toLocaleString('es-CL')}`;
 }
 
 /* ── Component ── */

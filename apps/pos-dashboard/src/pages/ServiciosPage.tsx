@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import { formatCurrency } from '../utils/format.js';
 import {
   fetchServicios,
   type Servicio,
@@ -24,13 +25,6 @@ interface Categoria {
 /* ── Constants ── */
 
 const ITEMS_PER_PAGE = 12;
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 /* ── Style constants ── */
 
@@ -165,12 +159,6 @@ const formLabelStyle: React.CSSProperties = {
   marginBottom: '0.3rem',
   letterSpacing: '0.02em',
 };
-
-/* ── Helpers ── */
-
-function formatCurrency(n: number): string {
-  return currencyFormatter.format(n);
-}
 
 /* ── Component ── */
 

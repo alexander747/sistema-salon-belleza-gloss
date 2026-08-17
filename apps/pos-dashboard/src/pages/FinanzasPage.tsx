@@ -10,6 +10,7 @@ import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import EmpleadaSearchableSelect from '../components/EmpleadaSearchableSelect.js';
 import CajaBanner from '../components/caja/CajaBanner.js';
 import CajaTab from '../components/caja/CajaTab.js';
+import { formatCurrency } from '../utils/format.js';
 import styles from './FinanzasPage.module.css';
 
 /* ================================================================ */
@@ -248,18 +249,6 @@ const METODO_PAGO_LABELS: Record<string, string> = {
   TRANSFERENCIA: 'Transferencia',
   OTRO: 'Otro',
 };
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
-function formatCurrency(n: number | null | undefined): string {
-  if (n == null) return '$0';
-  return currencyFormatter.format(n);
-}
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '—';

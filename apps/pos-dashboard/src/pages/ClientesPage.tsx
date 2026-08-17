@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import { formatCurrency } from '../utils/format.js';
 import styles from './ClientesPage.module.css';
 
 /* ── Types ── */
@@ -947,7 +948,7 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Deuda</span>
             <span className={styles.infoValue}>
-              ${cliente.deudaTotal.toLocaleString('es-CL')}
+              {formatCurrency(cliente.deudaTotal)}
             </span>
           </div>
         )}

@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import { formatCurrency } from '../utils/format.js';
 import {
   fetchProductos,
   createProducto,
@@ -22,13 +23,6 @@ import {
 /* ── Constants ── */
 
 const ITEMS_PER_PAGE = 12;
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 /* ── Style constants ── */
 
@@ -150,10 +144,6 @@ const formLabelStyle: React.CSSProperties = {
 };
 
 /* ── Helpers ── */
-
-function formatCurrency(n: number): string {
-  return currencyFormatter.format(n);
-}
 
 function getMargenColor(margen: number): string {
   if (margen >= 50) return 'var(--success)';

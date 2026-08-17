@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import { formatCurrency } from '../utils/format.js';
 import styles from './EmpleadasPage.module.css';
 
 /* ── Types ── */
@@ -594,15 +595,6 @@ interface RenderTableProps {
   onEdit: (e: Empleada) => void;
   onToggleActivo: (e: Empleada) => void;
   togglingId: number | null;
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 const RenderTable: React.FC<RenderTableProps> = ({

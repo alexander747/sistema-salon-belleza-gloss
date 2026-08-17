@@ -5,6 +5,7 @@ import { Skeleton } from '@pos-final/ui';
 import api from '../services/api.js';
 import { dispatchCajaRefresh } from './caja/CajaBanner.js';
 import { isCajaCerradaError } from './caja/cajaError.js';
+import { formatCurrency } from '../utils/format.js';
 import styles from './WalkInModal.module.css';
 
 /* ── Types ── */
@@ -80,16 +81,6 @@ interface WalkInModalProps {
 }
 
 /* ── Constants ── */
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  maximumFractionDigits: 0,
-});
-
-function formatCurrency(n: number): string {
-  return currencyFormatter.format(n);
-}
 
 /* ── Inline styles (matching VentasPage / FinanzasPage patterns) ── */
 

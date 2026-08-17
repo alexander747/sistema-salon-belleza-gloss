@@ -6,8 +6,9 @@ import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
-import tableSkeletonStyles from '../components/TableSkeleton.module.css';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
+import tableSkeletonStyles from '../components/TableSkeleton.module.css';
+import { formatCurrency } from '../utils/format.js';
 
 /* ── Types ── */
 
@@ -44,14 +45,6 @@ interface Empleada {
 }
 
 /* ── Constants ── */
-
-
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  maximumFractionDigits: 0,
-});
 
 type PaymentMethod = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
 
@@ -117,10 +110,6 @@ const formLabelStyle: React.CSSProperties = {
 };
 
 /* ── Helpers ── */
-
-function formatCurrency(n: number): string {
-  return currencyFormatter.format(n);
-}
 
 /* ── Component ── */
 

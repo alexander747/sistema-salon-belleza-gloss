@@ -32,6 +32,7 @@ import {
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import { formatCurrency } from '../utils/format.js';
 
 /* ── Types ── */
 
@@ -89,17 +90,6 @@ const QUICK_ACTIONS = [
 ];
 
 /* ── Helpers ── */
-
-const currencyFormatter = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
-function formatCurrency(n: number): string {
-  return currencyFormatter.format(n);
-}
 
 function toISODate(d: Date): string {
   const y = d.getUTCFullYear();
