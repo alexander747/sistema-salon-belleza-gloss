@@ -701,3 +701,172 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
     ).toBeInTheDocument();
   });
 });
+
+describe('FinanzasPage — modal auditoría (período editable / pago fuera de ciclo)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  const pendienteSemanal: Record<string, unknown> = {
+    empleadaId: 1,
+    nombre: 'Ana',
+    totalComisionesPendientes: 30000,
+    totalPropinas: 5000,
+    bonoHorario: 12500,
+    sueldoFijo: 50000,
+    porcentajeComisionServicio: 0,
+    totalAPagar: 97500,
+    cantidadRegistros: 1,
+    periodoInicio: '2026-08-10T05:00:00.000Z', // lunes (inclusivo)
+    periodoFin: '2026-08-17T05:00:00.000Z', // domingo + 1 (exclusivo)
+    frecuenciaPago: 'SEMANAL',
+  };
+
+  const registroDentroSemana = {
+    id: 1,
+    salonId: 1,
+    clienteId: 1,
+    usuarioId: 1,
+    totalServicios: 1,
+    totalProductos: 0,
+    montoTotal: 60000,
+    montoPendiente: 0,
+    propina: 5000,
+    comisionCalculada: 30000,
+    esRetoque: false,
+    descripcionServicio: null,
+    estaPagadaEmpleada: false,
+    creadoEn: '2026-08-11T10:00:00', // martes 11 (dentro de la semana)
+    actualizadoEn: '2026-08-11T10:00:00',
+    pagos: [],
+    divisiones: [],
+    serviciosItems: [
+      { id: 11, nombreServicio: 'Manicure Básico', precioServicio: 60000, costoBaseInsumos: 5000 },
+    ],
+  };
+
+  const registroFueraSemana = {
+    ...registroDentroSemana,
+    id: 2,
+    clienteId: 2,
+    montoTotal: 40000,
+    propina: 0,
+    comisionCalculada: 20000,
+    creadoEn: '2026-08-20T10:00:00', // jueves 20 (fuera de la semana)
+    actualizadoEn: '2026-08-20T10:00:00',
+    serviciosItems: [
+      { id: 12, nombreServicio: 'Manicure Avanzado', precioServicio: 40000, costoBaseInsumos: 8000 },
+    ],
+  };
+
+  function auditApiMock(options: { historial?: unknown[] } = {}) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/nomina/historial')) {
+        return Promise.resolve({ data: options.historial ?? [] });
+      }
+      if (url.includes('/finanzas/nomina')) {
+        return Promise.resolve({ data: [pendienteSemanal] });
+      }
+      if (url.includes('/prestamos')) {
+        return Promise.resolve({ data: { data: [] } });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({
+          data: { data: [registroDentroSemana, registroFueraSemana], meta: { page: 1, limit: 50, total: 2, totalPages: 1 } },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  async function openAuditModal() {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Auditar y Liquidar' }));
+    await screen.findByText('Auditoría pre-liquidación');
+  }
+
+  it('precarga Desde/Hasta con el período de la fila pendiente (lunes→domingo inclusive)', async () => {
+    auditApiMock();
+    await openAuditModal();
+
+    expect(screen.getByLabelText('Período desde')).toHaveValue('2026-08-10');
+    expect(screen.getByLabelText('Período hasta')).toHaveValue('2026-08-16');
+  });
+
+  it('muestra solo los registros del período por defecto y re-filtra al editar Hasta', async () => {
+    auditApiMock();
+    await openAuditModal();
+
+    // Solo el registro del 11/08 (dentro de la semana) aparece en el detalle
+    expect(await screen.findByText('Manicure Básico')).toBeInTheDocument();
+    expect(screen.queryByText('Manicure Avanzado')).toBeNull();
+    expect(screen.getByText('1 registros')).toBeInTheDocument();
+
+    // Extender Hasta → el registro del 20/08 entra al detalle
+    fireEvent.change(screen.getByLabelText('Período hasta'), {
+      target: { value: '2026-08-20' },
+    });
+
+    expect(await screen.findByText('Manicure Avanzado')).toBeInTheDocument();
+    expect(screen.getByText('2 registros')).toBeInTheDocument();
+  });
+
+  it('confirmar la liquidación envía el período EDITADO en bordes Colombia (T05:00:00.000Z)', async () => {
+    auditApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+    await openAuditModal();
+
+    fireEvent.change(screen.getByLabelText('Período desde'), {
+      target: { value: '2026-08-01' },
+    });
+    fireEvent.change(screen.getByLabelText('Período hasta'), {
+      target: { value: '2026-08-20' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '✅ Confirmar liquidación' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/finanzas/nomina/liquidar',
+        expect.objectContaining({
+          usuarioId: 1,
+          periodoInicio: '2026-08-01T05:00:00.000Z',
+          periodoFin: '2026-08-21T05:00:00.000Z', // hasta inclusive + 1 día (colombiaDayEndUTC)
+        }),
+      );
+    });
+  });
+
+  it('avisa si el período editado se solapa con una liquidación previa del historial', async () => {
+    auditApiMock({
+      historial: [
+        {
+          id: 5,
+          usuarioId: 1,
+          fechaDesde: '2026-08-01T05:00:00.000Z',
+          fechaHasta: '2026-08-10T05:00:00.000Z', // inclusive = 09/08
+          totalPagado: 50000,
+          creadoEn: '2026-08-10T12:00:00.000Z',
+        },
+      ],
+    });
+    await openAuditModal();
+
+    // Período por defecto (10→16) NO solapa la liquidación 01→09
+    expect(screen.queryByText(/se solapa con la liquidación/i)).toBeNull();
+
+    // Editar Desde al 05/08 → el rango 05→16 solapa la liquidación 01→09
+    fireEvent.change(screen.getByLabelText('Período desde'), {
+      target: { value: '2026-08-05' },
+    });
+
+    const alerta = await screen.findByRole('alert');
+    expect(within(alerta).getByText(/#5/i)).toBeInTheDocument();
+    expect(alerta).toHaveTextContent(/comp fijo podría pagarse nuevamente/i);
+  });
+});

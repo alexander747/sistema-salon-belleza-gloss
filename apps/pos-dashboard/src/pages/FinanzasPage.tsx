@@ -342,6 +342,25 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Suma/resta días a una fecha 'YYYY-MM-DD' (maneja cruce de mes/año). */
+function addDaysInput(fecha: string, delta: number): string {
+  const [year, month, day] = fecha.split('-').map(Number);
+  return toISODate(new Date(Date.UTC(year, month - 1, day + delta)));
+}
+
+/**
+ * Convierte una fecha de período del backend (ISO UTC, borde Colombia) a 'YYYY-MM-DD'
+ * en día de Colombia. El fin de período es EXCLUSIVO (colombiaDayEndUTC = 05:00 UTC del
+ * día siguiente): `exclusivo` resta un día para mostrarlo como día inclusivo.
+ */
+function periodoDayInput(iso?: string, exclusivo = false): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const ms = d.getTime() - 5 * 3_600_000 - (exclusivo ? 24 * 3_600_000 : 0);
+  return toISODate(new Date(ms));
+}
+
 /**
  * Formatea una fecha de período de nómina a dd/mm/yyyy en día de Colombia (UTC-5).
  * El backend envía el fin de período como límite EXCLUSIVO (colombiaDayEndUTC =
@@ -2350,9 +2369,14 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   // ── Pre-liquidation audit modal ──
   const [auditarOpen, setAuditarOpen] = useState(false);
   const [selectedEmpleada, setSelectedEmpleada] = useState<NominaEmpleado | null>(null);
-  const [auditarRegistros, setAuditarRegistros] = useState<Registro[]>([]);
+  // Registros no pagados traídos del server (por usuarioId). El filtro por período es
+  // CLIENT-side: `auditarRegistros` deriva del rango editable (pago fuera de ciclo).
+  const [auditarAllRegistros, setAuditarAllRegistros] = useState<Registro[]>([]);
   const [auditarLoading, setAuditarLoading] = useState(false);
   const [auditarError, setAuditarError] = useState<string | null>(null);
+  // Período editable Desde/Hasta (día Colombia, inclusivo). Default = período de la fila.
+  const [auditDesde, setAuditDesde] = useState('');
+  const [auditHasta, setAuditHasta] = useState('');
   // Detail modal opened from the audit table (each service row opens its registro)
   const [auditDetailRegistro, setAuditDetailRegistro] = useState<Registro | null>(null);
   const [auditDetailOpen, setAuditDetailOpen] = useState(false);
@@ -2382,14 +2406,44 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     [pendientes],
   );
 
-  // ── Helper: current month period ──
-  const getCurrentPeriod = () => {
-    const now = new Date();
-    // Usar UTC para coincidir con el backend
-    const firstDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-    return { firstDay, today };
-  };
+  // ── Helper: registros del detalle de auditoría filtrados por el período EDITADO ──
+  // El fetch es por usuarioId (server); el filtro por rango es client-side para permitir
+  // el pago fuera de ciclo. Bordes con la misma semántica del backend (colombiaDayStartUTC
+  // / colombiaDayEndUTC) para no romper los bordes de día de Colombia (D4).
+  const auditarRegistros = useMemo(() => {
+    if (!auditDesde || !auditHasta) return auditarAllRegistros;
+    const desde = new Date(`${auditDesde}T05:00:00.000Z`);
+    const hasta = new Date(`${addDaysInput(auditHasta, 1)}T05:00:00.000Z`);
+    return auditarAllRegistros.filter((r) => {
+      const creado = new Date(r.creadoEn);
+      return creado >= desde && creado < hasta;
+    });
+  }, [auditarAllRegistros, auditDesde, auditHasta]);
+
+  // Totales del modal: comisiones/propinas se recalculan del detalle filtrado;
+  // bono+sueldo se toman del row (el factor de frecuencia ya está aplicado) — D5.
+  const auditarTotales = useMemo(
+    () => ({
+      comisiones: auditarRegistros.reduce((sum, r) => sum + Number(r.comisionCalculada ?? 0), 0),
+      propinas: auditarRegistros.reduce((sum, r) => sum + Number(r.propina ?? 0), 0),
+    }),
+    [auditarRegistros],
+  );
+
+  // Aviso de solapamiento (D6): si el rango EDITADO intersecta una liquidación previa de la
+  // misma empleada, el comp fijo podría pagarse de nuevo en el tramo solapado. Informacional.
+  const liquidacionSolapada = useMemo(() => {
+    if (!selectedEmpleada || !auditDesde || !auditHasta) return null;
+    return (
+      historial.find((h) => {
+        if (h.usuarioId !== selectedEmpleada.empleadaId) return false;
+        const hIni = periodoDayInput(h.fechaDesde);
+        const hFin = periodoDayInput(h.fechaHasta, true);
+        if (!hIni || !hFin) return false;
+        return auditDesde <= hFin && hIni <= auditHasta; // intersección de rangos inclusivos
+      }) ?? null
+    );
+  }, [historial, selectedEmpleada, auditDesde, auditHasta]);
 
   // ── Filtered historial (client-side) ──
   const filteredHistorial = useMemo(() => {
@@ -2527,6 +2581,10 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const handleAuditar = async (emp: NominaEmpleado) => {
     setSelectedEmpleada(emp);
+    // Default del período editable = período calculado por la frecuencia (fila pendiente).
+    // El usuario MAY cambiarlo: pago fuera de ciclo / adelantado / semanal.
+    setAuditDesde(periodoDayInput(emp.periodoInicio));
+    setAuditHasta(periodoDayInput(emp.periodoFin, true));
     setPagoAjustado(emp.totalAPagar);
     setAjustarPago(false);
     setMotivoAjuste('');
@@ -2556,28 +2614,22 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         setLoadingPrestamos(false);
       }
 
-      // Fetch detailed registros for audit
+      // Fetch detailed registros for audit (por usuarioId; el filtro por período es client-side)
       setAuditarLoading(true);
       try {
         const { data: regData } = await api.get(`/salones/${salonId}/registros`, {
           params: { usuarioId: emp.empleadaId, limit: 50 },
         });
         const allRegs = Array.isArray(regData?.data) ? regData.data : Array.isArray(regData) ? regData : [];
-        const { firstDay, today } = getCurrentPeriod();
-        const periodRegs = allRegs.filter((r: any) => {
-          if (r.estaPagadaEmpleada !== false) return false;
-          if (!r.creadoEn) return true;
-          const creado = new Date(r.creadoEn);
-          return creado >= firstDay && creado <= today;
-        });
+        const noPagados = allRegs.filter((r: any) => r.estaPagadaEmpleada !== false ? false : true);
         // Enrich with resolved client/employee names so the detail modal shows names, not IDs
-        setAuditarRegistros(periodRegs.map((r: any) => ({
+        setAuditarAllRegistros(noPagados.map((r: any) => ({
           ...r,
           _clienteNombre: r._clienteNombre ?? clientesMap.get(r.clienteId) ?? undefined,
           _empleadaNombre: r._empleadaNombre ?? empleadasMap.get(r.usuarioId) ?? undefined,
         })));
       } catch {
-        setAuditarRegistros([]);
+        setAuditarAllRegistros([]);
       } finally {
         setAuditarLoading(false);
       }
@@ -2595,8 +2647,10 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       await handleLiquidar(
         selectedEmpleada.empleadaId,
         {
-          periodoInicio: selectedEmpleada.periodoInicio,
-          periodoFin: selectedEmpleada.periodoFin,
+          // Bordes en ISO con hora Colombia (colombiaDayStartUTC / colombiaDayEndUTC):
+          // el fin es EXCLUSIVO → hasta inclusive + 1 día a las 05:00 UTC (D4).
+          periodoInicio: `${auditDesde}T05:00:00.000Z`,
+          periodoFin: `${addDaysInput(auditHasta, 1)}T05:00:00.000Z`,
         },
         totalPagadoOverride,
         descuentos.length > 0 ? descuentos : undefined,
@@ -2608,6 +2662,9 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       setMotivoAjuste('');
       setDescuentosPrestamos({});
       setPrestamosActivos([]);
+      setAuditDesde('');
+      setAuditHasta('');
+      setAuditarAllRegistros([]);
     } catch (err: any) {
       const msg = err?.message ?? err?.response?.data?.error?.message ?? 'Error al liquidar nómina';
       setAuditarError(msg);
@@ -3093,6 +3150,9 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   onClick={() => {
                     setAuditarOpen(false);
                     setSelectedEmpleada(null);
+                    setAuditDesde('');
+                    setAuditHasta('');
+                    setAuditarAllRegistros([]);
                   }}
                   aria-label="Cerrar"
                 >
@@ -3123,13 +3183,42 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     </div>
                     <div style={{
                       fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
-                      color: 'var(--text-secondary)',
+                      color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
+                      gap: '0.5rem',
                     }}>
-                      {(() => {
-                        const d = new Date();
-                        const fd = new Date(d.getFullYear(), d.getMonth(), 1);
-                        return `${toISODate(fd)} — ${toISODate(d)}`;
-                      })()}
+                      <span>Período a liquidar:</span>
+                      <input
+                        type="date"
+                        aria-label="Período desde"
+                        value={auditDesde}
+                        onChange={(e) => setAuditDesde(e.target.value)}
+                        style={{
+                          fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+                          padding: '0.2rem 0.4rem',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                      <span style={{ color: 'var(--text-dim)' }}>→</span>
+                      <input
+                        type="date"
+                        aria-label="Período hasta"
+                        value={auditHasta}
+                        onChange={(e) => setAuditHasta(e.target.value)}
+                        style={{
+                          fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
+                          padding: '0.2rem 0.4rem',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.6875rem' }}>
+                        (editable — pago fuera de ciclo)
+                      </span>
                     </div>
                     <div style={{
                       display: 'flex', gap: '0.35rem', flexWrap: 'wrap',
@@ -3209,11 +3298,11 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 >
                   {([
                     {
-                      label: 'Comisiones', value: selectedEmpleada.totalComisionesPendientes,
+                      label: 'Comisiones', value: auditarTotales.comisiones,
                       emoji: '💰', color: 'var(--accent)', borderColor: 'var(--accent)',
                     },
                     {
-                      label: 'Propinas', value: selectedEmpleada.totalPropinas,
+                      label: 'Propinas', value: auditarTotales.propinas,
                       emoji: '🎁', color: 'var(--success)', borderColor: 'var(--success)',
                     },
                     {
@@ -3222,7 +3311,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     },
                     {
                       label: 'Total bruto',
-                      value: selectedEmpleada.totalComisionesPendientes + selectedEmpleada.totalPropinas + selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo,
+                      value: auditarTotales.comisiones + auditarTotales.propinas + selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo,
                       emoji: '🧾', color: 'var(--accent)', borderColor: 'var(--accent)', isTotal: true,
                     },
                   ]).map((card) => (
@@ -3270,6 +3359,32 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     </motion.div>
                   ))}
                 </motion.div>
+
+                {liquidacionSolapada && (
+                  <div
+                    role="alert"
+                    style={{
+                      marginBottom: '1rem',
+                      padding: '0.65rem 1rem',
+                      background: 'rgba(245,158,11,0.1)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid rgba(245,158,11,0.4)',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.75rem',
+                      color: 'var(--text-primary)',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <span>⚠️</span>
+                    <span>
+                      El período editado se solapa con la liquidación{' '}
+                      <strong>#{liquidacionSolapada.id}</strong> de esta empleada. El comp fijo
+                      podría pagarse nuevamente en el rango solapado.
+                    </span>
+                  </div>
+                )}
 
                 <hr className={styles.auditDivider} />
 
@@ -3820,6 +3935,9 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     setSelectedEmpleada(null);
                     setAjustarPago(false);
                     setMotivoAjuste('');
+                    setAuditDesde('');
+                    setAuditHasta('');
+                    setAuditarAllRegistros([]);
                   }}
                 >
                   Cancelar
