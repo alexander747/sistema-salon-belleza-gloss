@@ -10,6 +10,7 @@ import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import tableSkeletonStyles from '../components/TableSkeleton.module.css';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
+import { filterEmpleadasActivas } from '../utils/empleadas.js';
 
 /* ── Types ── */
 
@@ -43,6 +44,7 @@ interface Cliente {
 interface Empleada {
   id: number;
   nombre: string;
+  activo?: boolean;
 }
 
 /* ── Constants ── */
@@ -224,7 +226,7 @@ const VentasPage: React.FC = () => {
         api.get(`/salones/${salonId}/productos?tipo=RETAIL`),
         api.get(`/salones/${salonId}/categorias`),
         api.get(`/salones/${salonId}/clientes`),
-        api.get(`/salones/${salonId}/empleadas`),
+        api.get(`/salones/${salonId}/empleadas`, { params: { activo: true } }),
       ]);
       const prodData = Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.data ?? [];
       const catData = Array.isArray(catRes.data) ? catRes.data : catRes.data?.data ?? [];
@@ -959,7 +961,7 @@ const VentasPage: React.FC = () => {
                     style={selectStyle}
                   >
                     <option value="">Seleccionar empleada…</option>
-                    {empleadas.map((emp) => (
+                    {filterEmpleadasActivas(empleadas).map((emp) => (
                       <option key={emp.id} value={emp.id}>
                         {emp.nombre}
                       </option>

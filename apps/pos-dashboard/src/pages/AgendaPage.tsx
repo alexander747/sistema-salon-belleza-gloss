@@ -10,6 +10,7 @@ import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
+import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import styles from './AgendaPage.module.css';
 
 /* ── Types ── */
@@ -47,6 +48,7 @@ interface Cita {
 interface EmpleadaSimple {
   id: number;
   nombre: string;
+  activo?: boolean;
 }
 
 interface ServicioSimple {
@@ -831,7 +833,7 @@ const AgendaPage: React.FC = () => {
                   }}
                 >
                   <option value="">Todas las empleadas</option>
-                  {empleadas.map((emp) => (
+                  {filterEmpleadasActivas(empleadas).map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.nombre}
                     </option>
@@ -1609,7 +1611,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
               }
             >
               <option value="">Seleccionar empleada...</option>
-              {empleadas.map((emp) => (
+              {filterEmpleadasActivas(empleadas).map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.nombre}
                 </option>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
@@ -125,5 +125,45 @@ describe('WalkInModal — caja cerrada (regla de oro)', () => {
     expect(refreshSpy).not.toHaveBeenCalled();
     // El modal sigue abierto
     expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
+  });
+});
+
+describe('WalkInModal — empleadas inactivas filtradas', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  it('pide solo empleadas activas al backend y no muestra inactivas en el selector', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 }],
+        });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({
+          data: [
+            { id: 1, nombre: 'María', activo: true },
+            { id: 2, nombre: 'Inactiva', activo: false },
+          ],
+        });
+      }
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+    renderModal();
+
+    // El GET de empleadas incluye el filtro activo=true (server-side)
+    const empleadasCall = mockGet.mock.calls.find(([url]) => String(url).includes('/empleadas'));
+    expect(empleadasCall?.[1]).toEqual({ params: { activo: true } });
+
+    // La empleada activa aparece; la inactiva NO
+    expect(await screen.findByText('María')).toBeInTheDocument();
+    const combos = screen.getAllByRole('combobox');
+    const empleadaSelect = combos[1];
+    expect(within(empleadaSelect).getByText('María')).toBeInTheDocument();
+    expect(within(empleadaSelect).queryByText('Inactiva')).not.toBeInTheDocument();
   });
 });

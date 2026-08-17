@@ -6,6 +6,7 @@ import api from '../services/api.js';
 import { dispatchCajaRefresh } from './caja/CajaBanner.js';
 import { isCajaCerradaError } from './caja/cajaError.js';
 import { formatCurrency } from '../utils/format.js';
+import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import MoneyInput from './MoneyInput.js';
 import styles from './WalkInModal.module.css';
 
@@ -53,6 +54,7 @@ interface Cliente {
 interface Empleada {
   id: number;
   nombre: string;
+  activo?: boolean;
 }
 
 type PaymentMethod = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
@@ -290,7 +292,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
         const [servRes, cliRes, empRes, prodRes] = await Promise.all([
           api.get(`/salones/${salonId}/servicios`),
           api.get(`/salones/${salonId}/clientes`),
-          api.get(`/salones/${salonId}/empleadas`),
+          api.get(`/salones/${salonId}/empleadas`, { params: { activo: true } }),
           api.get(`/salones/${salonId}/productos?tipo=RETAIL`),
         ]);
         if (cancelled) return;
@@ -1035,7 +1037,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                       style={selectStyle}
                     >
                       <option value="">Seleccionar empleada…</option>
-                      {empleadas.map((emp) => (
+                      {filterEmpleadasActivas(empleadas).map((emp) => (
                         <option key={emp.id} value={emp.id}>
                           {emp.nombre}
                         </option>
