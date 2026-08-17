@@ -78,6 +78,16 @@ const formFieldStyle: React.CSSProperties = {
   width: '100%',
 };
 
+const formLabelStyle: React.CSSProperties = {
+  display: 'block',
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.75rem',
+  fontWeight: 500,
+  color: 'var(--text-secondary)',
+  marginBottom: '0.3rem',
+  letterSpacing: '0.02em',
+};
+
 const tableHeaderStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'minmax(150px, 1.2fr) 1fr 60px 60px 100px 100px 120px',
@@ -146,11 +156,9 @@ const CategoriasPage: React.FC = () => {
   const [dataError, setDataError] = useState<string | null>(null);
 
   /* UI state */
-  const [newNombre, setNewNombre] = useState('');
-  const [newDescripcion, setNewDescripcion] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editNombre, setEditNombre] = useState('');
-  const [editDescripcion, setEditDescripcion] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ nombre: '', descripcion: '' });
+  const [editing, setEditing] = useState<Categoria | null>(null);
   const [deleting, setDeleting] = useState<Categoria | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -231,57 +239,54 @@ const CategoriasPage: React.FC = () => {
     }
   }, [authLoading, salonId, fetchData]);
 
-  /* ── Create ── */
-  const handleCreate = async () => {
-    if (!salonId || !newNombre.trim()) return;
+  /* ── Reset form ── */
+  const resetForm = () => {
+    setForm({ nombre: '', descripcion: '' });
+    setEditing(null);
+  };
+
+  /* ── Open create modal ── */
+  const openCreate = () => {
+    resetForm();
+    setActionError(null);
+    setShowModal(true);
+  };
+
+  /* ── Open edit modal ── */
+  const openEdit = (cat: Categoria) => {
+    setEditing(cat);
+    setForm({ nombre: cat.nombre, descripcion: cat.descripcion ?? '' });
+    setActionError(null);
+    setShowModal(true);
+  };
+
+  /* ── Create / Update ── */
+  const handleSave = async () => {
+    if (!salonId || !form.nombre.trim()) return;
     setActionError(null);
     setActionLoading(true);
     try {
-      await api.post(`/salones/${salonId}/categorias`, {
-        nombre: newNombre.trim(),
-        descripcion: newDescripcion.trim() || undefined,
-      });
-      setNewNombre('');
-      setNewDescripcion('');
+      const payload = {
+        nombre: form.nombre.trim(),
+        descripcion: form.descripcion.trim() || undefined,
+      };
+      if (editing) {
+        await api.put(`/salones/${salonId}/categorias/${editing.id}`, payload);
+      } else {
+        await api.post(`/salones/${salonId}/categorias`, payload);
+      }
+      setShowModal(false);
+      resetForm();
       fetchData();
     } catch {
-      setActionError('Error al crear la categoría. Verificá los datos e intentá de nuevo.');
+      setActionError(
+        editing
+          ? 'Error al guardar la categoría. Verificá los datos e intentá de nuevo.'
+          : 'Error al crear la categoría. Verificá los datos e intentá de nuevo.',
+      );
     } finally {
       setActionLoading(false);
     }
-  };
-
-  /* ── Start edit ── */
-  const startEdit = (cat: Categoria) => {
-    setEditingId(cat.id);
-    setEditNombre(cat.nombre);
-    setEditDescripcion(cat.descripcion ?? '');
-  };
-
-  /* ── Save edit ── */
-  const handleSaveEdit = async (id: number) => {
-    if (!salonId || !editNombre.trim()) return;
-    setActionError(null);
-    setActionLoading(true);
-    try {
-      await api.put(`/salones/${salonId}/categorias/${id}`, {
-        nombre: editNombre.trim(),
-        descripcion: editDescripcion.trim() || undefined,
-      });
-      setEditingId(null);
-      fetchData();
-    } catch {
-      setActionError('Error al guardar la categoría. Verificá los datos e intentá de nuevo.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  /* ── Cancel edit ── */
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditNombre('');
-    setEditDescripcion('');
   };
 
   /* ── Delete ── */
@@ -344,110 +349,24 @@ const CategoriasPage: React.FC = () => {
             </motion.div>
           )}
 
-          {/* ── Inline create ── */}
-          <div
-            style={{ marginBottom: '1.5rem', opacity: 1, visibility: 'visible' as const }}
+          {/* ── Toolbar ── */}
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.05 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              marginBottom: '1rem',
+            }}
           >
-            <div
-              style={{
-                padding: '1rem 1.25rem',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-surface)',
-                opacity: 1,
-                visibility: 'visible' as const,
-              }}
-            >
-              <h3
-                style={{
-                  fontFamily: "'Playfair Display', serif",
-                  fontSize: '0.9375rem',
-                  fontWeight: 600,
-                  color: 'var(--accent)',
-                  marginBottom: '0.75rem',
-                  margin: 0,
-                }}
-              >
-                Nueva categoría
-              </h3>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '0.5rem',
-                  alignItems: 'flex-end',
-                  flexWrap: 'wrap',
-                  marginTop: '0.75rem',
-                }}
-              >
-                <div style={{ flex: 1, minWidth: '180px' }}>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.7rem',
-                      color: 'var(--text-dim)',
-                      marginBottom: '0.25rem',
-                    }}
-                  >
-                    Nombre
-                  </label>
-                  <input
-                    type="text"
-                    value={newNombre}
-                    onChange={(e) => setNewNombre(e.target.value)}
-                    style={formFieldStyle}
-                    placeholder="Ej: Cortes"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreate();
-                    }}
-                  />
-                </div>
-                <div style={{ flex: 1, minWidth: '180px' }}>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.7rem',
-                      color: 'var(--text-dim)',
-                      marginBottom: '0.25rem',
-                    }}
-                  >
-                    Descripción
-                  </label>
-                  <input
-                    type="text"
-                    value={newDescripcion}
-                    onChange={(e) => setNewDescripcion(e.target.value)}
-                    style={formFieldStyle}
-                    placeholder="Opcional"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreate();
-                    }}
-                  />
-                </div>
-                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                  <button
-                    style={{
-                      ...primaryBtnStyle,
-                      padding: '0.5rem 1rem',
-                      height: '34px',
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
-                    onClick={handleCreate}
-                    disabled={!newNombre.trim() || actionLoading}
-                  >
-                    {actionLoading ? '…' : 'Crear'}
-                  </button>
-                </motion.div>
-              </div>
-              {actionError && (
-                <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--danger)', marginTop: '0.75rem', marginBottom: 0 }}>
-                  {actionError}
-                </p>
-              )}
-            </div>
-          </div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+              <button onClick={openCreate} style={primaryBtnStyle}>
+                + Nueva Categoría
+              </button>
+            </motion.div>
+          </motion.div>
 
           {/* ── List ── */}
           {dataLoading ? (
@@ -542,7 +461,6 @@ const CategoriasPage: React.FC = () => {
 
               {/* Rows */}
               {paginatedCategorias.map((cat) => {
-                const isEditing = editingId === cat.id;
                 return (
                   <motion.div
                     key={cat.id}
@@ -554,69 +472,11 @@ const CategoriasPage: React.FC = () => {
                     whileHover={{ background: 'var(--bg-hover)' }}
                     transition={{ duration: 0.15 }}
                   >
-                    {isEditing ? (
-                      /* ── Inline edit: nombre ── */
-                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                        <input
-                          type="text"
-                          value={editNombre}
-                          onChange={(e) => setEditNombre(e.target.value)}
-                          style={{ ...formFieldStyle, height: '30px', fontSize: '0.75rem' }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEdit(cat.id);
-                            if (e.key === 'Escape') cancelEdit();
-                          }}
-                          autoFocus
-                        />
-                        <button
-                          style={{
-                            background: 'var(--accent)',
-                            border: 'none',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--bg-root)',
-                            padding: '0.3rem 0.6rem',
-                            fontFamily: "'DM Sans', sans-serif",
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                          }}
-                          onClick={() => handleSaveEdit(cat.id)}
-                          disabled={!editNombre.trim() || actionLoading}
-                        >
-                          Guardar
-                        </button>
-                        <button
-                          style={{
-                            ...ghostBtnStyle,
-                            padding: '0.3rem 0.6rem',
-                            fontSize: '0.7rem',
-                          }}
-                          onClick={cancelEdit}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <span style={{ fontWeight: 500 }}>{cat.nombre}</span>
-                    )}
+                    <span style={{ fontWeight: 500 }}>{cat.nombre}</span>
 
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={editDescripcion}
-                        onChange={(e) => setEditDescripcion(e.target.value)}
-                        style={{ ...formFieldStyle, height: '30px', fontSize: '0.75rem' }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit(cat.id);
-                          if (e.key === 'Escape') cancelEdit();
-                        }}
-                      />
-                    ) : (
-                      <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cat.descripcion || '—'}
-                      </span>
-                    )}
+                    <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {cat.descripcion || '—'}
+                    </span>
 
                     <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
                       {servicioCounts[cat.id] ?? 0}
@@ -632,19 +492,18 @@ const CategoriasPage: React.FC = () => {
                     </span>
                     <span style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
                       <button
-                        onClick={() => !isEditing && startEdit(cat)}
+                        onClick={() => openEdit(cat)}
                         style={{
                           background: 'none',
                           border: '1px solid var(--border)',
                           borderRadius: 'var(--radius-sm)',
                           color: 'var(--text-secondary)',
-                          padding: '0.3rem 0.6rem',
+                          padding: '0.25rem 0.5rem',
                           fontSize: '0.7rem',
-                          cursor: isEditing ? 'default' : 'pointer',
-                          opacity: isEditing ? 0.4 : 1,
+                          cursor: 'pointer',
                           transition: 'color 0.2s, border-color 0.2s',
                         }}
-                        onMouseEnter={(e) => { if (!isEditing) { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; } }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
                       >
                         Editar
@@ -656,7 +515,7 @@ const CategoriasPage: React.FC = () => {
                           border: '1px solid var(--border)',
                           borderRadius: 'var(--radius-sm)',
                           color: 'var(--danger)',
-                          padding: '0.3rem 0.6rem',
+                          padding: '0.25rem 0.5rem',
                           fontSize: '0.7rem',
                           cursor: 'pointer',
                           transition: 'border-color 0.2s',
@@ -684,6 +543,140 @@ const CategoriasPage: React.FC = () => {
         onPrev={() => setPage((p) => Math.max(1, p - 1))}
         onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
       />
+
+      {/* ── Create / Edit Modal ── */}
+      <AnimatePresence>
+        {showModal && (
+          <motion.div
+            style={modalOverlayStyle}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowModal(false);
+                resetForm();
+              }
+            }}
+          >
+            <motion.div
+              style={{ ...modalContentStyle, maxWidth: '480px' }}
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div
+                style={{
+                  padding: '1.25rem 1.5rem 0.75rem',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'Playfair Display', serif",
+                    fontSize: '1.125rem',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {editing ? 'Editar Categoría' : 'Nueva Categoría'}
+                </span>
+                <button
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-dim)',
+                    fontSize: '1.25rem',
+                    cursor: 'pointer',
+                    padding: '0 0.25rem',
+                    lineHeight: 1,
+                  }}
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '1.25rem 1.5rem' }}>
+                <div style={{ marginBottom: '0.875rem' }}>
+                  <label style={formLabelStyle}>Nombre *</label>
+                  <input
+                    type="text"
+                    value={form.nombre}
+                    onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))}
+                    style={formFieldStyle}
+                    placeholder="Ej: Cortes"
+                    autoFocus
+                  />
+                </div>
+                <div style={{ marginBottom: '0.875rem' }}>
+                  <label style={formLabelStyle}>Descripción</label>
+                  <input
+                    type="text"
+                    value={form.descripcion}
+                    onChange={(e) => setForm((prev) => ({ ...prev, descripcion: e.target.value }))}
+                    style={formFieldStyle}
+                    placeholder="Opcional"
+                  />
+                </div>
+                {actionError && (
+                  <p
+                    style={{
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.75rem',
+                      color: 'var(--danger)',
+                      marginTop: '0.75rem',
+                      marginBottom: 0,
+                    }}
+                  >
+                    {actionError}
+                  </p>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div
+                style={{
+                  padding: '0.75rem 1.5rem 1.25rem',
+                  borderTop: '1px solid var(--border)',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '0.75rem',
+                }}
+              >
+                <button
+                  style={ghostBtnStyle}
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  style={primaryBtnStyle}
+                  onClick={handleSave}
+                  disabled={!form.nombre.trim() || actionLoading}
+                >
+                  {actionLoading ? '…' : editing ? 'Guardar' : 'Crear'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Delete confirmation ── */}
       <AnimatePresence>
