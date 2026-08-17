@@ -391,6 +391,102 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
     }, WAIT);
   }, 20000);
 
+  it('completar cita con TARJETA → el pago viaja con metodoPago TARJETA', async () => {
+    defaultApiMock('CONFIRMADA');
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    // Cambiar el método de pago por defecto (EFECTIVO) a TARJETA
+    fireEvent.click(await screen.findByRole('button', { name: 'Tarjeta' }, WAIT));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const completarCall = mockPost.mock.calls.find(([url]) =>
+        String(url).includes('/completar'),
+      );
+      expect(completarCall).toBeDefined();
+      const [, body] = completarCall as [string, { registro: { pagos: Array<{ metodoPago: string }>; montoTotal: number } }];
+      expect(body.registro.pagos).toEqual([{ monto: 30000, metodoPago: 'TARJETA' }]);
+      expect(body.registro.montoTotal).toBe(30000);
+    });
+  }, 20000);
+
+  it('completar cita con EFECTIVO: monto recibido muestra vuelto y el pago viaja con EFECTIVO', async () => {
+    defaultApiMock('CONFIRMADA');
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    // EFECTIVO es el default: el input de monto recibido tiene como placeholder el total
+    const montoRecibido = screen.getByPlaceholderText(/\$\s*30\.000/);
+    fireEvent.change(montoRecibido, { target: { value: '50000' } });
+
+    // Vuelto visible: 50.000 - 30.000 = 20.000
+    expect(await screen.findByText('Vuelto')).toBeInTheDocument();
+    expect(screen.getAllByText('$ 20.000').length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const completarCall = mockPost.mock.calls.find(([url]) =>
+        String(url).includes('/completar'),
+      );
+      expect(completarCall).toBeDefined();
+      const [, body] = completarCall as [string, { registro: { pagos: Array<{ monto: number; metodoPago: string }> } }];
+      // El monto del pago es el total final (30.000), no el monto recibido
+      expect(body.registro.pagos).toEqual([{ monto: 30000, metodoPago: 'EFECTIVO' }]);
+    });
+  }, 20000);
+
+  it('ajuste de total: exige nota obligatoria y el registro viaja con precioAjustado', async () => {
+    defaultApiMock('CONFIRMADA');
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    // Activar el ajuste de total
+    fireEvent.click(await screen.findByLabelText('Ajustar valor total', {}, WAIT));
+
+    // Input del total personalizado: placeholder = total calculado ($ 30.000)
+    const totalInputs = screen.getAllByPlaceholderText(/\$\s*30\.000/);
+    fireEvent.change(totalInputs[0], { target: { value: '25000' } });
+
+    // Ajuste sin nota → error visible y botón deshabilitado
+    expect(
+      await screen.findByText(/Este campo es obligatorio cuando hay descuento o ajuste de total/i, {}, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar y Registrar' })).toBeDisabled();
+
+    // Con la nota, el botón se habilita
+    fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo del ajuste/i), {
+      target: { value: 'Descuento por cliente frecuente' },
+    });
+    expect(screen.getByRole('button', { name: 'Confirmar y Registrar' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const completarCall = mockPost.mock.calls.find(([url]) =>
+        String(url).includes('/completar'),
+      );
+      expect(completarCall).toBeDefined();
+      const [, body] = completarCall as [string, { registro: { montoTotal: number; precioAjustado: boolean; valorOriginal: number; valorFinal: number; notas: string } }];
+      expect(body.registro.montoTotal).toBe(25000);
+      expect(body.registro.precioAjustado).toBe(true);
+      expect(body.registro.valorOriginal).toBe(30000);
+      expect(body.registro.valorFinal).toBe(25000);
+      expect(body.registro.notas).toContain('[AJUSTE: total $25000]');
+    });
+  }, 20000);
+
   it('navegación semanal: Siguiente → 7 días, Anterior → vuelve a la semana original', async () => {
     defaultApiMock('CONFIRMADA');
     renderAgenda();
