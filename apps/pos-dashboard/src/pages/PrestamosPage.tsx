@@ -5,6 +5,7 @@ import { type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import { prestamoService, type Prestamo, type PagoPrestamo } from '../services/prestamoService.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import PaginationBar from '../components/PaginationBar.js';
 import styles from './PrestamosPage.module.css';
 
 /* ── Types ── */
@@ -15,6 +16,8 @@ interface Empleada {
 }
 
 /* ── Constants ── */
+
+const PAGE_SIZE = 12;
 
 const currencyFormatter = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -91,6 +94,7 @@ const PrestamosPage: React.FC = () => {
   } | null>(null);
   const [empleadas, setEmpleadas] = useState<Empleada[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   // Form state
   const [formTipo, setFormTipo] = useState<'empleado' | 'tercero'>('empleado');
@@ -174,6 +178,16 @@ const PrestamosPage: React.FC = () => {
     const activos = prestamos.filter((p) => p.estado === 'ACTIVO').length;
     return { totalPrestamos, totalMonto, totalSaldoPendiente, activos };
   }, [prestamos]);
+
+  /* ── Client-side pagination ── */
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(prestamos.length / PAGE_SIZE)),
+    [prestamos],
+  );
+  const paginatedPrestamos = useMemo(
+    () => prestamos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [prestamos, page],
+  );
 
   /* ── Handlers ── */
   const handleCreate = async () => {
@@ -410,7 +424,7 @@ const PrestamosPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                prestamos.map((p) => (
+                paginatedPrestamos.map((p) => (
                   <tr key={p.id} className={styles.tableRow}>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
@@ -490,6 +504,16 @@ const PrestamosPage: React.FC = () => {
           </table>
         </div>
       )}
+
+      {/* Paginación (client-side) */}
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        total={prestamos.length}
+        label="préstamos"
+        onPrev={() => setPage((p) => Math.max(1, p - 1))}
+        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+      />
 
       {/* Create Modal */}
       <AnimatePresence>

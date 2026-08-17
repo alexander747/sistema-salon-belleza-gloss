@@ -5,6 +5,7 @@ import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import PaginationBar from '../components/PaginationBar.js';
 
 /* ── Types ── */
 
@@ -18,7 +19,7 @@ interface Categoria {
 
 /* ── Constants ── */
 
-
+const PAGE_SIZE = 12;
 
 /* ── Style constants ── */
 
@@ -152,6 +153,7 @@ const CategoriasPage: React.FC = () => {
   const [deleting, setDeleting] = useState<Categoria | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   /* ── Derived ── */
 
@@ -160,6 +162,16 @@ const CategoriasPage: React.FC = () => {
     const stored = localStorage.getItem('xSalonId');
     return stored ? Number(stored) : user.salonId;
   }, [user]);
+
+  /* ── Client-side pagination ── */
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(categorias.length / PAGE_SIZE)),
+    [categorias],
+  );
+  const paginatedCategorias = useMemo(
+    () => categorias.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [categorias, page],
+  );
 
   /* ── Auth effect ── */
   useEffect(() => {
@@ -529,7 +541,7 @@ const CategoriasPage: React.FC = () => {
               </div>
 
               {/* Rows */}
-              {categorias.map((cat) => {
+              {paginatedCategorias.map((cat) => {
                 const isEditing = editingId === cat.id;
                 return (
                   <motion.div
@@ -662,6 +674,16 @@ const CategoriasPage: React.FC = () => {
           )}
         </motion.div>
       </AnimatePresence>
+
+      {/* Paginación (client-side) */}
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        total={categorias.length}
+        label="categorías"
+        onPrev={() => setPage((p) => Math.max(1, p - 1))}
+        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+      />
 
       {/* ── Delete confirmation ── */}
       <AnimatePresence>

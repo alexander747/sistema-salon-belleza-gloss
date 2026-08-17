@@ -5,6 +5,7 @@ import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import PaginationBar from '../components/PaginationBar.js';
 import styles from './EmpleadasPage.module.css';
 
 /* ── Types ── */
@@ -44,7 +45,7 @@ interface EmpleadaForm {
 
 /* ── Constants ── */
 
-
+const PAGE_SIZE = 12;
 
 const ROL_OPTIONS = [
   { value: '', label: 'Seleccionar rol...' },
@@ -152,6 +153,7 @@ const EmpleadasPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   /* ── Modal state ── */
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -211,6 +213,16 @@ const EmpleadasPage: React.FC = () => {
         (e.email && e.email.toLowerCase().includes(q)),
     );
   }, [empleadas, search]);
+
+  /* ── Client-side pagination ── */
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredEmpleadas.length / PAGE_SIZE)),
+    [filteredEmpleadas],
+  );
+  const paginatedEmpleadas = useMemo(
+    () => filteredEmpleadas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredEmpleadas, page],
+  );
 
   /* ── Modal openers ── */
   const openCreate = () => {
@@ -405,7 +417,10 @@ const EmpleadasPage: React.FC = () => {
                 className={styles.searchInput}
                 placeholder="Buscar por nombre o email..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
               />
             </motion.div>
 
@@ -428,14 +443,24 @@ const EmpleadasPage: React.FC = () => {
           ) : filteredEmpleadas.length === 0 ? (
             <RenderEmpty search={search} onCreate={openCreate} />
           ) : (
-            <RenderTable
-              empleadas={filteredEmpleadas}
-              containerVariants={containerVariants}
-              itemVariants={itemVariants}
-              onEdit={openEdit}
-              onToggleActivo={handleToggleActivo}
-              togglingId={togglingId}
-            />
+            <>
+              <RenderTable
+                empleadas={paginatedEmpleadas}
+                containerVariants={containerVariants}
+                itemVariants={itemVariants}
+                onEdit={openEdit}
+                onToggleActivo={handleToggleActivo}
+                togglingId={togglingId}
+              />
+              <PaginationBar
+                page={page}
+                totalPages={totalPages}
+                total={filteredEmpleadas.length}
+                label="empleados"
+                onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+              />
+            </>
           )}
         </motion.div>
       </AnimatePresence>

@@ -301,3 +301,72 @@ describe('EmpleadasPage — frecuencia de pago', () => {
     expect(screen.getByLabelText('Frecuencia de pago')).toHaveValue('SEMANAL');
   });
 });
+
+describe('EmpleadasPage — paginación (client-side)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockPatch.mockReset();
+  });
+
+  function manyEmpleadas(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      id: i + 1,
+      nombre: `Empleado ${i + 1}`,
+      email: `emp${i + 1}@test.com`,
+      numeroWhatsApp: '3000000000',
+      rol: Rol.MANICURISTA,
+      porcentajeComisionServicio: 30,
+      sueldoFijo: 0,
+      bonoHorario: 0,
+      activo: true,
+    }));
+  }
+
+  it('muestra solo 12 empleados en la página 1 y el patrón estándar de paginación', async () => {
+    defaultApiMock(manyEmpleadas(13));
+
+    renderPage();
+
+    expect(await screen.findByText('Empleado 1')).toBeInTheDocument();
+    // Página 1: primeros 12 → el empleado 13 NO se ve todavía
+    expect(screen.queryByText('Empleado 13')).not.toBeInTheDocument();
+    expect(screen.getByText('Página 1 de 2 (13 empleados)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '← Anterior' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Siguiente →' })).toBeEnabled();
+  });
+
+  it('navega a la página 2 con Siguiente y ve el empleado restante', async () => {
+    defaultApiMock(manyEmpleadas(13));
+
+    renderPage();
+
+    await screen.findByText('Empleado 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente →' }));
+
+    expect(await screen.findByText('Empleado 13')).toBeInTheDocument();
+    expect(screen.queryByText('Empleado 1')).not.toBeInTheDocument();
+    expect(screen.getByText('Página 2 de 2 (13 empleados)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Siguiente →' })).toBeDisabled();
+  });
+
+  it('vuelve a la página 1 al buscar', async () => {
+    defaultApiMock(manyEmpleadas(13));
+
+    renderPage();
+
+    await screen.findByText('Empleado 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente →' }));
+    await screen.findByText('Empleado 13');
+
+    fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o email...'), {
+      target: { value: 'Empleado 5' },
+    });
+
+    expect(await screen.findByText('Empleado 5')).toBeInTheDocument();
+    expect(screen.queryByText('Empleado 6')).not.toBeInTheDocument();
+    // Con un solo resultado la barra de paginación desaparece (totalPages = 1)
+    expect(screen.queryByText(/Página \d de \d \(\d+ empleados\)/)).not.toBeInTheDocument();
+  });
+});

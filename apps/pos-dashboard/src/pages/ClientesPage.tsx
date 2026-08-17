@@ -5,6 +5,7 @@ import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import PaginationBar from '../components/PaginationBar.js';
 import styles from './ClientesPage.module.css';
 
 /* ── Types ── */
@@ -418,27 +419,14 @@ const ClientesPage: React.FC = () => {
               />
 
               {/* ── Pagination controls ── */}
-              {meta.totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem', alignItems: 'center' }}>
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                    style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
-                  >
-                    ← Anterior
-                  </button>
-                  <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                    Página {meta.page} de {meta.totalPages} ({meta.total} registros)
-                  </span>
-                  <button
-                    disabled={page >= meta.totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                    style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: page >= meta.totalPages ? 'not-allowed' : 'pointer', opacity: page >= meta.totalPages ? 0.5 : 1 }}
-                  >
-                    Siguiente →
-                  </button>
-                </div>
-              )}
+              <PaginationBar
+                page={page}
+                totalPages={meta.totalPages}
+                total={meta.total}
+                label="registros"
+                onPrev={() => setPage((p) => p - 1)}
+                onNext={() => setPage((p) => p + 1)}
+              />
             </>
           )}
         </motion.div>

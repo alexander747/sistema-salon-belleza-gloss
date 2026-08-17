@@ -5,6 +5,7 @@ import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
+import PaginationBar from '../components/PaginationBar.js';
 import {
   fetchServicios,
   type Servicio,
@@ -85,18 +86,6 @@ const ghostBtnStyle: React.CSSProperties = {
   fontSize: '0.8125rem',
   cursor: 'pointer',
   transition: 'background 0.2s',
-};
-
-const paginationBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: '1px solid var(--border)',
-  borderRadius: 'var(--radius-sm)',
-  color: 'var(--text-primary)',
-  padding: '0.35rem 0.7rem',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.75rem',
-  cursor: 'pointer',
-  transition: 'background 0.2s, border-color 0.2s',
 };
 
 const tableHeaderStyle: React.CSSProperties = {
@@ -228,23 +217,6 @@ const ServiciosPage: React.FC = () => {
   }, [user]);
 
   const hasData = useMemo(() => servicios.length > 0, [servicios]);
-
-  const paginationRange = useMemo(() => {
-    const range: (number | string)[] = [];
-    const maxVisible = 5;
-    if (pageCount <= maxVisible + 2) {
-      for (let i = 1; i <= pageCount; i++) range.push(i);
-    } else {
-      range.push(1);
-      if (currentPage > 3) range.push('...');
-      const start = Math.max(2, currentPage - 1);
-      const end = Math.min(pageCount - 1, currentPage + 1);
-      for (let i = start; i <= end; i++) range.push(i);
-      if (currentPage < pageCount - 2) range.push('...');
-      range.push(pageCount);
-    }
-    return range;
-  }, [pageCount, currentPage]);
 
   /* ── Debounced search ── */
   const handleSearchChange = (value: string) => {
@@ -696,75 +668,14 @@ const ServiciosPage: React.FC = () => {
               ))}
 
               {/* ── Pagination ── */}
-              {pageCount > 1 && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.35rem',
-                    marginTop: '1rem',
-                    padding: '0 1rem 0.75rem',
-                  }}
-                >
-                  <button
-                    style={{
-                      ...paginationBtnStyle,
-                      opacity: currentPage === 1 ? 0.4 : 1,
-                      cursor: currentPage === 1 ? 'default' : 'pointer',
-                    }}
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  >
-                    ←
-                  </button>
-                  {paginationRange.map((p, i) =>
-                    typeof p === 'string' ? (
-                      <span
-                        key={`ellipsis-${i}`}
-                        style={{ color: 'var(--text-dim)', fontSize: '0.75rem', padding: '0 0.25rem' }}
-                      >
-                        …
-                      </span>
-                    ) : (
-                      <button
-                        key={p}
-                        style={{
-                          ...paginationBtnStyle,
-                          background: p === currentPage ? 'var(--accent)' : 'transparent',
-                          color: p === currentPage ? 'var(--bg-root)' : 'var(--text-primary)',
-                          borderColor: p === currentPage ? 'var(--accent)' : 'var(--border)',
-                          fontWeight: p === currentPage ? 600 : 400,
-                        }}
-                        onClick={() => setCurrentPage(p)}
-                      >
-                        {p}
-                      </button>
-                    ),
-                  )}
-                  <button
-                    style={{
-                      ...paginationBtnStyle,
-                      opacity: currentPage === pageCount ? 0.4 : 1,
-                      cursor: currentPage === pageCount ? 'default' : 'pointer',
-                    }}
-                    disabled={currentPage === pageCount}
-                    onClick={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
-                  >
-                    →
-                  </button>
-                  <span
-                    style={{
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.7rem',
-                      color: 'var(--text-dim)',
-                      marginLeft: '0.5rem',
-                    }}
-                  >
-                    {totalCount} servicios
-                  </span>
-                </div>
-              )}
+              <PaginationBar
+                page={currentPage}
+                totalPages={pageCount}
+                total={totalCount}
+                label="servicios"
+                onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onNext={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
+              />
             </div>
           )}
 
