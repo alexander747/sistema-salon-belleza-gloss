@@ -1,0 +1,225 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { Rol, type IUser } from '@pos-final/types';
+
+const { mockGet, mockPost, mockPut, mockDelete } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  mockPost: vi.fn(),
+  mockPut: vi.fn(),
+  mockDelete: vi.fn(),
+}));
+
+vi.mock('../../services/api.js', () => ({
+  default: { get: mockGet, post: mockPost, put: mockPut, delete: mockDelete },
+}));
+
+import ClientesPage from '../ClientesPage';
+
+const duena: IUser = {
+  id: 2,
+  nombre: 'Dueña Test',
+  numeroWhatsApp: '',
+  email: 'duena@test.com',
+  rol: Rol.DUEÑA,
+  salonId: 1,
+  porcentajeComisionServicio: 0,
+  sueldoFijo: 0,
+  bonoHorario: 0,
+  activo: true,
+  creadoEn: new Date(),
+  actualizadoEn: new Date(),
+};
+
+const cliente = {
+  id: 1,
+  nombre: 'Ana Gómez',
+  telefono: '3128553060',
+  cedula: '1012345678',
+  email: 'ana@test.com',
+  fechaNacimiento: '1990-05-20',
+  genero: 'Femenino',
+  notas: 'Cliente frecuente',
+  preferencias: 'Manicure',
+  totalServicios: 3,
+  visitas: 3,
+  activo: true,
+  creadoEn: '2026-01-10T12:00:00',
+  actualizadoEn: '2026-01-10T12:00:00',
+};
+
+function defaultApiMock(data: unknown[] = [cliente], total = data.length) {
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+    if (url.includes('/clientes')) {
+      return Promise.resolve({
+        data: { data, meta: { page: 1, limit: 12, total, totalPages: Math.max(1, Math.ceil(total / 12)) } },
+      });
+    }
+    return Promise.resolve({ data: {} });
+  });
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={['/clientes']}>
+      <ClientesPage />
+    </MemoryRouter>,
+  );
+}
+
+const WAIT = { timeout: 4000 };
+
+describe('ClientesPage — listado y CRUD', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockDelete.mockReset();
+  });
+
+  it('lista los clientes con teléfono formateado, cédula y visitas desde la API', async () => {
+    defaultApiMock();
+
+    renderPage();
+
+    expect(await screen.findByText('Ana Gómez', {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByText('312 855 3060')).toBeInTheDocument(); // teléfono formateado
+    expect(screen.getByText('1012345678')).toBeInTheDocument(); // cédula
+    expect(screen.getByText('3')).toBeInTheDocument(); // visitas (badge)
+    // creadoEn y actualizadoEn tienen la misma fecha en el fixture
+    expect(screen.getAllByText('10/01/2026').length).toBeGreaterThanOrEqual(2);
+
+    const clientesCall = mockGet.mock.calls.find(([url]) => String(url).includes('/clientes'));
+    expect(clientesCall?.[1]).toEqual({ params: { page: '1', limit: '12' } });
+  });
+
+  it('crear cliente: llena el modal y hace POST con nombre y teléfono', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo cliente' }, WAIT));
+
+    expect(await screen.findByText('Nuevo cliente', {}, WAIT)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Nombre completo'), {
+      target: { value: 'Lina Pérez' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Ej: 3128553060'), {
+      target: { value: '3001234567' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('cliente@email.com'), {
+      target: { value: 'lina@test.com' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear cliente' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/clientes', {
+        nombre: 'Lina Pérez',
+        telefono: '3001234567',
+        email: 'lina@test.com',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Nuevo cliente')).not.toBeInTheDocument();
+    }, WAIT);
+  }, 20000);
+
+  it('editar cliente: precarga los campos y Guardar hace PUT', async () => {
+    defaultApiMock();
+    mockPut.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+
+    expect(await screen.findByText('Editar cliente', {}, WAIT)).toBeInTheDocument();
+
+    // Precarga: nombre, teléfono, cédula, email
+    expect(screen.getByDisplayValue('Ana Gómez')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('3128553060')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1012345678')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('ana@test.com')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue('Ana Gómez'), {
+      target: { value: 'Ana Gómez R' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith(
+        '/salones/1/clientes/1',
+        expect.objectContaining({
+          nombre: 'Ana Gómez R',
+          telefono: '3128553060',
+          cedula: '1012345678',
+        }),
+      );
+    });
+  }, 20000);
+
+  it('detalle: el botón "Ver" abre el modal con los datos del cliente', async () => {
+    defaultApiMock();
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalle' }, WAIT));
+
+    // Título del modal = nombre del cliente
+    expect((await screen.findAllByText('Ana Gómez', {}, WAIT)).length).toBeGreaterThanOrEqual(2);
+    // El teléfono aparece en la fila de la tabla y en el modal de detalle
+    expect(screen.getAllByText('312 855 3060').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('1012345678').length).toBeGreaterThanOrEqual(2); // cédula
+    expect(screen.getByText('Cliente frecuente')).toBeInTheDocument(); // notas
+  }, 20000);
+
+  it('eliminar cliente: confirmación con aviso de visitas y DELETE', async () => {
+    defaultApiMock();
+    mockDelete.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }, WAIT));
+
+    expect(await screen.findByText('Eliminar cliente', {}, WAIT)).toBeInTheDocument();
+    // El cliente tiene 3 visitas → se avisa que el registro se elimina pero las citas se conservan
+    expect(screen.getByText(/tiene 3 visitas registradas/i)).toBeInTheDocument();
+
+    const eliminarButtons = screen.getAllByRole('button', { name: 'Eliminar' });
+    fireEvent.click(eliminarButtons[eliminarButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mockDelete).toHaveBeenCalledWith('/salones/1/clientes/1');
+    });
+  }, 20000);
+
+  it('muestra la paginación y navega a la página 2', async () => {
+    defaultApiMock([cliente], 25);
+
+    renderPage();
+
+    expect(await screen.findByText('Ana Gómez', {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByText('Página 1 de 3 (25 registros)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente →' }));
+
+    await waitFor(() => {
+      const clientesCalls = mockGet.mock.calls.filter(([url]) => String(url).includes('/clientes'));
+      const last = clientesCalls[clientesCalls.length - 1];
+      expect(last?.[1]).toEqual({ params: { page: '2', limit: '12' } });
+    });
+  }, 20000);
+
+  it('muestra el estado vacío cuando la API responde sin clientes', async () => {
+    defaultApiMock([], 0);
+
+    renderPage();
+
+    expect(await screen.findByText('No hay clientes registrados', {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear primer cliente' })).toBeInTheDocument();
+  }, 20000);
+});
