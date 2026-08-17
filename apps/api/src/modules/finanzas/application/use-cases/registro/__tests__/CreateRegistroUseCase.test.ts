@@ -500,6 +500,11 @@ describe('CreateRegistroUseCase', () => {
     it('should use the provided queryRunner for all writes without committing/releasing', async () => {
       setupHappyPath();
       const externalQr = {
+        connect: vi.fn(),
+        startTransaction: vi.fn(),
+        commitTransaction: vi.fn(),
+        rollbackTransaction: vi.fn(),
+        release: vi.fn(),
         manager: {
           getRepository: vi.fn(() => ({
             update: vi.fn(),
@@ -520,7 +525,9 @@ describe('CreateRegistroUseCase', () => {
       expect(mockPagoRepo.bulkCreate).toHaveBeenCalledWith(expect.anything(), externalQr);
       expect(externalQr.manager.getRepository).toHaveBeenCalled();
       // No se cierra ni commitea nada
-      expect(externalQr.commitTransaction).toBeUndefined();
+      expect(externalQr.commitTransaction).not.toHaveBeenCalled();
+      expect(externalQr.rollbackTransaction).not.toHaveBeenCalled();
+      expect(externalQr.release).not.toHaveBeenCalled();
     });
 
     it('should pass citaId through to registroRepo.create when provided', async () => {

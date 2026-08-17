@@ -18,6 +18,7 @@ vi.mock('../../../../../shared/database', () => ({
 }));
 
 import { TypeORMCitaRepository } from '../TypeORMCitaRepository';
+import { EstadoCita } from '../../../../../infrastructure/persistence/entities/CitaEntity';
 
 describe('TypeORMCitaRepository.cambiarEstado', () => {
   let repo: TypeORMCitaRepository;
@@ -31,7 +32,7 @@ describe('TypeORMCitaRepository.cambiarEstado', () => {
     mockDefaultRepoUpdate.mockResolvedValue(undefined);
     mockDefaultFindOne.mockResolvedValue({ id: 1, estado: 'COMPLETADA' });
 
-    const result = await repo.cambiarEstado(1, 'COMPLETADA', { completadoPorId: 2 });
+    const result = await repo.cambiarEstado(1, EstadoCita.COMPLETADA, { completadoPorId: 2 });
 
     expect(mockDefaultRepoUpdate).toHaveBeenCalledWith(1, {
       estado: 'COMPLETADA',
@@ -51,7 +52,7 @@ describe('TypeORMCitaRepository.cambiarEstado', () => {
     mockQrUpdate.mockResolvedValue(undefined);
     mockQrFindOne.mockResolvedValue({ id: 1, estado: 'COMPLETADA' });
 
-    await repo.cambiarEstado(1, 'COMPLETADA', { completadoPorId: 2 }, qr as never);
+    await repo.cambiarEstado(1, EstadoCita.COMPLETADA, { completadoPorId: 2 }, qr as never);
 
     expect(qr.manager.getRepository).toHaveBeenCalled();
     expect(mockQrUpdate).toHaveBeenCalledWith(1, {
