@@ -1,4 +1,5 @@
 import { injectable, inject } from 'tsyringe';
+import type { QueryRunner } from 'typeorm';
 import type { CreateRegistroInput } from '@pos-final/validation';
 import { MetodoPago } from '../../../../../infrastructure/persistence/entities/PagoTransaccionEntity';
 import { AppDataSource } from '../../../../../shared/database';
@@ -18,6 +19,13 @@ import type { RegistroServicioDTO } from '../../dtos/RegistroServicioDTO';
 import { registroServicioToDTO } from '../../dtos/RegistroServicioDTO';
 import { NotFoundError } from '../../../../../shared/errors';
 
+/**
+ * Input extendido: además del payload validado por HTTP, permite fijar
+ * `citaId` cuando el registro se crea dentro del flujo atómico de completar
+ * cita (nunca llega por HTTP — lo inyecta el use case dueño de la transacción).
+ */
+export type CreateRegistroInputConCita = CreateRegistroInput & { citaId?: number | null };
+
 @injectable()
 export class CreateRegistroUseCase {
   constructor(
@@ -31,7 +39,10 @@ export class CreateRegistroUseCase {
     @inject('ICajaRepository') private readonly cajaRepo: ICajaRepository,
   ) {}
 
-  async execute(input: CreateRegistroInput): Promise<RegistroServicioDTO> {
+  async execute(
+    input: CreateRegistroInputConCita,
+    queryRunner?: QueryRunner,
+  ): Promise<RegistroServicioDTO> {
     // ── 0. Regla de oro: no se vende sin caja abierta ──────────
     const caja = await verificarCajaAbierta(this.cajaRepo, input.salonId);
 
@@ -90,9 +101,15 @@ export class CreateRegistroUseCase {
     );
 
     // ── 5. Transaction ────────────────────────────────────────
-    const queryRunner = AppDataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    // Si el caller ya abrió una transacción (qr), la usamos y NO tocamos el
+    // ciclo de vida (commit/rollback/release) — el dueño es el caller.
+    // Sin qr → comportamiento legacy: transacción propia.
+    const ownTx = !queryRunner;
+    const qr = queryRunner ?? AppDataSource.createQueryRunner();
+    if (ownTx) {
+      await qr.connect();
+      await qr.startTransaction();
+    }
 
     try {
       // ── 6. Create RegistroServicio ──────────────────────────
@@ -107,6 +124,7 @@ export class CreateRegistroUseCase {
           clienteId: input.clienteId,
           usuarioId: input.usuarioId,
           cajaId: caja.id,
+          citaId: input.citaId ?? null,
           totalServicios: input.totalServicios,
           totalProductos: input.totalProductos,
           cantidadProductosVendidos,
@@ -124,7 +142,7 @@ export class CreateRegistroUseCase {
           valorOriginal,
           valorFinal,
         },
-        queryRunner,
+        qr,
       );
 
       // ── 7. Create PagoTransaccion rows ──────────────────────
@@ -135,7 +153,7 @@ export class CreateRegistroUseCase {
           metodoPago: p.metodoPago as MetodoPago,
           referencia: p.referencia,
         }));
-        await this.pagoRepo.bulkCreate(pagosData, queryRunner);
+        await this.pagoRepo.bulkCreate(pagosData, qr);
       }
 
       // ── 8. Create DivisionRegistro rows ─────────────────────
@@ -148,13 +166,13 @@ export class CreateRegistroUseCase {
               porcentajeParticipacion: div.porcentaje,
               comisionCorrespondiente: div.monto,
             },
-            queryRunner,
+            qr,
           );
         }
       }
 
       // ── 9. Update Cliente stats within the same transaction ─
-      await queryRunner.manager.getRepository(ClienteEntity).update(cliente.id, {
+      await qr.manager.getRepository(ClienteEntity).update(cliente.id, {
         ultimaVisita: new Date(),
         totalServicios: Number(cliente.totalServicios ?? 0) + 1,
         deudaTotal: Number(Number(cliente.deudaTotal ?? 0) + montoPendiente),
@@ -173,7 +191,7 @@ export class CreateRegistroUseCase {
           const precioVentaUnitario = Number(producto.precioVenta);
           const subtotal = precioVentaUnitario * pv.cantidad;
 
-          const registroProducto = queryRunner.manager
+          const registroProducto = qr.manager
             .getRepository(RegistroProductoEntity)
             .create({
               registroServicioId: registro.id,
@@ -182,7 +200,7 @@ export class CreateRegistroUseCase {
               precioVentaUnitario,
               subtotal,
             });
-          await queryRunner.manager
+          await qr.manager
             .getRepository(RegistroProductoEntity)
             .save(registroProducto);
 
@@ -190,14 +208,14 @@ export class CreateRegistroUseCase {
           await this.productoRepo.decrementStock(
             pv.productoId,
             pv.cantidad,
-            queryRunner,
+            qr,
           );
         }
       }
 
       // ── 11. Persist servicio items ──────────────────────────
       if (input.serviciosItems && input.serviciosItems.length > 0) {
-        const servicioItemRepo = queryRunner.manager.getRepository(RegistroServicioItemEntity);
+        const servicioItemRepo = qr.manager.getRepository(RegistroServicioItemEntity);
         for (const si of input.serviciosItems) {
           const item = servicioItemRepo.create({
             registroServicioId: registro.id,
@@ -210,16 +228,26 @@ export class CreateRegistroUseCase {
         }
       }
 
-      await queryRunner.commitTransaction();
+      if (ownTx) {
+        await qr.commitTransaction();
 
-      // Re-fetch with relations for the DTO
-      const saved = await this.registroRepo.findById(registro.id);
-      return registroServicioToDTO(saved!);
+        // Re-fetch with relations for the DTO (post-commit, repo default)
+        const saved = await this.registroRepo.findById(registro.id);
+        return registroServicioToDTO(saved!);
+      }
+
+      // Modo compartido: el caller es dueño del commit y del re-fetch.
+      // Devolvemos el DTO desde la entidad recién persistida (id + escalares).
+      return registroServicioToDTO(registro);
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      if (ownTx) {
+        await qr.rollbackTransaction();
+      }
       throw error;
     } finally {
-      await queryRunner.release();
+      if (ownTx) {
+        await qr.release();
+      }
     }
   }
 }

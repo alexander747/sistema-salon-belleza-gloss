@@ -49,6 +49,7 @@ vi.mock('../../../../../../shared/database.js', () => ({
 
 import { CreateRegistroUseCase } from '../CreateRegistroUseCase';
 import { NotFoundError, CajaCerradaError } from '../../../../../../shared/errors';
+import { AppDataSource } from '../../../../../../shared/database';
 import type { CreateRegistroInput } from '@pos-final/validation';
 
 // ── Mocks ──────────────────────────────────────────────────────
@@ -460,5 +461,88 @@ describe('CreateRegistroUseCase', () => {
     // Should NOT have called repository for servicio items
     // (create and save may be called for other entities, but we verify cantidad)
     expect(mockSaved.serviciosItems).toEqual([]);
+  });
+
+  describe('queryRunner externo (modo transacción compartida)', () => {
+    const setupHappyPath = () => {
+      const mockCliente = { id: 1, totalServicios: 5, deudaTotal: 50000 };
+      const mockUsuario = { id: 2, porcentajeComisionServicio: '60' };
+      const mockSaved = {
+        id: 1,
+        salonId: 1,
+        clienteId: 1,
+        usuarioId: 2,
+        totalServicios: 100000,
+        totalProductos: 50000,
+        montoTotal: 160000,
+        propina: 10000,
+        comisionCalculada: 60000,
+        esRetoque: false,
+        montoPendiente: 50000,
+        estaPagadaEmpleada: false,
+        notas: null,
+        descripcionServicio: null,
+        pagos: [],
+        divisiones: [],
+        creadoEn: new Date(),
+        actualizadoEn: new Date(),
+      };
+      mockClienteRepo.findBySalonAndId.mockResolvedValue(mockCliente);
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue(mockUsuario);
+      mockComisionService.calcularComision.mockReturnValue(60000);
+      mockComisionService.calcularMontoTotal.mockReturnValue(160000);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(50000);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue(mockSaved);
+      return { mockSaved };
+    };
+
+    it('should use the provided queryRunner for all writes without committing/releasing', async () => {
+      setupHappyPath();
+      const externalQr = {
+        manager: {
+          getRepository: vi.fn(() => ({
+            update: vi.fn(),
+            create: vi.fn(),
+            save: vi.fn(),
+          })),
+        },
+      };
+
+      await useCase.execute(validInput, externalQr as never);
+
+      // El caller es dueño del ciclo de vida de la transacción
+      expect(AppDataSource.createQueryRunner).not.toHaveBeenCalled();
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ cajaId: 5 }),
+        externalQr,
+      );
+      expect(mockPagoRepo.bulkCreate).toHaveBeenCalledWith(expect.anything(), externalQr);
+      expect(externalQr.manager.getRepository).toHaveBeenCalled();
+      // No se cierra ni commitea nada
+      expect(externalQr.commitTransaction).toBeUndefined();
+    });
+
+    it('should pass citaId through to registroRepo.create when provided', async () => {
+      setupHappyPath();
+
+      await useCase.execute({ ...validInput, citaId: 42 });
+
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ citaId: 42 }),
+        expect.anything(),
+      );
+    });
+
+    it('should leave citaId null when input omits it', async () => {
+      setupHappyPath();
+
+      await useCase.execute(validInput);
+
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ citaId: null }),
+        expect.anything(),
+      );
+    });
   });
 });
