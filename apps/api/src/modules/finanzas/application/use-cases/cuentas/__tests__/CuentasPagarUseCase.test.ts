@@ -166,6 +166,29 @@ describe('CuentasPagarUseCase', () => {
     ]);
   });
 
+  it('mantiene la fila con datos por defecto cuando la empleada ya no está en findBySalon (p. ej. desactivada)', async () => {
+    // Historial con usuarioId 9 pero findBySalon ya no lo devuelve (inactivo/eliminado).
+    mockNominaUseCase.execute.mockResolvedValue([]);
+    mockHistorialUseCase.execute.mockResolvedValue([
+      makeLiquidacion({ usuarioId: 9, totalPagado: 120000 }),
+    ]);
+    mockUsuarioRepo.findBySalon.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        empleadaId: 9,
+        nombre: '',
+        sueldoFijo: 0,
+        porcentajeComisionServicio: 0,
+        pendienteActual: 0,
+        liquidadoAcumulado: 120000,
+        alDia: true,
+      }),
+    ]);
+  });
+
   it('ordena por empleadaId y pagina', async () => {
     mockNominaUseCase.execute.mockResolvedValue([
       makeNominaEntry({ empleadaId: 5, nombre: 'Eli', totalAPagar: 100000 }),
