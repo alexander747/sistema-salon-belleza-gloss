@@ -36,6 +36,7 @@ vi.mock('../../../../../../shared/database.js', () => ({
 import { CompletarCitaUseCase } from '../CompletarCitaUseCase';
 import { NotFoundError, CajaCerradaError, UnprocessableEntityError } from '../../../../../../shared/errors';
 import { EstadoCita } from '../../../../../../infrastructure/persistence/entities/CitaEntity';
+import type { CreateRegistroInputConCita } from '../../../../../finanzas/application/use-cases/registro/CreateRegistroUseCase';
 
 function makeMockCita(estado: EstadoCita, overrides: Record<string, unknown> = {}) {
   return {
@@ -54,7 +55,9 @@ function makeMockCita(estado: EstadoCita, overrides: Record<string, unknown> = {
   };
 }
 
-function makeRegistroPayload(overrides: Record<string, unknown> = {}) {
+function makeRegistroPayload(
+  overrides: Partial<CreateRegistroInputConCita> = {},
+): CreateRegistroInputConCita {
   return {
     salonId: 999, // jamás debe usarse: el salonId viene de la cita
     clienteId: 1,
@@ -62,6 +65,10 @@ function makeRegistroPayload(overrides: Record<string, unknown> = {}) {
     totalServicios: 50000,
     totalProductos: 0,
     propina: 0,
+    esRetoque: false,
+    divisiones: [],
+    porcentajeDescuento: 0,
+    productosVendidos: [],
     pagos: [{ monto: 50000, metodoPago: 'EFECTIVO' }],
     serviciosItems: [{ servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000 }],
     ...overrides,
