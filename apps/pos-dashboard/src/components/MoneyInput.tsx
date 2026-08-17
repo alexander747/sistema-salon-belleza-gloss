@@ -15,6 +15,7 @@ interface MoneyInputProps {
   autoFocus?: boolean;
   onFocus?: React.FocusEventHandler<HTMLInputElement>;
   onBlur?: React.FocusEventHandler<HTMLInputElement>;
+  onWheel?: React.WheelEventHandler<HTMLInputElement>;
 }
 
 /**
@@ -33,6 +34,7 @@ const MoneyInput: React.FC<MoneyInputProps> = ({
   autoFocus,
   onFocus,
   onBlur,
+  onWheel,
 }) => {
   const [digits, setDigits] = useState(value ? String(Math.trunc(value)) : '');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +80,7 @@ const MoneyInput: React.FC<MoneyInputProps> = ({
       autoFocus={autoFocus}
       onFocus={onFocus}
       onBlur={onBlur}
+      onWheel={onWheel}
       value={formatMoneyDigits(digits)}
       onChange={handleChange}
     />

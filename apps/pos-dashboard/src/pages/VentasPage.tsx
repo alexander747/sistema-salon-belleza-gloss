@@ -8,6 +8,7 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import tableSkeletonStyles from '../components/TableSkeleton.module.css';
+import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 
 /* ── Types ── */
@@ -1022,11 +1023,9 @@ const VentasPage: React.FC = () => {
                 {paymentMethod === 'EFECTIVO' && (
                   <div style={{ marginBottom: '0.625rem' }}>
                     <label style={formLabelStyle}>Monto recibido</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={montoRecibido || ''}
-                      onChange={(e) => setMontoRecibido(Number(e.target.value))}
+                    <MoneyInput
+                      value={montoRecibido}
+                      onChange={setMontoRecibido}
                       placeholder="0"
                       style={{
                         ...searchInputStyle,
@@ -1114,11 +1113,9 @@ const VentasPage: React.FC = () => {
                 }}
               >
                 <label style={formLabelStyle}>Propina</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={propina || ''}
-                  onChange={(e) => setPropina(Math.max(0, Number(e.target.value)))}
+                <MoneyInput
+                  value={propina}
+                  onChange={(n) => setPropina(n)}
                   placeholder="0"
                   style={{
                     ...searchInputStyle,
@@ -1254,14 +1251,9 @@ const VentasPage: React.FC = () => {
                   </label>
                   {ajustarTotal && (
                     <div style={{ marginTop: '0.5rem' }}>
-                      <input
-                        type="number"
-                        min={0}
-                        value={totalPersonalizado !== null ? totalPersonalizado : ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setTotalPersonalizado(val ? Number(val) : null);
-                        }}
+                      <MoneyInput
+                        value={totalPersonalizado ?? 0}
+                        onChange={(n) => setTotalPersonalizado(n === 0 ? null : n)}
                         placeholder={formatCurrency(calculatedTotal)}
                         style={{
                           ...searchInputStyle,

@@ -6,6 +6,7 @@ import api from '../services/api.js';
 import { dispatchCajaRefresh } from './caja/CajaBanner.js';
 import { isCajaCerradaError } from './caja/cajaError.js';
 import { formatCurrency } from '../utils/format.js';
+import MoneyInput from './MoneyInput.js';
 import styles from './WalkInModal.module.css';
 
 /* ── Types ── */
@@ -1047,11 +1048,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                 <div className={styles.checkoutSection}>
                   <div>
                     <label style={formLabelStyle}>Propina</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={propina || ''}
-                      onChange={(e) => setPropina(Number(e.target.value))}
+                    <MoneyInput
+                      value={propina}
+                      onChange={setPropina}
                       placeholder="0"
                       style={inputStyle}
                       className={styles.noSpinner}
@@ -1142,14 +1141,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     </label>
                     {ajustarTotal && (
                       <div style={{ marginTop: '0.5rem' }}>
-                        <input
-                          type="number"
-                          min={0}
-                          value={totalPersonalizado !== null ? totalPersonalizado : ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setTotalPersonalizado(val ? Number(val) : null);
-                          }}
+                        <MoneyInput
+                          value={totalPersonalizado ?? 0}
+                          onChange={(n) => setTotalPersonalizado(n === 0 ? null : n)}
                           placeholder={formatCurrency(calculatedTotal)}
                           className={styles.noSpinner}
                           style={inputStyle}
@@ -1242,11 +1236,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   {paymentMethod === 'EFECTIVO' && (
                     <div>
                       <label style={formLabelStyle}>Monto recibido</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={montoRecibido || ''}
-                        onChange={(e) => setMontoRecibido(Number(e.target.value))}
+                      <MoneyInput
+                        value={montoRecibido}
+                        onChange={setMontoRecibido}
                         placeholder="0"
                         className={styles.noSpinner}
                         style={inputStyle}

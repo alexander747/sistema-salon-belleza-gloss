@@ -159,7 +159,8 @@ describe('EmpleadasPage — esquema de pago (tipoPago)', () => {
     fireEvent.click(await screen.findByLabelText('Editar'));
 
     // Ambos campos precargados → el modo detectado es MIXTO
-    expect(screen.getByDisplayValue('1200000')).toBeInTheDocument();
+    // (MoneyInput muestra el sueldo con separador de miles)
+    expect(screen.getByDisplayValue('1.200.000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('30')).toBeInTheDocument();
   });
 });

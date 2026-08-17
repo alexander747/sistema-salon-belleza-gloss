@@ -10,6 +10,7 @@ import {
   puedeGestionarCaja,
   type CajaDTO,
 } from './CajaBanner.js';
+import MoneyInput from '../MoneyInput.js';
 
 /* ================================================================ */
 /*  TIPOS                                                            */
@@ -648,13 +649,11 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                 <label htmlFor="montoInicial" style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                   Monto inicial (fondo)
                 </label>
-                <input
+                <MoneyInput
                   id="montoInicial"
-                  aria-label="Monto inicial"
-                  type="number"
-                  min={0}
-                  value={montoInicial}
-                  onChange={(e) => setMontoInicial(e.target.value)}
+                  ariaLabel="Monto inicial"
+                  value={Number(montoInicial) || 0}
+                  onChange={(n) => setMontoInicial(n === 0 ? '' : String(n))}
                   placeholder="0"
                   style={inputStyle}
                 />
@@ -712,13 +711,11 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                     <label htmlFor="montoReal" style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       Monto real en efectivo (conteo físico)
                     </label>
-                    <input
+                    <MoneyInput
                       id="montoReal"
-                      aria-label="Monto real en efectivo"
-                      type="number"
-                      min={0}
-                      value={montoRealEfectivo}
-                      onChange={(e) => setMontoRealEfectivo(e.target.value)}
+                      ariaLabel="Monto real en efectivo"
+                      value={Number(montoRealEfectivo) || 0}
+                      onChange={(n) => setMontoRealEfectivo(n === 0 ? '' : String(n))}
                       placeholder="0"
                       style={inputStyle}
                     />

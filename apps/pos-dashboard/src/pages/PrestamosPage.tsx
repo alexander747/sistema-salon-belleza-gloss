@@ -6,6 +6,7 @@ import { prestamoService, type Prestamo, type PagoPrestamo } from '../services/p
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './PrestamosPage.module.css';
 
@@ -601,14 +602,11 @@ const PrestamosPage: React.FC = () => {
                     <label className={`${styles.formLabel} ${styles.formRequired}`}>
                       Monto
                     </label>
-                    <input
-                      type="number"
-                      value={formMonto}
-                      onChange={(e) => setFormMonto(e.target.value)}
+                    <MoneyInput
+                      value={Number(formMonto) || 0}
+                      onChange={(n) => setFormMonto(n === 0 ? '' : String(n))}
                       className={styles.formInput}
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
+                      placeholder="0"
                     />
                   </div>
                   <div className={styles.formGroup}>
@@ -774,14 +772,10 @@ const PrestamosPage: React.FC = () => {
                         <label className={`${styles.formLabel} ${styles.formRequired}`}>
                           Monto
                         </label>
-                        <input
-                          type="number"
-                          value={pagoMonto}
-                          onChange={(e) => setPagoMonto(e.target.value)}
+                        <MoneyInput
+                          value={Number(pagoMonto) || 0}
+                          onChange={(n) => setPagoMonto(n === 0 ? '' : String(n))}
                           className={styles.formInput}
-                          min="0"
-                          step="0.01"
-                          max={selectedPrestamo.saldoPendiente}
                         />
                       </div>
                       <div className={styles.formGroup}>

@@ -8,6 +8,7 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
+import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './AgendaPage.module.css';
 
@@ -2738,14 +2739,9 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                     <span>Ajustar valor total</span>
                   </label>
                   {form.ajustarTotal && (
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.totalPersonalizado !== null ? form.totalPersonalizado : ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        onChangeForm({ totalPersonalizado: val ? Number(val) : null });
-                      }}
+                    <MoneyInput
+                      value={form.totalPersonalizado ?? 0}
+                      onChange={(n) => onChangeForm({ totalPersonalizado: n === 0 ? null : n })}
                       placeholder={formatCurrency(calculatedTotal)}
                       className={`${styles.noSpinner} ${styles.amountInput}`}
                       style={{
@@ -2792,11 +2788,9 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                 {/* Propina */}
                 <div className={styles.propinaRow}>
                   <span className={styles.receiptLabel}>Propina</span>
-                  <input
-                    type="number"
-                    min="0"
+                  <MoneyInput
                     value={form.propina}
-                    onChange={(e) => onChangeForm({ propina: Math.max(0, Number(e.target.value)) })}
+                    onChange={(n) => onChangeForm({ propina: n })}
                     className={`${styles.noSpinner} ${styles.propinaInput}`}
                   />
                 </div>
@@ -2849,13 +2843,9 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                   <>
                     <div className={styles.amountRow}>
                       <span className={styles.receiptLabel}>Monto recibido</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={form.montoRecibido || ''}
-                        onChange={(e) =>
-                          onChangeForm({ montoRecibido: Math.max(0, Number(e.target.value)) })
-                        }
+                      <MoneyInput
+                        value={form.montoRecibido}
+                        onChange={(n) => onChangeForm({ montoRecibido: n })}
                         placeholder={formatCurrency(totalFinal)}
                         className={`${styles.noSpinner} ${styles.amountInput}`}
                       />

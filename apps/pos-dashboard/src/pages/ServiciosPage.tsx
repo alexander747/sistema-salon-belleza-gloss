@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import {
   fetchServicios,
@@ -751,11 +752,9 @@ const ServiciosPage: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
                   <div>
                     <label style={formLabelStyle}>Precio base *</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={form.precioBase || ''}
-                      onChange={(e) => setForm((prev) => ({ ...prev, precioBase: Number(e.target.value) }))}
+                    <MoneyInput
+                      value={form.precioBase}
+                      onChange={(n) => setForm((prev) => ({ ...prev, precioBase: n }))}
                       style={formFieldStyle}
                       placeholder="0"
                     />
@@ -775,11 +774,9 @@ const ServiciosPage: React.FC = () => {
 
                 <div style={{ marginBottom: '0.875rem' }}>
                   <label style={formLabelStyle}>Costo base insumos</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.costoBaseInsumos || ''}
-                    onChange={(e) => setForm((prev) => ({ ...prev, costoBaseInsumos: Number(e.target.value) }))}
+                  <MoneyInput
+                    value={form.costoBaseInsumos}
+                    onChange={(n) => setForm((prev) => ({ ...prev, costoBaseInsumos: n }))}
                     style={formFieldStyle}
                     placeholder="0"
                   />

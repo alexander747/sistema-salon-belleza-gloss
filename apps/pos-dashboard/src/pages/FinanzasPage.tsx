@@ -10,6 +10,7 @@ import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import EmpleadaSearchableSelect from '../components/EmpleadaSearchableSelect.js';
 import CajaBanner from '../components/caja/CajaBanner.js';
 import CajaTab from '../components/caja/CajaTab.js';
+import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './FinanzasPage.module.css';
 
@@ -1877,13 +1878,11 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 </div>
                 <div className={styles.formGroup}>
                   <label className={`${styles.formLabel} ${styles.formRequired}`}>Monto</label>
-                  <input
-                    type="number"
-                    className={styles.formInput}
-                    value={form.monto}
-                    onChange={(e) => setForm((prev) => ({ ...prev, monto: e.target.value }))}
+                  <MoneyInput
+                    value={Number(form.monto) || 0}
+                    onChange={(n) => setForm((prev) => ({ ...prev, monto: n === 0 ? '' : String(n) }))}
                     placeholder="0"
-                    min="0"
+                    className={styles.formInput}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -2272,13 +2271,11 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   </div>
                   <div className={styles.formGroup}>
                     <label className={`${styles.formLabel} ${styles.formRequired}`}>Monto devolución</label>
-                    <input
-                      type="number"
-                      className={styles.formInput}
-                      value={form.montoDevolucion}
-                      onChange={(e) => setForm((prev) => ({ ...prev, montoDevolucion: e.target.value }))}
+                    <MoneyInput
+                      value={Number(form.montoDevolucion) || 0}
+                      onChange={(n) => setForm((prev) => ({ ...prev, montoDevolucion: n === 0 ? '' : String(n) }))}
                       placeholder="0"
-                      min="0"
+                      className={styles.formInput}
                     />
                   </div>
                 </div>
@@ -3851,13 +3848,11 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                         }}>
                           Nuevo monto a pagar
                         </label>
-                        <input
-                          type="number"
-                          className={styles.formInput}
+                        <MoneyInput
                           value={pagoAjustado}
-                          onChange={(e) => setPagoAjustado(Math.max(0, Number(e.target.value)))}
+                          onChange={(n) => setPagoAjustado(n)}
                           onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                          min="0"
+                          className={styles.formInput}
                           style={{ width: '100%' }}
                         />
                       </div>

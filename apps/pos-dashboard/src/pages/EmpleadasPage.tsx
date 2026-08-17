@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './EmpleadasPage.module.css';
 
@@ -917,13 +918,11 @@ const RenderFormModal: React.FC<FormModalProps> = ({
             <label className={styles.formLabel}>
               Sueldo Fijo Mensual
             </label>
-            <input
-              type="number"
-              className={styles.formInput}
-              value={form.sueldoFijo}
-              onChange={(e) => onChange({ sueldoFijo: e.target.value })}
+            <MoneyInput
+              value={Number(form.sueldoFijo) || 0}
+              onChange={(n) => onChange({ sueldoFijo: n === 0 ? '' : String(n) })}
               placeholder="Ej: 1200000"
-              min={0}
+              className={styles.formInput}
             />
           </div>
         ) : null}
@@ -933,13 +932,11 @@ const RenderFormModal: React.FC<FormModalProps> = ({
           <label className={styles.formLabel}>
             Incentivo / Bono
           </label>
-          <input
-            type="number"
-            className={styles.formInput}
-            value={form.bonoHorario}
-            onChange={(e) => onChange({ bonoHorario: e.target.value })}
+          <MoneyInput
+            value={Number(form.bonoHorario) || 0}
+            onChange={(n) => onChange({ bonoHorario: n === 0 ? '' : String(n) })}
             placeholder="Ej: 50000"
-            min={0}
+            className={styles.formInput}
           />
         </div>
 

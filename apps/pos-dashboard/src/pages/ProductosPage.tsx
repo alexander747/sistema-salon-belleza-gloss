@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import {
   fetchProductos,
@@ -1002,14 +1003,9 @@ const ProductosPage: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
                     <div>
                       <label style={formLabelStyle}>Precio de compra</label>
-                      <input
-                        type="number" min={0} step={0.01}
-                        value={form.precioCompra || ''}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setForm((prev) => ({ ...prev, precioCompra: val }));
-                        }}
-                        className="noSpinner"
+                      <MoneyInput
+                        value={form.precioCompra}
+                        onChange={(n) => setForm((prev) => ({ ...prev, precioCompra: n }))}
                         style={formFieldStyle}
                         placeholder="0"
                       />
@@ -1043,25 +1039,18 @@ const ProductosPage: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
                     <div>
                       <label style={formLabelStyle}>Precio de compra</label>
-                      <input
-                        type="number" min={0} step={0.01}
-                        value={form.precioCompra || ''}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setForm((prev) => ({ ...prev, precioCompra: val }));
-                        }}
-                        className="noSpinner"
+                      <MoneyInput
+                        value={form.precioCompra}
+                        onChange={(n) => setForm((prev) => ({ ...prev, precioCompra: n }))}
                         style={formFieldStyle}
                         placeholder="0"
                       />
                     </div>
                     <div>
                       <label style={{ ...formLabelStyle, color: 'var(--accent)' }}>Precio de venta *</label>
-                      <input
-                        type="number" min={0} step={0.01}
-                        value={form.precioVenta || ''}
-                        onChange={(e) => setForm((prev) => ({ ...prev, precioVenta: Number(e.target.value) }))}
-                        className="noSpinner"
+                      <MoneyInput
+                        value={form.precioVenta}
+                        onChange={(n) => setForm((prev) => ({ ...prev, precioVenta: n }))}
                         style={formFieldStyle}
                         placeholder="0"
                       />
