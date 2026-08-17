@@ -38,7 +38,7 @@ interface EmpleadaForm {
   porcentajeComisionServicio: string;
   sueldoFijo: string;
   bonoHorario: string;
-  frecuenciaPago: 'MENSUAL' | 'QUINCENAL';
+  frecuenciaPago: 'MENSUAL' | 'QUINCENAL' | 'SEMANAL';
   fechaNacimiento: string;
 }
 
@@ -236,7 +236,8 @@ const EmpleadasPage: React.FC = () => {
       porcentajeComisionServicio: empleada.porcentajeComisionServicio != null ? String(empleada.porcentajeComisionServicio) : '50',
       sueldoFijo: empleada.sueldoFijo != null ? String(empleada.sueldoFijo) : '0',
       bonoHorario: empleada.bonoHorario != null ? String(empleada.bonoHorario) : '0',
-      frecuenciaPago: empleada.frecuenciaPago === 'QUINCENAL' ? 'QUINCENAL' : 'MENSUAL',
+      // Passthrough de los 3 valores (no mapear no-QUINCENAL → MENSUAL, rompería SEMANAL)
+      frecuenciaPago: (empleada.frecuenciaPago ?? 'MENSUAL') as EmpleadaForm['frecuenciaPago'],
       fechaNacimiento: empleada.fechaNacimiento ? new Date(empleada.fechaNacimiento).toISOString().split('T')[0] : '',
     });
     setModalMode('edit');
@@ -923,10 +924,11 @@ const RenderFormModal: React.FC<FormModalProps> = ({
             className={styles.formSelect}
             aria-label="Frecuencia de pago"
             value={form.frecuenciaPago}
-            onChange={(e) => onChange({ frecuenciaPago: e.target.value as 'MENSUAL' | 'QUINCENAL' })}
+            onChange={(e) => onChange({ frecuenciaPago: e.target.value as EmpleadaForm['frecuenciaPago'] })}
           >
             <option value="MENSUAL">Mensual</option>
             <option value="QUINCENAL">Quincenal</option>
+            <option value="SEMANAL">Semanal</option>
           </select>
         </div>
 

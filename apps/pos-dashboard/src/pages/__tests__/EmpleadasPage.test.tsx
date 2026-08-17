@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 
@@ -247,5 +247,57 @@ describe('EmpleadasPage — frecuencia de pago', () => {
     renderPage();
 
     expect(await screen.findByText('QUINCENAL')).toBeInTheDocument();
+  });
+
+  it('ofrece la opción "Semanal" en el select de frecuencia', async () => {
+    defaultApiMock();
+    renderPage();
+    await openCreateModal();
+
+    const options = within(screen.getByLabelText('Frecuencia de pago'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options).toContain('Semanal');
+  });
+
+  it('envía frecuenciaPago SEMANAL al seleccionarla al crear', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+    await openCreateModal();
+
+    fireEvent.change(screen.getByLabelText('Frecuencia de pago'), {
+      target: { value: 'SEMANAL' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleada' }));
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/salones/1/empleadas',
+      expect.objectContaining({ frecuenciaPago: 'SEMANAL' }),
+    );
+  });
+
+  it('openEdit NO resetea SEMANAL a MENSUAL (passthrough de los 3 valores)', async () => {
+    defaultApiMock([
+      {
+        id: 9,
+        nombre: 'Sem',
+        email: 'sem@test.com',
+        numeroWhatsApp: '3000000003',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 1200000,
+        bonoHorario: 0,
+        frecuenciaPago: 'SEMANAL',
+        activo: true,
+      },
+    ]);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByLabelText('Editar'));
+
+    expect(screen.getByLabelText('Frecuencia de pago')).toHaveValue('SEMANAL');
   });
 });
