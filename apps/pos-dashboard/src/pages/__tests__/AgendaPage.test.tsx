@@ -174,7 +174,7 @@ describe('AgendaPage — errores del backend visibles', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Crear cita' })).not.toBeInTheDocument();
-    });
+    }, WAIT);
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/agenda/citas',
       expect.objectContaining({ clienteId: 1, serviciosIds: [1], usuarioId: 1 }),

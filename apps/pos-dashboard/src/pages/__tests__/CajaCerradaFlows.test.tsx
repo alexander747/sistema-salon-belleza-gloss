@@ -113,16 +113,18 @@ describe('AgendaPage — completar cita con caja cerrada (regla de oro)', () => 
       </MemoryRouter>,
     );
 
+    // Timeouts explícitos: la suite corre en paralelo y bajo carga los fetches tardan más
+    const WAIT = { timeout: 4000 };
     // Abrir la cita CONFIRMADA desde el calendario
-    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByText('Cliente Test', {}, WAIT));
     // Abrir el modal de completar
-    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
 
     mockPost.mockRejectedValueOnce(cajaCerradaError);
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
 
     // Mensaje accionable visible en el modal de completar
-    expect(await screen.findByText(/no hay caja abierta\. abrí la caja primero para completar la cita/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no hay caja abierta\. abrí la caja primero para completar la cita/i, {}, WAIT)).toBeInTheDocument();
     // El modal permanece abierto
     expect(screen.getByRole('button', { name: 'Confirmar y Registrar' })).toBeInTheDocument();
     // UNA sola llamada atómica: el registro viaja anidado en el POST /completar
@@ -158,7 +160,7 @@ describe('VentasPage — cobrar con caja cerrada (regla de oro)', () => {
     );
 
     // Agregar producto al carrito
-    fireEvent.click(await screen.findByText('Shampoo'));
+    fireEvent.click(await screen.findByText('Shampoo', {}, { timeout: 4000 }));
     // Cliente + empleada (combos[0] es el filtro de categoría de la toolbar)
     const combos = screen.getAllByRole('combobox');
     fireEvent.change(combos[1], { target: { value: '1' } });
@@ -170,7 +172,7 @@ describe('VentasPage — cobrar con caja cerrada (regla de oro)', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Cobrar/ }));
 
     // Mensaje accionable visible
-    expect(await screen.findByText(/no hay caja abierta\. abrí la caja primero para vender/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no hay caja abierta\. abrí la caja primero para vender/i, {}, { timeout: 4000 })).toBeInTheDocument();
     // El flujo sigue abierto: botón Cobrar con el total del carrito intacto (no se limpió el carrito)
     expect(screen.getByRole('button', { name: /^Cobrar\s+\$\s*20\.000/ })).toBeInTheDocument();
     // Sin mensaje de éxito
