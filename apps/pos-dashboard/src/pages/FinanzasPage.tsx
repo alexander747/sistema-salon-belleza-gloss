@@ -1056,7 +1056,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                 <th>Total</th>
                 <th>Método de pago</th>
                 <th>Estado</th>
-                <th>Acciones</th>
+                <th className={styles.stickyActions}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1125,7 +1125,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                       <span className={`${styles.badge} ${styles.badgeServicios}`}>Activo</span>
                     )}
                   </td>
-                  <td>
+                  <td className={styles.stickyActions}>
                     <div style={{ display: 'flex', gap: '0.15rem' }}>
                       <button
                         className={styles.actionBtn}
@@ -1782,7 +1782,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 <th>Categoría</th>
                 <th>Monto</th>
                 <th>Fecha</th>
-                <th>Acciones</th>
+                <th className={styles.stickyActions}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1803,7 +1803,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   </td>
                   <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(Number(g.monto ?? 0))}</td>
                   <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(g.fecha)}</td>
-                  <td>
+                  <td className={styles.stickyActions}>
                     <button
                       className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
                       onClick={() => openDelete(g)}

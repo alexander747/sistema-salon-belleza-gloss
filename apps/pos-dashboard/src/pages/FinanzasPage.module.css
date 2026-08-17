@@ -124,6 +124,20 @@
   overflow-x: auto;
 }
 
+/* Columna de acciones fija a la derecha (visible aunque la tabla scrollee horizontalmente) */
+.stickyActions {
+  position: sticky;
+  right: 0;
+  background: var(--bg-surface);
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.08);
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.tableHead .stickyActions {
+  background: var(--bg-elevated);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
