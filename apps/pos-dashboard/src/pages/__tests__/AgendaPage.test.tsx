@@ -251,3 +251,69 @@ describe('AgendaPage — errores del backend visibles', () => {
     expect(await screen.findByText(/La cita ya está cancelada/, {}, WAIT)).toBeInTheDocument();
   }, 20000);
 });
+
+describe('AgendaPage — gating de botones por estado (B6)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('PENDIENTE → Confirmar + Cancelar, NUNCA Completar ni No llegó', async () => {
+    defaultApiMock('PENDIENTE');
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    await screen.findByRole('button', { name: 'Confirmar' }, WAIT);
+
+    expect(screen.getByRole('button', { name: 'Cancelar Cita' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Completar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'No llegó' })).not.toBeInTheDocument();
+  }, 20000);
+
+  it('CONFIRMADA → Completar + No llegó + Cancelar', async () => {
+    defaultApiMock('CONFIRMADA');
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    await screen.findByRole('button', { name: 'Completar' }, WAIT);
+
+    expect(screen.getByRole('button', { name: 'No llegó' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar Cita' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument();
+  }, 20000);
+
+  it('No llegó en CONFIRMADA → PATCH estado NO_LLEGO y cierra el modal', async () => {
+    defaultApiMock('CONFIRMADA');
+    mockPatch.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'No llegó' }, WAIT));
+
+    expect(mockPatch).toHaveBeenCalledWith('/salones/1/agenda/citas/1/estado', {
+      estado: 'NO_LLEGO',
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'No llegó' })).not.toBeInTheDocument();
+    });
+  }, 20000);
+
+  it('COMPLETADA (terminal) → sin botones de acción', async () => {
+    defaultApiMock('COMPLETADA');
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    await screen.findByText(/Cita #1/, {}, WAIT);
+
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Completar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar Cita' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'No llegó' })).not.toBeInTheDocument();
+  }, 20000);
+});

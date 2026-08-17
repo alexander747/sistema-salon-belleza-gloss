@@ -12,6 +12,7 @@ import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
+import { getCitaActions, type CitaAccion } from '../utils/citaActions.js';
 import styles from './AgendaPage.module.css';
 
 /* ── Types ── */
@@ -21,7 +22,8 @@ type CitaEstado =
   | 'CONFIRMADA'
   | 'EN_PROGRESO'
   | 'COMPLETADA'
-  | 'CANCELADA';
+  | 'CANCELADA'
+  | 'NO_LLEGO';
 
 interface Cita {
   id: number;
@@ -137,6 +139,13 @@ const STATUS_CFG: Record<
     dot: '#ef4444',
     label: 'Cancelada',
     text: '#ef4444',
+  },
+  NO_LLEGO: {
+    bg: 'rgba(140, 136, 148, 0.35)',
+    border: 'rgba(140, 136, 148, 0.75)',
+    dot: '#8c8894',
+    label: 'No llegó',
+    text: '#8c8894',
   },
 };
 
@@ -2057,7 +2066,15 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
   onCancelMotivoChange,
 }) => {
   const cfg = STATUS_CFG[cita.estado];
-  const isTerminal = cita.estado === 'COMPLETADA' || cita.estado === 'CANCELADA';
+  const isTerminal = ['COMPLETADA', 'CANCELADA', 'NO_LLEGO'].includes(cita.estado);
+
+  const acciones = getCitaActions(cita.estado);
+  const actionBtnCfg: Record<CitaAccion, { label: string; variant?: 'default' | 'danger' | 'success'; onClick: () => void }> = {
+    CONFIRMAR: { label: 'Confirmar', onClick: () => onChangeEstado('CONFIRMADA') },
+    COMPLETAR: { label: 'Completar', variant: 'success', onClick: onCompletar },
+    NO_LLEGO: { label: 'No llegó', onClick: () => onChangeEstado('NO_LLEGO') },
+    CANCELAR: { label: 'Cancelar Cita', variant: 'danger', onClick: onShowCancelForm },
+  };
 
   return (
     <motion.div
@@ -2189,22 +2206,21 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
             </div>
           )}
 
-          {/* ── Action buttons ── */}
-          {!isTerminal && (
+          {/* ── Action buttons (gated por estado: PENDIENTE no puede completarse) ── */}
+          {!isTerminal && acciones.length > 0 && (
             <div className={styles.actionGroup} style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              {cita.estado === 'PENDIENTE' && (
-                <>
-                  <ActionBtn label="Confirmar" onClick={() => onChangeEstado('CONFIRMADA')} loading={actionLoading} />
-                  <ActionBtn label="Completar" variant="success" onClick={onCompletar} loading={false} />
-                  <ActionBtn label="Cancelar Cita" variant="danger" onClick={onShowCancelForm} loading={false} />
-                </>
-              )}
-              {cita.estado === 'CONFIRMADA' && (
-                <>
-                  <ActionBtn label="Completar" variant="success" onClick={onCompletar} loading={false} />
-                  <ActionBtn label="Cancelar Cita" variant="danger" onClick={onShowCancelForm} loading={false} />
-                </>
-              )}
+              {acciones.map((accion) => {
+                const cfg = actionBtnCfg[accion];
+                return (
+                  <ActionBtn
+                    key={accion}
+                    label={cfg.label}
+                    variant={cfg.variant}
+                    onClick={cfg.onClick}
+                    loading={cfg.label === 'Confirmar' || cfg.label === 'No llegó' ? actionLoading : false}
+                  />
+                );
+              })}
             </div>
           )}
 
