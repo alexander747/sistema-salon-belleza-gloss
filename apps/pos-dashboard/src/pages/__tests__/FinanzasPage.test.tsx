@@ -449,13 +449,14 @@ describe('FinanzasPage — Exportar Excel', () => {
 
 describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
   const cuentasCobrar = [
-    { clienteId: 1, nombre: 'Ana Gómez', deudaTotal: 120000, cantidadRegistros: 2, antiguedadDias: 45, antiguedadBucket: '31-60' },
-    { clienteId: 2, nombre: 'Lina Pérez', deudaTotal: 40000, cantidadRegistros: 1, antiguedadDias: 5, antiguedadBucket: '0-30' },
+    { id: 1, tipo: 'CLIENTE', nombre: 'Ana Gómez', deudaTotal: 120000, cantidadRegistros: 2, antiguedadDias: 45, antiguedadBucket: '31-60' },
+    { id: 2, tipo: 'CLIENTE', nombre: 'Lina Pérez', deudaTotal: 40000, cantidadRegistros: 1, antiguedadDias: 5, antiguedadBucket: '0-30' },
+    { id: 99, tipo: 'PRESTAMO', nombre: 'Luis Ramírez', deudaTotal: 85000, cantidadRegistros: null, antiguedadDias: 3, antiguedadBucket: '0-30' },
   ];
 
   const cuentasPagar = [
-    { empleadaId: 3, nombre: 'María Torres', sueldoFijo: 800000, porcentajeComisionServicio: 30, pendienteActual: 298000, liquidadoAcumulado: 550000 },
-    { empleadaId: 4, nombre: 'Sofía Ruiz', sueldoFijo: 0, porcentajeComisionServicio: 40, pendienteActual: 0, liquidadoAcumulado: 200000 },
+    { empleadaId: 3, nombre: 'María Torres', sueldoFijo: 800000, porcentajeComisionServicio: 30, pendienteActual: 298000, liquidadoAcumulado: 550000, alDia: false },
+    { empleadaId: 4, nombre: 'Sofía Ruiz', sueldoFijo: 0, porcentajeComisionServicio: 40, pendienteActual: 0, liquidadoAcumulado: 200000, alDia: true },
   ];
 
   const fmt = (n: number) =>
@@ -565,6 +566,61 @@ describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
     expect(within(sofiaRow).getByText(fmt(200000))).toBeInTheDocument(); // liquidadoAcumulado
   });
 
+  it('muestra préstamos activos en Por cobrar con badge Préstamo y el saldo como deuda', async () => {
+    await openCuentasTab();
+
+    const luis = await screen.findByText('Luis Ramírez');
+    const luisRow = luis.closest('tr')!;
+    expect(within(luisRow).getByText('Préstamo')).toBeInTheDocument();
+    expect(within(luisRow).getByText(fmt(85000))).toBeInTheDocument(); // deudaTotal = saldoPendiente
+    expect(within(luisRow).getByText('—')).toBeInTheDocument(); // sin cantidadRegistros
+    expect(within(luisRow).getByText('0-30 días')).toBeInTheDocument();
+
+    const ana = screen.getByText('Ana Gómez');
+    const anaRow = ana.closest('tr')!;
+    expect(within(anaRow).getByText('Cliente')).toBeInTheDocument();
+  });
+
+  it('separa Por pagar en secciones Pendientes (deuda) y Al día (liquidadas)', async () => {
+    await openCuentasTab();
+
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+
+    const pendientes = await screen.findByTestId('seccion-pendientes');
+    expect(within(pendientes).getByText('María Torres')).toBeInTheDocument();
+    expect(within(pendientes).getByText(fmt(298000))).toBeInTheDocument(); // pendienteActual
+    expect(within(pendientes).queryByText('Sofía Ruiz')).toBeNull();
+
+    const alDia = screen.getByTestId('seccion-al-dia');
+    expect(within(alDia).getByText('Sofía Ruiz')).toBeInTheDocument();
+    expect(within(alDia).getByText(fmt(200000))).toBeInTheDocument(); // liquidadoAcumulado
+    expect(within(alDia).queryByText('María Torres')).toBeNull();
+
+    expect(screen.getByRole('heading', { name: /pendientes/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /al día/i })).toBeInTheDocument();
+  });
+
+  it('muestra nota "Sin pagos pendientes" cuando no hay deuda pero sí historial al día', async () => {
+    await openCuentasTab((url) => {
+      if (url.includes('/finanzas/cuentas/pagar')) {
+        return Promise.resolve(
+          cuentasResponse(
+            [{ empleadaId: 4, nombre: 'Sofía Ruiz', sueldoFijo: 0, porcentajeComisionServicio: 40, pendienteActual: 0, liquidadoAcumulado: 200000, alDia: true }],
+            1,
+          ),
+        );
+      }
+      return cuentasApiMock(url);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+
+    const pendientes = await screen.findByTestId('seccion-pendientes');
+    expect(within(pendientes).getByText(/sin pagos pendientes/i)).toBeInTheDocument();
+    const alDia = screen.getByTestId('seccion-al-dia');
+    expect(within(alDia).getByText('Sofía Ruiz')).toBeInTheDocument();
+  });
+
   it('NO muestra botones de cobro ni "registrar pago" en la sub-vista Cobrar (v1 read-only)', async () => {
     await openCuentasTab();
     await screen.findByText('Ana Gómez');
@@ -573,13 +629,13 @@ describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
     expect(screen.queryByRole('button', { name: /registrar pago/i })).toBeNull();
   });
 
-  it('muestra estado vacío "No hay deudas de clientas" cuando Cobrar viene vacío', async () => {
+  it('muestra estado vacío "No hay deudas pendientes" cuando Cobrar viene vacío', async () => {
     await openCuentasTab((url) => {
       if (url.includes('/finanzas/cuentas/cobrar')) return Promise.resolve(cuentasResponse([], 0));
       return cuentasApiMock(url);
     });
 
-    expect(await screen.findByText(/no hay deudas de clientas/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no hay deudas pendientes/i)).toBeInTheDocument();
   });
 
   it('muestra estado vacío "No hay pagos pendientes" cuando Pagar viene vacío', async () => {

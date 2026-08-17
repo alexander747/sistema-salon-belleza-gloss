@@ -176,10 +176,11 @@ interface PyLData {
 }
 
 interface CuentaCobrar {
-  clienteId: number;
+  id: number;
+  tipo: 'CLIENTE' | 'PRESTAMO';
   nombre: string;
   deudaTotal: number;
-  cantidadRegistros: number;
+  cantidadRegistros: number | null;
   antiguedadDias: number;
   antiguedadBucket: string;
 }
@@ -191,6 +192,7 @@ interface CuentaPagar {
   porcentajeComisionServicio: number;
   pendienteActual: number;
   liquidadoAcumulado: number;
+  alDia?: boolean;
 }
 
 type TabKey = 'registros' | 'gastos' | 'devoluciones' | 'nomina' | 'reportes' | 'caja' | 'cuentas';
@@ -4480,6 +4482,31 @@ const CuentasPaginacion: React.FC<CuentasPaginacionProps> = ({ page, meta, total
   );
 };
 
+/** Badge de tipo de deuda en Por cobrar: CLIENTE (neutral) | PRESTAMO (ámbar). */
+const CuentaTipoBadge: React.FC<{ tipo: CuentaCobrar['tipo'] }> = ({ tipo }) => {
+  const esPrestamo = tipo === 'PRESTAMO';
+  return (
+    <span
+      style={{
+        background: esPrestamo ? 'rgba(245,158,11,0.15)' : 'rgba(99,102,241,0.12)',
+        color: esPrestamo ? '#b45309' : 'var(--primary)',
+        padding: '0.15rem 0.6rem',
+        borderRadius: '999px',
+        fontSize: '0.7rem',
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {esPrestamo ? 'Préstamo' : 'Cliente'}
+    </span>
+  );
+};
+
+/** "Al día" = sin deuda pendiente Y con historial liquidado (fallback para APIs antiguas sin alDia). */
+function esAlDia(empleada: CuentaPagar): boolean {
+  return empleada.alDia ?? (empleada.pendienteActual === 0 && empleada.liquidadoAcumulado > 0);
+}
+
 const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   /* ── Sub-vistas: Cobrar (clientes con deuda) / Pagar (empleadas) ── */
   const [cuentasSubtab, setCuentasSubtab] = useState<'cobrar' | 'pagar'>('cobrar');
@@ -4521,13 +4548,6 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       });
       const payload = data?.data;
       const rows = Array.isArray(payload?.data) ? payload.data : [];
-      // Pendientes primero (deuda desc), "al día" (pendienteActual=0) al final
-      rows.sort((a: CuentaPagar, b: CuentaPagar) => {
-        const aPend = a.pendienteActual > 0 ? 0 : 1;
-        const bPend = b.pendienteActual > 0 ? 0 : 1;
-        if (aPend !== bPend) return aPend - bPend;
-        return b.pendienteActual - a.pendienteActual;
-      });
       setPagar(rows);
       setPagarMeta(payload?.meta ?? CUENTAS_META_VACIO);
       return true;
@@ -4621,15 +4641,15 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
       {cuentasSubtab === 'cobrar' ? (
         /* ════════════════════════════════════════════════ */
-        /*  POR COBRAR — clientes con deuda                  */
+        /*  POR COBRAR — clientes con deuda + préstamos      */
         /* ════════════════════════════════════════════════ */
         <div>
           {cobrar.length === 0 ? (
             <div className={styles.emptyState}>
               <span className={styles.emptyIcon}>✅</span>
-              <h3 className={styles.emptyTitle}>No hay deudas de clientas</h3>
+              <h3 className={styles.emptyTitle}>No hay deudas pendientes</h3>
               <p className={styles.emptySubtitle}>
-                Los montos pendientes de clientes aparecerán aquí.
+                Las deudas de clientes y los préstamos activos aparecerán aquí.
               </p>
             </div>
           ) : (
@@ -4638,7 +4658,8 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 <table className={styles.table}>
                   <thead className={styles.tableHead}>
                     <tr>
-                      <th>Cliente</th>
+                      <th>Cliente / Préstamo</th>
+                      <th>Tipo</th>
                       <th>Deuda total</th>
                       <th>Registros</th>
                       <th>Antigüedad</th>
@@ -4646,13 +4667,16 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   </thead>
                   <tbody>
                     {cobrar.map((c) => (
-                      <tr key={c.clienteId} className={styles.tableRow}>
+                      <tr key={c.id} className={styles.tableRow}>
                         <td style={{ fontWeight: 500 }}>{c.nombre}</td>
+                        <td>
+                          <CuentaTipoBadge tipo={c.tipo ?? 'CLIENTE'} />
+                        </td>
                         <td style={{ fontWeight: 600, color: 'var(--danger)' }}>
                           {formatCurrency(c.deudaTotal)}
                         </td>
                         <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
-                          {c.cantidadRegistros}
+                          {c.cantidadRegistros ?? '—'}
                         </td>
                         <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                           {antiguedadLabel(c.antiguedadBucket)}
@@ -4666,7 +4690,7 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               <CuentasPaginacion
                 page={cobrarPage}
                 meta={cobrarMeta}
-                totalLabel="clientes"
+                totalLabel="deudas"
                 onPrev={() => goCobrarPage(cobrarPage - 1)}
                 onNext={() => goCobrarPage(cobrarPage + 1)}
               />
@@ -4675,7 +4699,7 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         </div>
       ) : (
         /* ════════════════════════════════════════════════ */
-        /*  POR PAGAR — empleadas con obligaciones           */
+        /*  POR PAGAR — Pendientes vs Al día                */
         /* ════════════════════════════════════════════════ */
         <div>
           {pagar.length === 0 ? (
@@ -4688,55 +4712,114 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             </div>
           ) : (
             <>
-              <div className={styles.tableWrapper}>
-                <table className={styles.table}>
-                  <thead className={styles.tableHead}>
-                    <tr>
-                      <th>Empleada</th>
-                      <th>Pendiente</th>
-                      <th>Liquidado acumulado</th>
-                      <th>Sueldo fijo</th>
-                      <th>Comisión %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagar.map((e) => (
-                      <tr key={e.empleadaId} className={styles.tableRow}>
-                        <td style={{ fontWeight: 500 }}>{e.nombre}</td>
-                        <td>
-                          {e.pendienteActual > 0 ? (
-                            <span style={{ fontWeight: 600, color: 'var(--danger)' }}>
-                              {formatCurrency(e.pendienteActual)}
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                background: 'rgba(92,186,123,0.15)',
-                                color: 'var(--success)',
-                                padding: '0.15rem 0.6rem',
-                                borderRadius: '999px',
-                                fontSize: '0.7rem',
-                                fontWeight: 700,
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              ✅ Al día
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
-                          {formatCurrency(e.liquidadoAcumulado)}
-                        </td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
-                          {formatCurrency(e.sueldoFijo)}
-                        </td>
-                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
-                          {e.porcentajeComisionServicio}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* ── Pendientes: empleadas con deuda > 0 ── */}
+              <div data-testid="seccion-pendientes" style={{ marginBottom: '1.75rem' }}>
+                <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.5rem', color: 'var(--text-primary)' }}>
+                  Pendientes
+                </h4>
+                {pagar.some((e) => !esAlDia(e)) ? (
+                  <div className={styles.tableWrapper}>
+                    <table className={styles.table}>
+                      <thead className={styles.tableHead}>
+                        <tr>
+                          <th>Empleada</th>
+                          <th>Pendiente</th>
+                          <th>Liquidado acumulado</th>
+                          <th>Sueldo fijo</th>
+                          <th>Comisión %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagar
+                          .filter((e) => !esAlDia(e))
+                          .sort((a, b) => b.pendienteActual - a.pendienteActual)
+                          .map((e) => (
+                            <tr key={e.empleadaId} className={styles.tableRow}>
+                              <td style={{ fontWeight: 500 }}>{e.nombre}</td>
+                              <td>
+                                <span style={{ fontWeight: 600, color: 'var(--danger)' }}>
+                                  {formatCurrency(e.pendienteActual)}
+                                </span>
+                              </td>
+                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                                {formatCurrency(e.liquidadoAcumulado)}
+                              </td>
+                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                                {formatCurrency(e.sueldoFijo)}
+                              </td>
+                              <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                                {e.porcentajeComisionServicio}%
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    🎉 Sin pagos pendientes
+                  </p>
+                )}
+              </div>
+
+              {/* ── Al día: liquidadas, sin deuda actual ── */}
+              <div data-testid="seccion-al-dia">
+                <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.5rem', color: 'var(--success)' }}>
+                  ✅ Al día
+                </h4>
+                {pagar.some((e) => esAlDia(e)) ? (
+                  <div className={styles.tableWrapper}>
+                    <table className={styles.table}>
+                      <thead className={styles.tableHead}>
+                        <tr>
+                          <th>Empleada</th>
+                          <th>Pendiente</th>
+                          <th>Liquidado acumulado</th>
+                          <th>Sueldo fijo</th>
+                          <th>Comisión %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagar
+                          .filter((e) => esAlDia(e))
+                          .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                          .map((e) => (
+                            <tr key={e.empleadaId} className={styles.tableRow}>
+                              <td style={{ fontWeight: 500 }}>{e.nombre}</td>
+                              <td>
+                                <span
+                                  style={{
+                                    background: 'rgba(92,186,123,0.15)',
+                                    color: 'var(--success)',
+                                    padding: '0.15rem 0.6rem',
+                                    borderRadius: '999px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  ✅ Al día
+                                </span>
+                              </td>
+                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                                {formatCurrency(e.liquidadoAcumulado)}
+                              </td>
+                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                                {formatCurrency(e.sueldoFijo)}
+                              </td>
+                              <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                                {e.porcentajeComisionServicio}%
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    Sin empleadas al día con historial.
+                  </p>
+                )}
               </div>
 
               <CuentasPaginacion
