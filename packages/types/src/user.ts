@@ -9,7 +9,7 @@ export enum Rol {
 }
 
 /** Frecuencia con la que se liquida el sueldo fijo de una empleada. */
-export type FrecuenciaPago = 'MENSUAL' | 'QUINCENAL';
+export type FrecuenciaPago = 'MENSUAL' | 'QUINCENAL' | 'SEMANAL';
 
 /** Core user entity shape shared across frontend and backend. */
 export interface IUser {

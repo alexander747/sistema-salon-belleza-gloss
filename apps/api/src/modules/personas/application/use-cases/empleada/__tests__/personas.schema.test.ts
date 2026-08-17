@@ -24,16 +24,27 @@ describe('personas.schema — frecuenciaPago', () => {
     expect(result.frecuenciaPago).toBe('QUINCENAL');
   });
 
-  it('rejects an invalid frecuenciaPago value (SEMANAL) on create', () => {
+  it('accepts frecuenciaPago SEMANAL on create', () => {
+    const result = createEmpleadaSchema.parse({
+      ...baseValid,
+      frecuenciaPago: 'SEMANAL',
+    });
+    expect(result.frecuenciaPago).toBe('SEMANAL');
+  });
+
+  it('rejects an invalid frecuenciaPago value (ANUAL) on create', () => {
     expect(() =>
-      createEmpleadaSchema.parse({ ...baseValid, frecuenciaPago: 'SEMANAL' }),
+      createEmpleadaSchema.parse({ ...baseValid, frecuenciaPago: 'ANUAL' }),
     ).toThrow();
   });
 
-  it('accepts frecuenciaPago QUINCENAL on update and rejects invalid values', () => {
+  it('accepts frecuenciaPago QUINCENAL and SEMANAL on update and rejects invalid values', () => {
     const result = updateEmpleadaSchema.parse({ frecuenciaPago: 'QUINCENAL' });
     expect(result.frecuenciaPago).toBe('QUINCENAL');
 
-    expect(() => updateEmpleadaSchema.parse({ frecuenciaPago: 'SEMANAL' })).toThrow();
+    const resultSemanal = updateEmpleadaSchema.parse({ frecuenciaPago: 'SEMANAL' });
+    expect(resultSemanal.frecuenciaPago).toBe('SEMANAL');
+
+    expect(() => updateEmpleadaSchema.parse({ frecuenciaPago: 'ANUAL' })).toThrow();
   });
 });

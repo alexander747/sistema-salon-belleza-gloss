@@ -109,9 +109,11 @@ export class LiquidarEmpleadaUseCase {
       (sum, r) => sum + Number(r.propina),
       0,
     );
-    // Fixed comp: 100% for MENSUAL, 50% for QUINCENAL.
+    // Fixed comp: 100% for MENSUAL, 50% for QUINCENAL, 25% for SEMANAL.
     // MUST match NominaPendienteUseCase so the historial never drifts from the UI.
-    const factorFijo = (empleada.frecuenciaPago as FrecuenciaPago | undefined) === 'QUINCENAL' ? 0.5 : 1;
+    const frecuencia = empleada.frecuenciaPago as FrecuenciaPago | undefined;
+    const factorFijo =
+      frecuencia === 'QUINCENAL' ? 0.5 : frecuencia === 'SEMANAL' ? 0.25 : 1;
     const bonoHorario = Number(empleada.bonoHorario) * factorFijo;
     const sueldoFijo = Number(empleada.sueldoFijo) * factorFijo;
     const calculatedTotal = totalComisiones + totalPropinas + bonoHorario + sueldoFijo;

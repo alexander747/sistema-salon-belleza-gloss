@@ -20,7 +20,7 @@ export const createEmpleadaSchema = z.object({
   frecuenciaBono: z.string().max(20).optional(),
   // Orden .optional().default() (NO .default().optional()): con el default adentro,
   // ZodOptional corta en undefined y el default nunca aplica → rompe "ausente = MENSUAL".
-  frecuenciaPago: z.enum(['MENSUAL', 'QUINCENAL']).optional().default('MENSUAL'),
+  frecuenciaPago: z.enum(['MENSUAL', 'QUINCENAL', 'SEMANAL']).optional().default('MENSUAL'),
 });
 
 export type CreateEmpleadaInput = z.infer<typeof createEmpleadaSchema>;
@@ -40,7 +40,7 @@ export const updateEmpleadaSchema = z.object({
   sueldoFijo: z.number().min(0).optional(),
   bonoHorario: z.number().min(0).optional(),
   frecuenciaBono: z.string().max(20).optional(),
-  frecuenciaPago: z.enum(['MENSUAL', 'QUINCENAL']).optional(),
+  frecuenciaPago: z.enum(['MENSUAL', 'QUINCENAL', 'SEMANAL']).optional(),
 });
 
 export type UpdateEmpleadaInput = z.infer<typeof updateEmpleadaSchema>;

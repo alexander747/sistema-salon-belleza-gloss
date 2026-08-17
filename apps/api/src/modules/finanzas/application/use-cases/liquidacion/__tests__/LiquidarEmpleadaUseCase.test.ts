@@ -412,6 +412,31 @@ describe('LiquidarEmpleadaUseCase', () => {
     expect(result).toEqual(expect.objectContaining({ id: 20, totalPagado: 125000 }));
   });
 
+  it('liquida a empleada SEMANAL registrando el 25% del comp fijo (coherente con NominaPendiente)', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, frecuenciaPago: 'SEMANAL', sueldoFijo: 200000, bonoHorario: 50000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 30 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 30, totalPagado: 62500 });
+
+    const result = await useCase.execute(baseInput);
+
+    expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalComisiones: 0,
+        totalPropinas: 0,
+        sueldoFijo: 50000, // 25% de 200000
+        bonoHorario: 12500, // 25% de 50000
+        totalPagado: 62500,
+        estado: 'PAGADA',
+      }),
+      expect.anything(),
+    );
+    expect(result).toEqual(expect.objectContaining({ id: 30, totalPagado: 62500 }));
+  });
+
   it('hace rollback y re-lanza el error cuando falla la creación dentro de la transacción', async () => {
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, sueldoFijo: 200000 }),

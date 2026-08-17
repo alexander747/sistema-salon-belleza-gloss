@@ -29,19 +29,45 @@ export interface NominaPendienteInput {
   salonId: number;
 }
 
+const FACTOR_FIJO_MENSUAL = 1;
 const FACTOR_FIJO_QUINCENAL = 0.5;
+const FACTOR_FIJO_SEMANAL = 0.25;
+
+/** Suma/resta días a una fecha 'YYYY-MM-DD' (maneja cruce de mes/año). */
+function addDays(fecha: string, delta: number): string {
+  const [year, month, day] = fecha.split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day + delta));
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
 
 /**
  * Período de nómina de una empleada según su frecuencia de pago, en hora de Colombia.
  * - MENSUAL: del día 1 del mes a HOY (semántica preservada: el overlap del guard
  *   anti-doble-pago hace [1→hoy] ≡ [1→fin de mes]).
  * - QUINCENAL día ≤ 15: [1, 15]. QUINCENAL día ≥ 16: [16, último día del mes].
+ * - SEMANAL: [lunes, domingo] de la semana actual (inclusive).
  */
 export function calcularPeriodo(
   frecuenciaPago: FrecuenciaPago,
   hoy: string,
 ): { periodoInicio: Date; periodoFin: Date } {
   const [y, m] = hoy.split('-');
+
+  if (frecuenciaPago === 'SEMANAL') {
+    // Lunes de la semana actual desde el string COT 'hoy' con ancla a mediodía UTC
+    // (evita bordes de día; Colombia sin DST — D1).
+    const ancla = new Date(`${hoy}T12:00:00Z`);
+    const diasDesdeLunes = (ancla.getUTCDay() + 6) % 7;
+    const lunes = addDays(hoy, -diasDesdeLunes);
+    const domingo = addDays(hoy, 6 - diasDesdeLunes);
+    return {
+      periodoInicio: colombiaDayStartUTC(lunes),
+      periodoFin: colombiaDayEndUTC(domingo),
+    };
+  }
 
   if (frecuenciaPago === 'QUINCENAL') {
     const dia = Number(hoy.slice(8, 10));
@@ -105,9 +131,9 @@ export class NominaPendienteUseCase {
       (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada && r.estado !== EstadoRegistro.ANULADO,
     );
 
-    // QUINCENAL: solo cuentan los registros creados dentro de la quincena.
+    // QUINCENAL/SEMANAL: solo cuentan los registros creados dentro del período.
     // MENSUAL: comportamiento actual — todos los no pagados, sin filtro de período.
-    if (frecuenciaPago === 'QUINCENAL') {
+    if (frecuenciaPago === 'QUINCENAL' || frecuenciaPago === 'SEMANAL') {
       pendingRegistros = pendingRegistros.filter(
         (r) => new Date(r.creadoEn) >= periodoInicio && new Date(r.creadoEn) <= periodoFin,
       );
@@ -151,8 +177,13 @@ export class NominaPendienteUseCase {
       0,
     );
 
-    // Fixed comp: 100% for MENSUAL, 50% for QUINCENAL (same factor as LiquidarEmpleada)
-    const factor = frecuenciaPago === 'QUINCENAL' ? FACTOR_FIJO_QUINCENAL : 1;
+    // Fixed comp: 100% MENSUAL, 50% QUINCENAL, 25% SEMANAL (same factor as LiquidarEmpleada)
+    const factor =
+      frecuenciaPago === 'QUINCENAL'
+        ? FACTOR_FIJO_QUINCENAL
+        : frecuenciaPago === 'SEMANAL'
+          ? FACTOR_FIJO_SEMANAL
+          : FACTOR_FIJO_MENSUAL;
     const bonoHorarioPeriodo = Number(empleada.bonoHorario) * factor;
     const sueldoFijoPeriodo = Number(empleada.sueldoFijo) * factor;
 
