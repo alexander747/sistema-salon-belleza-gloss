@@ -110,12 +110,16 @@ describe('FinanzasPage — tab Caja', () => {
     expect(screen.getAllByRole('button', { name: 'Abrir' }).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('monta el CajaBanner sobre el contenido de FinanzasPage', async () => {
+  it('monta el CajaBanner dentro del tab Caja (no en otros tabs)', async () => {
     defaultApiMock();
 
     renderPage();
 
-    // El banner consulta el estado de caja al montar
+    // Tab por defecto (Registros): el banner NO se monta
+    expect(screen.queryByText(/caja cerrada — abrir para vender/i)).not.toBeInTheDocument();
+
+    // Al activar el tab Caja el banner consulta el estado de caja al montar
+    fireEvent.click(await screen.findByRole('button', { name: '💰 Caja' }));
     expect(await screen.findByText(/caja cerrada — abrir para vender/i)).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/actual');
   });

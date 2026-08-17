@@ -488,8 +488,10 @@ const FinanzasPage: React.FC = () => {
         </motion.div>
       )}
 
-      {/* CajaBanner: estado de caja global (abierta/cerrada) con acción al tab Caja */}
-      <CajaBanner salonId={salonId} user={user} onNavigateToCaja={() => setActiveTab('caja')} />
+      {/* CajaBanner: estado de caja global — solo visible dentro del tab Caja */}
+      {activeTab === 'caja' && (
+        <CajaBanner salonId={salonId} user={user} onNavigateToCaja={() => setActiveTab('caja')} />
+      )}
 
       {/* ── Tab Navigation ── */}
       <div className={styles.tabsRow}>

@@ -5,7 +5,7 @@ import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
-import CajaBanner, { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
+import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import styles from './AgendaPage.module.css';
@@ -736,9 +736,6 @@ const AgendaPage: React.FC = () => {
               <SalonSwitcher userSalonId={user!.salonId} />
             </motion.div>
           )}
-
-          {/* CajaBanner: estado de caja global (abierta/cerrada) con acceso al tab Caja */}
-          <CajaBanner salonId={salonId} user={user} />
 
           {/* ── Week Navigation ── */}
           <motion.div
