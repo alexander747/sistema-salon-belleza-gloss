@@ -317,3 +317,107 @@ describe('AgendaPage — gating de botones por estado (B6)', () => {
     expect(screen.queryByRole('button', { name: 'No llegó' })).not.toBeInTheDocument();
   }, 20000);
 });
+
+describe('AgendaPage — happy paths de cita (D6)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('confirmar cita PENDIENTE → PATCH estado CONFIRMADA y cierra el modal', async () => {
+    defaultApiMock('PENDIENTE');
+    mockPatch.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }, WAIT));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith('/salones/1/agenda/citas/1/estado', {
+        estado: 'CONFIRMADA',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument();
+    }, WAIT);
+  }, 20000);
+
+  it('completar cita CONFIRMADA → POST atómico /completar con registro anidado', async () => {
+    defaultApiMock('CONFIRMADA');
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      // UNA sola llamada: el registro viaja anidado en el POST /completar (transacción atómica)
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/agenda/citas/1/completar',
+        expect.objectContaining({
+          registro: expect.objectContaining({
+            salonId: 1,
+            clienteId: 1,
+            usuarioId: 1,
+            totalServicios: 30000,
+            totalProductos: 0,
+            montoTotal: 30000,
+            pagos: [{ monto: 30000, metodoPago: 'EFECTIVO' }],
+            serviciosIds: [1],
+            serviciosItems: [
+              expect.objectContaining({
+                servicioId: 1,
+                nombreServicio: 'Corte',
+                precioServicio: 30000,
+              }),
+            ],
+          }),
+        }),
+      );
+    });
+    // No hay POST separado a /registros: el flujo es atómico
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/registros'))).toBe(false);
+    // El modal de completar se cierra
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Confirmar y Registrar' })).not.toBeInTheDocument();
+    }, WAIT);
+  }, 20000);
+
+  it('navegación semanal: Siguiente → 7 días, Anterior → vuelve a la semana original', async () => {
+    defaultApiMock('CONFIRMADA');
+    renderAgenda();
+
+    // Esperar el calendario y la primera consulta de citas
+    await screen.findByLabelText('Semana anterior');
+    await waitFor(() => {
+      expect(mockGet.mock.calls.some(([url]) => String(url).includes('/agenda/citas'))).toBe(true);
+    }, WAIT);
+
+    const getUltimaCitasCall = () => {
+      const calls = mockGet.mock.calls.filter(([url]) => String(url).includes('/agenda/citas'));
+      return calls[calls.length - 1];
+    };
+    const getDesde = () => new Date(getUltimaCitasCall()?.[1].params.desde as string).getTime();
+    const semanaOriginal = getDesde();
+
+    fireEvent.click(screen.getByLabelText('Semana siguiente'));
+
+    await waitFor(() => {
+      expect(getDesde()).toBe(semanaOriginal + 7 * 24 * 3600 * 1000);
+    }, WAIT);
+
+    fireEvent.click(screen.getByLabelText('Semana anterior'));
+
+    await waitFor(() => {
+      expect(getDesde()).toBe(semanaOriginal);
+    }, WAIT);
+  }, 20000);
+});
