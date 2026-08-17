@@ -34,8 +34,10 @@
 - [x] C4 Frontend: Por pagar separa secciones Pendientes vs Al día
 - [x] C5 Tests: use cases backend (préstamos + alDia) y FinanzasPage cuentas
 
-## Batch D — Pruebas (PENDIENTE — próximo lote)
+## Batch D — Pruebas (COMPLETA — 8 commits, ver apply-progress #290)
 
-- [ ] D1 Suites ServiciosPage / ProductosPage / ClientesPage / CategoriasPage
-- [ ] D2 Suites PrestamosPage / VentasPage / AgendaPage (crear cita + gating)
-- [ ] D3 Actualizar CajaBannerPages.test.tsx
+- [x] D1 Suites ServiciosPage / ProductosPage / ClientesPage (6+7+7 tests)
+- [x] D2 Suites PrestamosPage / VentasPage / AgendaPage (6+4+15 tests; CategoriasPage ya
+      tenía suite propia del Batch B)
+- [x] D3 CajaBanner.test.tsx: "Reabrir" con fecha Colombia dinámica (getColombiaDateString)
+      — suite completa verde (180 tests, 23 archivos)
