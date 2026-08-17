@@ -120,7 +120,7 @@ const modalContentStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-lg)',
   boxShadow: '0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(212,168,83,0.06)',
   width: '100%',
-  maxWidth: '520px',
+  maxWidth: '1100px',
   maxHeight: '90vh',
   overflowY: 'auto',
 };

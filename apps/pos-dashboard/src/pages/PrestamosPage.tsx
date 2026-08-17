@@ -525,7 +525,7 @@ const PrestamosPage: React.FC = () => {
             onClick={() => setShowCreateModal(false)}
           >
             <motion.div
-              className={styles.modalContent}
+              className={`${styles.modalContent} ${styles.modalContentXl}`}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}

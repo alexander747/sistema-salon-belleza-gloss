@@ -281,6 +281,10 @@
   scrollbar-width: thin;
 }
 
+.modalContentXl {
+  max-width: 1100px;
+}
+
 .modalContent::-webkit-scrollbar {
   width: 4px;
 }
