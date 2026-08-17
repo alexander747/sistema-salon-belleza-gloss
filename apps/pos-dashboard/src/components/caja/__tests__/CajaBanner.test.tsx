@@ -12,7 +12,7 @@ vi.mock('../../../services/api.js', () => ({
   default: { get: mockGet, post: mockPost },
 }));
 
-import CajaBanner from '../CajaBanner';
+import CajaBanner, { getColombiaDateString } from '../CajaBanner';
 
 const duena: IUser = {
   id: 2,
@@ -92,7 +92,8 @@ describe('CajaBanner', () => {
   });
 
   it('muestra "Reabrir para vender" y botón "Reabrir" cuando la caja de HOY está cerrada (historial trae CERRADA de hoy)', async () => {
-    // GET /caja/actual → 404; GET /caja/cierres → caja de hoy CERRADA
+    // GET /caja/actual → 404; GET /caja/cierres → caja de HOY (fecha Colombia dinámica) CERRADA
+    const hoy = getColombiaDateString();
     mockGet
       .mockRejectedValueOnce(error404)
       .mockResolvedValueOnce({
@@ -103,7 +104,7 @@ describe('CajaBanner', () => {
               {
                 id: 5,
                 salonId: 1,
-                fechaCaja: '2026-08-16',
+                fechaCaja: hoy,
                 montoInicial: 50000,
                 montoEsperado: 60000,
                 montoRealEfectivo: 60000,
