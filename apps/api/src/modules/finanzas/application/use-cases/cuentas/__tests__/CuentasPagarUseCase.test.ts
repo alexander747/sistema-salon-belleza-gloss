@@ -69,11 +69,12 @@ describe('CuentasPagarUseCase', () => {
         porcentajeComisionServicio: 30,
         pendienteActual: 298000,
         liquidadoAcumulado: 550000,
+        alDia: false,
       },
     ]);
   });
 
-  it('incluye empleada presente solo en el historial con pendienteActual=0', async () => {
+  it('incluye empleada presente solo en el historial con pendienteActual=0 y la marca alDia=true', async () => {
     mockNominaUseCase.execute.mockResolvedValue([]);
     mockHistorialUseCase.execute.mockResolvedValue([
       makeLiquidacion({ usuarioId: 2, totalPagado: 200000 }),
@@ -92,11 +93,12 @@ describe('CuentasPagarUseCase', () => {
         porcentajeComisionServicio: 25,
         pendienteActual: 0,
         liquidadoAcumulado: 200000,
+        alDia: true,
       },
     ]);
   });
 
-  it('incluye empleada presente solo en la nómina con liquidadoAcumulado=0', async () => {
+  it('incluye empleada presente solo en la nómina con liquidadoAcumulado=0 y la marca alDia=false', async () => {
     mockNominaUseCase.execute.mockResolvedValue([
       makeNominaEntry({ empleadaId: 3, nombre: 'Caro', sueldoFijo: 500000, porcentajeComisionServicio: 0, totalAPagar: 500000 }),
     ]);
@@ -115,6 +117,7 @@ describe('CuentasPagarUseCase', () => {
         porcentajeComisionServicio: 0,
         pendienteActual: 500000,
         liquidadoAcumulado: 0,
+        alDia: false,
       },
     ]);
   });
@@ -137,6 +140,28 @@ describe('CuentasPagarUseCase', () => {
         empleadaId: 4,
         pendienteActual: 0,
         liquidadoAcumulado: 300000,
+        alDia: true,
+      }),
+    ]);
+  });
+
+  it('marca alDia=false cuando no hay pendiente NI historial liquidado', async () => {
+    mockNominaUseCase.execute.mockResolvedValue([
+      makeNominaEntry({ empleadaId: 8, nombre: 'Hilda', totalAPagar: 0 }),
+    ]);
+    mockHistorialUseCase.execute.mockResolvedValue([]);
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeUsuario({ id: 8, nombre: 'Hilda' }),
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        empleadaId: 8,
+        pendienteActual: 0,
+        liquidadoAcumulado: 0,
+        alDia: false,
       }),
     ]);
   });

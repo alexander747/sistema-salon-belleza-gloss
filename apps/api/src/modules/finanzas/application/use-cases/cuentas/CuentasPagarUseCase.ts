@@ -61,6 +61,8 @@ export class CuentasPagarUseCase {
     const filas: CuentaPagarDTO[] = [...empleadaIds].map((empleadaId) => {
       const usuario = usuarioPorId.get(empleadaId);
       const nominaEntry = nominaPorEmpleada.get(empleadaId);
+      const pendienteActual = nominaEntry?.totalAPagar ?? 0;
+      const liquidadoAcumulado = acumuladoPorEmpleada.get(empleadaId) ?? 0;
       return {
         empleadaId,
         nombre: usuario?.nombre ?? nominaEntry?.nombre ?? '',
@@ -68,8 +70,11 @@ export class CuentasPagarUseCase {
         porcentajeComisionServicio: usuario
           ? Number(usuario.porcentajeComisionServicio)
           : (nominaEntry?.porcentajeComisionServicio ?? 0),
-        pendienteActual: nominaEntry?.totalAPagar ?? 0,
-        liquidadoAcumulado: acumuladoPorEmpleada.get(empleadaId) ?? 0,
+        pendienteActual,
+        liquidadoAcumulado,
+        // "Al día" = sin deuda pendiente Y con historial liquidado (frontera de
+        // mes de la nómina: liquidada sin registros nuevos aparece aquí).
+        alDia: pendienteActual === 0 && liquidadoAcumulado > 0,
       };
     });
 

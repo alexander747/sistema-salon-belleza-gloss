@@ -1,5 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
+import type { IPrestamoRepository } from '../../../../prestamos/domain/ports/IPrestamoRepository';
 import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { PaginationParams, PaginatedResult } from '../../../../../shared/pagination';
 import { paginate } from '../../../../../shared/pagination';
@@ -19,7 +20,9 @@ interface GrupoCliente {
 
 /**
  * Cuentas por cobrar: deuda pendiente agregada por cliente desde los registros
- * no anulados con `montoPendiente > 0`.
+ * no anulados con `montoPendiente > 0` MÁS los préstamos activos
+ * (estado ACTIVO con `saldoPendiente > 0`) del salón. Lista unificada: cada
+ * fila lleva `tipo: 'CLIENTE' | 'PRESTAMO'`.
  *
  * CONSISTENCIA DE DEUDA — follow-ups conocidos, fuera de scope v1 (ver proposal
  * `cuentas-pagar-cobrar` → FOLLOW-UP):
@@ -35,11 +38,19 @@ export class CuentasCobrarUseCase {
   constructor(
     @inject('IRegistroServicioRepository')
     private readonly registroRepo: IRegistroServicioRepository,
+    @inject('IPrestamoRepository')
+    private readonly prestamoRepo: IPrestamoRepository,
   ) {}
 
   async execute(input: CuentasCobrarInput): Promise<PaginatedResult<CuentaCobrarDTO>> {
-    const registros = await this.registroRepo.findConDeudaBySalon(input.salonId);
+    const [registros, [prestamos]] = await Promise.all([
+      this.registroRepo.findConDeudaBySalon(input.salonId),
+      this.prestamoRepo.findBySalon({ salonId: input.salonId, estado: 'ACTIVO' }),
+    ]);
 
+    const filas: CuentaCobrarDTO[] = [];
+
+    // ── Deuda de clientes (registros no ANULADOS con montoPendiente > 0) ──
     const grupos = new Map<number, GrupoCliente>();
 
     for (const registro of registros) {
@@ -63,17 +74,37 @@ export class CuentasCobrarUseCase {
       grupos.set(registro.clienteId, grupo);
     }
 
-    const filas: CuentaCobrarDTO[] = [...grupos.entries()].map(([clienteId, grupo]) => {
+    for (const [clienteId, grupo] of grupos.entries()) {
       const antiguedadDias = antiguedadDiasColombia(grupo.masAntiguo);
-      return {
-        clienteId,
+      filas.push({
+        id: clienteId,
+        tipo: 'CLIENTE',
         nombre: grupo.nombre,
         deudaTotal: grupo.deudaTotal,
         cantidadRegistros: grupo.cantidadRegistros,
         antiguedadDias,
         antiguedadBucket: bucketAntiguedad(antiguedadDias),
-      };
-    });
+      });
+    }
+
+    // ── Préstamos activos con saldo pendiente (el repo filtra estado ACTIVO) ──
+    for (const prestamo of prestamos) {
+      // Defensa en profundidad: misma semántica que el repo (estado ACTIVO, saldo > 0)
+      if (prestamo.estado !== 'ACTIVO') continue;
+      const saldo = Number(prestamo.saldoPendiente);
+      if (saldo <= 0) continue;
+
+      const antiguedadDias = antiguedadDiasColombia(prestamo.fechaCreacion);
+      filas.push({
+        id: prestamo.id,
+        tipo: 'PRESTAMO',
+        nombre: prestamo.usuario?.nombre ?? prestamo.nombreTercero ?? '',
+        deudaTotal: saldo,
+        cantidadRegistros: null,
+        antiguedadDias,
+        antiguedadBucket: bucketAntiguedad(antiguedadDias),
+      });
+    }
 
     filas.sort((a, b) => b.deudaTotal - a.deudaTotal);
 

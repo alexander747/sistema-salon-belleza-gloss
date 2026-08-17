@@ -8,6 +8,10 @@ const mockRegistroRepo = {
   findConDeudaBySalon: vi.fn(),
 };
 
+const mockPrestamoRepo = {
+  findBySalon: vi.fn(),
+};
+
 // Fecha fija "hoy" en hora Colombia (UTC-5): 2026-08-16 12:00 COT
 const HOY = new Date('2026-08-16T12:00:00-05:00');
 
@@ -22,14 +26,30 @@ const makeRegistro = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const makePrestamo = (overrides: Record<string, unknown> = {}) => ({
+  id: 10,
+  salonId: 1,
+  usuarioId: 5,
+  usuario: { id: 5, nombre: 'Eder' },
+  nombreTercero: null,
+  monto: 100000,
+  saldoPendiente: 50000,
+  motivo: 'Préstamo',
+  estado: 'ACTIVO',
+  fechaCreacion: new Date('2026-08-10T00:00:00-05:00'),
+  ...overrides,
+});
+
 describe('CuentasCobrarUseCase', () => {
   let useCase: CuentasCobrarUseCase;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: salón sin préstamos activos (los tests de clientes no dependen de ello)
+    mockPrestamoRepo.findBySalon.mockResolvedValue([[], 0]);
     vi.useFakeTimers();
     vi.setSystemTime(HOY);
-    useCase = new CuentasCobrarUseCase(mockRegistroRepo as never);
+    useCase = new CuentasCobrarUseCase(mockRegistroRepo as never, mockPrestamoRepo as never);
   });
 
   afterEach(() => {
@@ -51,10 +71,12 @@ describe('CuentasCobrarUseCase', () => {
     const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
 
     expect(mockRegistroRepo.findConDeudaBySalon).toHaveBeenCalledWith(1);
+    expect(mockPrestamoRepo.findBySalon).toHaveBeenCalledWith({ salonId: 1, estado: 'ACTIVO' });
     expect(result.meta).toEqual({ page: 1, limit: 0, total: 1, totalPages: 1 });
     expect(result.data).toEqual([
       {
-        clienteId: 1,
+        id: 1,
+        tipo: 'CLIENTE',
         nombre: 'Ana',
         deudaTotal: 40000,
         cantidadRegistros: 2,
@@ -131,7 +153,103 @@ describe('CuentasCobrarUseCase', () => {
 
     const result = await useCase.execute({ salonId: 1, page: 1, limit: 10 });
 
+    expect(mockPrestamoRepo.findBySalon).toHaveBeenCalledWith({ salonId: 1, estado: 'ACTIVO' });
     expect(result.meta).toEqual({ page: 1, limit: 10, total: 0, totalPages: 0 });
     expect(result.data).toEqual([]);
+  });
+
+  // ── Préstamos activos en cuentas por cobrar ──────────────────
+
+  it('incluye préstamos ACTIVOS con saldoPendiente > 0 como filas tipo PRESTAMO', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([
+      [makePrestamo({ id: 10, saldoPendiente: 50000, usuario: { id: 5, nombre: 'Eder' } })],
+      1,
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data).toEqual([
+      {
+        id: 10,
+        tipo: 'PRESTAMO',
+        nombre: 'Eder',
+        deudaTotal: 50000,
+        cantidadRegistros: null,
+        antiguedadDias: 6,
+        antiguedadBucket: '0-30',
+      },
+    ]);
+  });
+
+  it('usa nombreTercero cuando el préstamo no tiene usuario vinculado', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([
+      [makePrestamo({ id: 11, usuarioId: null, usuario: null, nombreTercero: 'Fulanito', saldoPendiente: 30000 })],
+      1,
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({ id: 11, tipo: 'PRESTAMO', nombre: 'Fulanito', deudaTotal: 30000 }),
+    ]);
+  });
+
+  it('excluye préstamos PAGADO, CANCELADO y con saldoPendiente 0', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([
+      [
+        makePrestamo({ id: 20, estado: 'PAGADO', saldoPendiente: 0 }),
+        makePrestamo({ id: 21, estado: 'CANCELADO', saldoPendiente: 90000 }),
+        makePrestamo({ id: 22, estado: 'ACTIVO', saldoPendiente: 0 }),
+      ],
+      3,
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data).toEqual([]);
+  });
+
+  it('une clientes y préstamos en una sola lista ordenada por deudaTotal DESC', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([
+      makeRegistro({ id: 1, clienteId: 1, montoPendiente: 40000, cliente: { id: 1, nombre: 'Ana' } }),
+    ]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([
+      [
+        makePrestamo({ id: 30, saldoPendiente: 90000, usuario: { id: 5, nombre: 'Eder' } }),
+        makePrestamo({ id: 31, saldoPendiente: 10000, usuario: { id: 6, nombre: 'Bety' } }),
+      ],
+      2,
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data).toHaveLength(3);
+    expect(result.data.map((f) => [f.id, f.tipo, f.deudaTotal])).toEqual([
+      [30, 'PRESTAMO', 90000],
+      [1, 'CLIENTE', 40000],
+      [31, 'PRESTAMO', 10000],
+    ]);
+  });
+
+  it('aplica paginación sobre la lista unificada de clientes y préstamos', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([
+      makeRegistro({ id: 1, clienteId: 1, montoPendiente: 40000, cliente: { id: 1, nombre: 'Ana' } }),
+    ]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([
+      [
+        makePrestamo({ id: 30, saldoPendiente: 90000, usuario: { id: 5, nombre: 'Eder' } }),
+        makePrestamo({ id: 31, saldoPendiente: 10000, usuario: { id: 6, nombre: 'Bety' } }),
+      ],
+      2,
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 2, limit: 2 });
+
+    expect(result.meta).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 });
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({ id: 31, tipo: 'PRESTAMO' });
   });
 });
