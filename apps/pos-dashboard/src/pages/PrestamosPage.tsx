@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Skeleton } from '@pos-final/ui';
 import { type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import { prestamoService, type Prestamo, type PagoPrestamo } from '../services/prestamoService.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
+import TableSkeleton from '../components/TableSkeleton.js';
 import styles from './PrestamosPage.module.css';
 
 /* ── Types ── */
@@ -382,11 +382,10 @@ const PrestamosPage: React.FC = () => {
 
       {/* Table */}
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} height={56} />
-          ))}
-        </div>
+        <TableSkeleton
+          columns={['Deudor', 'Monto', 'Saldo pendiente', 'Estado', 'Motivo', 'Fecha', 'Acciones']}
+          rows={5}
+        />
       ) : (
         <div className={styles.tableWrapper}>
           <table className={styles.table}>

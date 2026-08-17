@@ -6,6 +6,7 @@ import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
+import tableSkeletonStyles from '../components/TableSkeleton.module.css';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
 
 /* ── Types ── */
@@ -534,7 +535,11 @@ const VentasPage: React.FC = () => {
               {dataLoading ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
                   {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <Skeleton key={i} height="140px" variant="rect" />
+                    <div
+                      key={i}
+                      className={tableSkeletonStyles.skeletonBlock}
+                      style={{ height: 140, borderRadius: 'var(--radius-md)' }}
+                    />
                   ))}
                 </div>
               ) : !hasProductos ? (

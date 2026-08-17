@@ -6,6 +6,7 @@ import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
+import TableSkeleton from '../components/TableSkeleton.js';
 import styles from './EmpleadasPage.module.css';
 
 /* ── Types ── */
@@ -437,7 +438,10 @@ const EmpleadasPage: React.FC = () => {
 
           {/* ── Content ── */}
           {loading ? (
-            <RenderSkeleton />
+            <TableSkeleton
+              columns={['Nombre', 'Email', 'Rol', 'WhatsApp', 'Pago', 'Activo', 'Creado', 'Modificado', 'Nacimiento', 'Acciones']}
+              rows={5}
+            />
           ) : error ? (
             <RenderError error={error} onRetry={fetchEmpleadas} />
           ) : filteredEmpleadas.length === 0 ? (
@@ -501,56 +505,6 @@ const EmpleadasPage: React.FC = () => {
     </>
   );
 };
-
-/* ================================================================ */
-/*  SUB-COMPONENT: Loading Skeleton                                   */
-/* ================================================================ */
-
-const RenderSkeleton: React.FC = () => (
-  <div className={styles.tableWrapper}>
-    <table className={styles.table}>
-      <thead className={styles.tableHead}>
-        <tr>
-          <th>Nombre</th>
-          <th>Email</th>
-          <th>Rol</th>
-          <th>WhatsApp</th>
-          <th>Pago</th>
-          <th>Activo</th>
-          <th>Creado</th>
-          <th>Modificado</th>
-          <th>Nacimiento</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-    </table>
-    <div style={{ padding: '0.25rem 1rem' }}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div
-          key={i}
-          style={{
-            display: 'flex',
-            gap: '1rem',
-            padding: '0.7rem 0',
-            alignItems: 'center',
-            borderBottom: i < 5 ? '1px solid var(--border)' : 'none',
-          }}
-        >
-          <div className={styles.skeletonBlock} style={{ height: 14, flex: 1.5 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, flex: 2 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, width: 80 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, flex: 1.5 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, width: 50 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, width: 36 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, width: 85 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, width: 85 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, width: 85 }} />
-          <div className={styles.skeletonBlock} style={{ height: 14, width: 60 }} />
-        </div>
-      ))}
-    </div>
-  </div>
-);
 
 /* ================================================================ */
 /*  SUB-COMPONENT: Error State                                        */

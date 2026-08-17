@@ -6,6 +6,7 @@ import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
+import TableSkeleton from '../components/TableSkeleton.js';
 
 /* ── Types ── */
 
@@ -450,11 +451,10 @@ const CategoriasPage: React.FC = () => {
 
           {/* ── List ── */}
           {dataLoading ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}>
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} height="64px" variant="rect" style={{ marginBottom: '0.5rem' }} />
-              ))}
-            </motion.div>
+            <TableSkeleton
+              columns={['Nombre', 'Descripción', '💅', '🧴', 'Creado', 'Modificado', 'Acción']}
+              rows={5}
+            />
           ) : dataError ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}

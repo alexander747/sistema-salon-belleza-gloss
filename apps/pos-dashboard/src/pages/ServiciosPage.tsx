@@ -6,6 +6,7 @@ import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
+import TableSkeleton from '../components/TableSkeleton.js';
 import {
   fetchServicios,
   type Servicio,
@@ -468,19 +469,10 @@ const ServiciosPage: React.FC = () => {
           {/* ── Content area ── */}
           {(() => { console.log('[DEBUG ServiciosPage RENDER] dataLoading:', dataLoading, 'dataError:', dataError, 'hasData:', hasData, 'servicios.length:', servicios.length, 'categorias.length:', categorias.length); return null; })()}
           {dataLoading ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.15 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
-            >
-              {[1, 2, 3].map((i) => (
-                <div key={i}>
-                  <Skeleton height="24px" width="180px" variant="rect" style={{ marginBottom: '0.5rem' }} />
-                  <Skeleton height="160px" variant="rect" />
-                </div>
-              ))}
-            </motion.div>
+            <TableSkeleton
+              columns={['Nombre', 'Duración', 'Precio', 'Costo base insumos', 'Categoría', 'Estado', 'Creado', 'Modificado', 'Acción']}
+              rows={5}
+            />
           ) : dataError ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
