@@ -50,6 +50,15 @@ export const createRegistroSchema = z.object({
 
 export type CreateRegistroInput = z.infer<typeof createRegistroSchema>;
 
+// ── Completar cita (atómico) ─────────────────────────────────
+
+export const completarCitaSchema = z.object({
+  // registro es opcional → sin body conserva el comportamiento legacy
+  registro: createRegistroSchema.optional(),
+});
+
+export type CompletarCitaInput = z.infer<typeof completarCitaSchema>;
+
 // ── Gasto ────────────────────────────────────────────────────
 
 export const createGastoSchema = z.object({
