@@ -11,6 +11,7 @@ import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
+import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import styles from './AgendaPage.module.css';
 
 /* ── Types ── */
@@ -246,6 +247,7 @@ const AgendaPage: React.FC = () => {
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [servicioSearch, setServicioSearch] = useState('');
 
   /* ── Detail modal state ── */
@@ -253,6 +255,7 @@ const AgendaPage: React.FC = () => {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelMotivo, setCancelMotivo] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   /* ── Completar modal state ── */
   const [showCompletar, setShowCompletar] = useState(false);
@@ -473,12 +476,14 @@ const AgendaPage: React.FC = () => {
     });
     setAvailableSlots([]);
     setServicioSearch('');
+    setCreateError(null);
   };
 
   /* ── Create appointment ── */
   const handleCreate = async () => {
     if (!salonId) return;
     setCreating(true);
+    setCreateError(null);
     try {
       await api.post(`/salones/${salonId}/agenda/citas`, {
         clienteId: createForm.clienteId,
@@ -490,8 +495,11 @@ const AgendaPage: React.FC = () => {
       setShowCreate(false);
       resetCreateForm();
       fetchCitas();
-    } catch {
-      // error handled silently — could show toast in the future
+    } catch (err: unknown) {
+      // Muestra el error real del backend (ej. "Conflicto con cita existente")
+      setCreateError(
+        extractApiErrorMessage(err, 'Error al crear la cita. Verificá los datos e intentá de nuevo.'),
+      );
     } finally {
       setCreating(false);
     }
@@ -501,6 +509,7 @@ const AgendaPage: React.FC = () => {
   const handleChangeEstado = async (nuevoEstado: string, motivo?: string) => {
     if (!salonId || !selectedCita) return;
     setActionLoading(true);
+    setDetailError(null);
     try {
       await api.patch(
         `/salones/${salonId}/agenda/citas/${selectedCita.id}/estado`,
@@ -510,6 +519,11 @@ const AgendaPage: React.FC = () => {
       setShowCancelForm(false);
       setCancelMotivo('');
       fetchCitas();
+    } catch (err: unknown) {
+      // Muestra el error real del backend (ej. "Transición inválida: ...")
+      setDetailError(
+        extractApiErrorMessage(err, 'Error al cambiar el estado de la cita. Intentá de nuevo.'),
+      );
     } finally {
       setActionLoading(false);
     }
@@ -629,7 +643,10 @@ const AgendaPage: React.FC = () => {
         setCompletarError('No hay caja abierta. Abrí la caja primero para completar la cita.');
         dispatchCajaRefresh();
       } else {
-        setCompletarError('Error al completar la cita. Intentá de nuevo.');
+        // Muestra el error real del backend (ej. "Transición inválida: de PENDIENTE a COMPLETADA")
+        setCompletarError(
+          extractApiErrorMessage(err, 'Error al completar la cita. Intentá de nuevo.'),
+        );
       }
     } finally {
       setCompletando(false);
@@ -666,6 +683,7 @@ const AgendaPage: React.FC = () => {
   const handleCancelar = async () => {
     if (!salonId || !selectedCita || !cancelMotivo.trim()) return;
     setActionLoading(true);
+    setDetailError(null);
     try {
       await api.post(
         `/salones/${salonId}/agenda/citas/${selectedCita.id}/cancelar`,
@@ -675,6 +693,11 @@ const AgendaPage: React.FC = () => {
       setShowCancelForm(false);
       setCancelMotivo('');
       fetchCitas();
+    } catch (err: unknown) {
+      // Muestra el error real del backend (ej. la cita ya no puede cancelarse)
+      setDetailError(
+        extractApiErrorMessage(err, 'Error al cancelar la cita. Intentá de nuevo.'),
+      );
     } finally {
       setActionLoading(false);
     }
@@ -927,6 +950,7 @@ const AgendaPage: React.FC = () => {
                   setSelectedCita(c);
                   setShowCancelForm(false);
                   setCancelMotivo('');
+                  setDetailError(null);
                 }}
               />
             )}
@@ -956,6 +980,7 @@ const AgendaPage: React.FC = () => {
               resetCreateForm();
             }}
             onCreate={handleCreate}
+            createError={createError}
             servicioSearch={servicioSearch}
             setServicioSearch={setServicioSearch}
           />
@@ -970,10 +995,12 @@ const AgendaPage: React.FC = () => {
             showCancelForm={showCancelForm}
             cancelMotivo={cancelMotivo}
             actionLoading={actionLoading}
+            detailError={detailError}
             onClose={() => {
               setSelectedCita(null);
               setShowCancelForm(false);
               setCancelMotivo('');
+              setDetailError(null);
             }}
             onChangeEstado={handleChangeEstado}
             onCompletar={handleAbrirCompletar}
@@ -1351,6 +1378,7 @@ interface CreateModalProps {
   totalDuration: number;
   totalPrice: number;
   creating: boolean;
+  createError: string | null;
   onCancel: () => void;
   onCreate: () => void;
   servicioSearch: string;
@@ -1377,6 +1405,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
   totalDuration,
   totalPrice,
   creating,
+  createError,
   onCancel,
   onCreate,
   servicioSearch,
@@ -1957,6 +1986,26 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
           )}
         </div>
 
+        {/* ── Error de creación (mensaje real del backend) — el modal permanece abierto ── */}
+        {createError && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              background: 'rgba(224,85,106,0.12)',
+              borderBottom: '1px solid rgba(224,85,106,0.3)',
+              color: 'var(--danger)',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+            }}
+          >
+            ⚠️ {createError}
+          </div>
+        )}
+
         <div className={styles.modalFooter}>
           <Button variant="ghost" size="sm" onClick={onCancel}>
             Cancelar
@@ -1985,6 +2034,7 @@ interface DetailModalProps {
   showCancelForm: boolean;
   cancelMotivo: string;
   actionLoading: boolean;
+  detailError: string | null;
   onClose: () => void;
   onChangeEstado: (estado: string, motivo?: string) => Promise<void>;
   onCompletar: () => Promise<void>;
@@ -1998,6 +2048,7 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
   showCancelForm,
   cancelMotivo,
   actionLoading,
+  detailError,
   onClose,
   onChangeEstado,
   onCompletar,
@@ -2112,6 +2163,29 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
               <span className={styles.infoValue} style={{ color: 'var(--danger)' }}>
                 {cita.motivoCancelacion}
               </span>
+            </div>
+          )}
+
+          {/* ── Error de acción (mensaje real del backend) — el modal permanece abierto ── */}
+          {detailError && (
+            <div
+              role="alert"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem 1rem',
+                marginTop: '0.75rem',
+                background: 'rgba(224,85,106,0.12)',
+                border: '1px solid rgba(224,85,106,0.3)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--danger)',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+              }}
+            >
+              ⚠️ {detailError}
             </div>
           )}
 
