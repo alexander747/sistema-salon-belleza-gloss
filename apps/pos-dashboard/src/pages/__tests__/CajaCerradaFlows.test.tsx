@@ -106,7 +106,7 @@ describe('AgendaPage — completar cita con caja cerrada (regla de oro)', () => 
     window.removeEventListener('caja-refresh', refreshSpy as EventListener);
   });
 
-  it('POST /registros con CAJA_CERRADA → mensaje en el modal, NO completa la cita y refresca el banner', async () => {
+  it('POST único /completar con CAJA_CERRADA → mensaje en el modal, NO completa la cita y refresca el banner', async () => {
     render(
       <MemoryRouter>
         <AgendaPage />
@@ -125,8 +125,13 @@ describe('AgendaPage — completar cita con caja cerrada (regla de oro)', () => 
     expect(await screen.findByText(/no hay caja abierta\. abrí la caja primero para completar la cita/i)).toBeInTheDocument();
     // El modal permanece abierto
     expect(screen.getByRole('button', { name: 'Confirmar y Registrar' })).toBeInTheDocument();
-    // La cita NO se completó (el POST /completar nunca se disparó)
-    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/completar'))).toBe(false);
+    // UNA sola llamada atómica: el registro viaja anidado en el POST /completar
+    // (ya no hay POST /registros separado — el backend persiste ambos en una transacción)
+    const completarCall = mockPost.mock.calls.find(([url]) => String(url).includes('/completar'));
+    expect(completarCall).toBeDefined();
+    expect(mockPost.mock.calls.some(([url]) => String(url).includes('/registros'))).toBe(false);
+    const [, body] = completarCall as [string, { registro?: { clienteId?: number } }];
+    expect(body.registro?.clienteId).toBe(1);
     // Se refrescó el banner de caja
     expect(refreshSpy).toHaveBeenCalled();
   });

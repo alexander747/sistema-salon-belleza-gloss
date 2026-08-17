@@ -537,7 +537,7 @@ const AgendaPage: React.FC = () => {
     setShowCompletar(true);
   };
 
-  /* ── Confirmar completar (POST registro + completar cita) ── */
+  /* ── Confirmar completar (POST atómico: registro + cita en una transacción) ── */
   const handleConfirmarCompletar = async () => {
     if (!salonId || !selectedCita) return;
     setCompletando(true);
@@ -576,48 +576,49 @@ const AgendaPage: React.FC = () => {
         notas = `${prefix}\n${notas}`;
       }
 
-      // 1. Create registro financiero
-      await api.post(`/salones/${salonId}/registros`, {
-        salonId,
-        clienteId: selectedCita.cliente.id,
-        usuarioId: selectedCita.empleada.id,
-        totalServicios: totalServiciosFinal,
-        totalProductos,
-        propina: completarForm.propina,
-        montoTotal: finalTotal,
-        pagos: [{ monto: finalTotal, metodoPago: completarForm.metodoPago }],
-        serviciosIds: [...selectedCita.servicios.map(s => s.id), ...completarForm.nuevosServiciosIds],
-        serviciosItems: [
-          ...selectedCita.servicios.map(s => ({
-            servicioId: s.id,
-            nombreServicio: s.nombre,
-            precioServicio: completarForm.serviciosPrecios[s.id] ?? s.precio,
-            costoBaseInsumos: s.costoBaseInsumos ?? 0,
-          })),
-          ...servicios
-            .filter(s => completarForm.nuevosServiciosIds.includes(s.id))
-            .map(s => ({
+      // 1. Crear registro financiero Y completar la cita en UNA sola llamada
+      //    atómica (el backend persiste ambos en una transacción; si falla,
+      //    no queda nada a medias y el reintento no duplica registros).
+      await api.post(`/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`, {
+        registro: {
+          salonId,
+          clienteId: selectedCita.cliente.id,
+          usuarioId: selectedCita.empleada.id,
+          totalServicios: totalServiciosFinal,
+          totalProductos,
+          propina: completarForm.propina,
+          montoTotal: finalTotal,
+          pagos: [{ monto: finalTotal, metodoPago: completarForm.metodoPago }],
+          serviciosIds: [...selectedCita.servicios.map(s => s.id), ...completarForm.nuevosServiciosIds],
+          serviciosItems: [
+            ...selectedCita.servicios.map(s => ({
               servicioId: s.id,
               nombreServicio: s.nombre,
-              precioServicio: s.precioBase ?? 0,
+              precioServicio: completarForm.serviciosPrecios[s.id] ?? s.precio,
               costoBaseInsumos: s.costoBaseInsumos ?? 0,
             })),
-        ],
-        notas,
-        registradoPorId: user?.id,
-        productosVendidos: completarForm.productosVendidos.map(p => ({
-          productoId: p.productoId,
-          cantidad: p.cantidad,
-        })),
-        // Price adjustment fields
-        porcentajeDescuento: descuentoPct,
-        precioAjustado: hasAdjustment,
-        valorOriginal: totalServiciosFinal + totalProductos + completarForm.propina,
-        valorFinal: finalTotal,
+            ...servicios
+              .filter(s => completarForm.nuevosServiciosIds.includes(s.id))
+              .map(s => ({
+                servicioId: s.id,
+                nombreServicio: s.nombre,
+                precioServicio: s.precioBase ?? 0,
+                costoBaseInsumos: s.costoBaseInsumos ?? 0,
+              })),
+          ],
+          notas,
+          registradoPorId: user?.id,
+          productosVendidos: completarForm.productosVendidos.map(p => ({
+            productoId: p.productoId,
+            cantidad: p.cantidad,
+          })),
+          // Price adjustment fields
+          porcentajeDescuento: descuentoPct,
+          precioAjustado: hasAdjustment,
+          valorOriginal: totalServiciosFinal + totalProductos + completarForm.propina,
+          valorFinal: finalTotal,
+        },
       });
-
-      // 2. Mark cita as completed
-      await api.post(`/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`);
 
       setShowCompletar(false);
       setSelectedCita(null);
