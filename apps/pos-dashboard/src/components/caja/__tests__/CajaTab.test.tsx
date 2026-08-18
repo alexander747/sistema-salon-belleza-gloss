@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { Rol, type IUser } from '@pos-final/types';
+import { setMobileMedia } from '../../../test/setMobileMedia';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -602,5 +603,26 @@ describe('CajaTab', () => {
 
     const modal = await screen.findByTestId('detalle-cierre-modal');
     expect(await within(modal).findByText(/no se pudo cargar/i)).toBeInTheDocument();
+  });
+});
+
+describe('CajaTab — móvil (modales bottom-sheet, D10)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    setMobileMedia(true);
+  });
+
+  it('el modal de abrir caja usa las clases bottom-sheet en móvil (D10)', async () => {
+    defaultApiMock();
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir' }));
+
+    const overlay = await waitFor(() => document.querySelector('.mobileBottomSheet'));
+    const panel = document.querySelector('.mobileBottomSheetContent');
+    expect(overlay).not.toBeNull();
+    expect(panel).not.toBeNull();
   });
 });

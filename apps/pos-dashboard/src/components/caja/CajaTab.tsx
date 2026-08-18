@@ -602,8 +602,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
       {/* ── Modal Abrir ── */}
       <AnimatePresence>
         {abrirOpen && (
-          <motion.div style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setAbrirOpen(false); }}>
+          <motion.div className="mobileBottomSheet" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setAbrirOpen(false); }}>
             <motion.div
+              className="mobileBottomSheetContent"
               style={modalStyle}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -642,8 +643,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
       {/* ── Modal Cerrar (arqueo) ── */}
       <AnimatePresence>
         {cerrarOpen && (
-          <motion.div style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setCerrarOpen(false); }}>
+          <motion.div className="mobileBottomSheet" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setCerrarOpen(false); }}>
             <motion.div
+              className="mobileBottomSheetContent"
               style={modalStyle}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -726,8 +728,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
       {/* ── Modal Reporte de Cierre ── */}
       <AnimatePresence>
         {reporte && (
-          <motion.div data-testid="reporte-cierre-modal" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setReporte(null); }}>
+          <motion.div data-testid="reporte-cierre-modal" className="mobileBottomSheet" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setReporte(null); }}>
             <motion.div
+              className="mobileBottomSheetContent"
               style={{ ...modalStyle, maxWidth: 640 }}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -806,8 +809,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
       {/* ── Modal Detalle de Cierre (historial) ── */}
       <AnimatePresence>
         {detalleOpen && (
-          <motion.div data-testid="detalle-cierre-modal" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setDetalleOpen(false); }}>
+          <motion.div data-testid="detalle-cierre-modal" className="mobileBottomSheet" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setDetalleOpen(false); }}>
             <motion.div
+              className="mobileBottomSheetContent"
               style={{ ...modalStyle, maxWidth: 640 }}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
