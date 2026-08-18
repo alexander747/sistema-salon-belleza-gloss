@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import LoginPage from './pages/LoginPage.js';
 import DashboardPage from './pages/DashboardPage.js';
@@ -16,6 +16,7 @@ import HorariosPage from './pages/HorariosPage.js';
 import ProtectedRoute from './components/ProtectedRoute.js';
 import LuxeLayout from './components/LuxeLayout.js';
 import api from './services/api.js';
+import { resolveRouteGuard } from './utils/roles.js';
 
 /* ── Types ── */
 
@@ -42,6 +43,7 @@ interface UserWithSalon {
 
 const ProtectedLayout: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<UserWithSalon | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,6 +54,16 @@ const ProtectedLayout: React.FC = () => {
       .catch(() => navigate('/login'))
       .finally(() => setLoading(false));
   }, [navigate]);
+
+  // Route guard por rol: un rol sin permiso para la página actual es
+  // redirigido al Dashboard (matriz en src/utils/roles.ts).
+  useEffect(() => {
+    if (loading || !user) return;
+    const target = resolveRouteGuard(user.rol, location.pathname);
+    if (target) {
+      navigate(target, { replace: true });
+    }
+  }, [user, loading, location.pathname, navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');

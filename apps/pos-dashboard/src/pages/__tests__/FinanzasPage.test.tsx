@@ -1041,3 +1041,69 @@ describe('FinanzasPage — errores de mutación visibles en la UI', () => {
     expect(await screen.findByText(/El gasto ya fue conciliado y no se puede eliminar/)).toBeInTheDocument();
   }, 20000);
 });
+
+describe('FinanzasPage — tabs filtrados por rol', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+  });
+
+  function rolApiMock(user: IUser) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: user });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  it('RECEPCIONISTA: ve solo los tabs Registros y Caja (sin Nómina/Cuentas/Reportes/Gastos)', async () => {
+    rolApiMock({ ...duena, id: 5, rol: Rol.RECEPCIONISTA });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '💰 Caja' })).toBeInTheDocument();
+
+    expect(screen.queryByRole('button', { name: '👩‍💼 Nómina' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '📊 Reportes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '💳 Cuentas' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '💸 Gastos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '↩️ Devoluciones' })).not.toBeInTheDocument();
+  });
+
+  it('CONTADOR: ve todos los tabs excepto Caja', async () => {
+    rolApiMock({ ...duena, id: 6, rol: Rol.CONTADOR });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '👩‍💼 Nómina' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '📊 Reportes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '💳 Cuentas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '💸 Gastos' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '↩️ Devoluciones' })).toBeInTheDocument();
+
+    expect(screen.queryByRole('button', { name: '💰 Caja' })).not.toBeInTheDocument();
+  });
+
+  it('MANICURISTA sin acceso directo (rol aislado): no rompe — el guard de rutas la bloquea antes', async () => {
+    rolApiMock({ ...duena, id: 4, rol: Rol.MANICURISTA });
+
+    renderPage();
+
+    // Comportamiento defensivo: si entra igual, ve al menos el tab por defecto
+    expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+  });
+});

@@ -223,6 +223,23 @@ function puedeVerCuentas(user: IUser | null | undefined): boolean {
   return !!user && ROLES_CUENTAS.includes(user.rol);
 }
 
+/**
+ * Acceso por tab según rol:
+ * - RECEPCIONISTA: solo Registros y Caja (front desk; sin nómina/cuentas/reportes/gastos).
+ * - CONTADOR: todos salvo Caja (la caja es operativa, no contable).
+ * - ADMIN/DUEÑA/SUPERADMIN: todos (Cuentas adicionalmente gated por puedeVerCuentas).
+ */
+function puedeVerTab(user: IUser | null | undefined, tabKey: TabKey): boolean {
+  if (!user) return false;
+  if (user.rol === Rol.RECEPCIONISTA) {
+    return tabKey === 'registros' || tabKey === 'caja';
+  }
+  if (user.rol === Rol.CONTADOR) {
+    return tabKey !== 'caja';
+  }
+  return tabKey !== 'cuentas' || puedeVerCuentas(user);
+}
+
 const CUENTAS_PAGE_SIZE = 12;
 const CUENTAS_META_VACIO = { page: 1, limit: CUENTAS_PAGE_SIZE, total: 0, totalPages: 0 };
 
@@ -445,6 +462,13 @@ const FinanzasPage: React.FC = () => {
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState<TabKey>(tabParam === 'caja' ? 'caja' : 'registros');
 
+  // Si el rol no puede ver el tab activo (p.ej. ?tab=caja para CONTADOR), cae a Registros
+  useEffect(() => {
+    if (!authLoading && user && !puedeVerTab(user, activeTab)) {
+      setActiveTab('registros');
+    }
+  }, [authLoading, user, activeTab]);
+
   const salonId = useMemo(() => {
     if (!user) return null;
     const stored = localStorage.getItem('xSalonId');
@@ -490,7 +514,7 @@ const FinanzasPage: React.FC = () => {
 
       {/* ── Tab Navigation ── */}
       <div className={styles.tabsRow}>
-        {TABS.filter((tab) => tab.key !== 'cuentas' || puedeVerCuentas(user)).map((tab) => (
+        {TABS.filter((tab) => puedeVerTab(user, tab.key)).map((tab) => (
           <button
             key={tab.key}
             className={`${styles.tabBtn} ${activeTab === tab.key ? styles.tabActive : ''}`}
@@ -503,7 +527,7 @@ const FinanzasPage: React.FC = () => {
 
       <AnimatePresence mode="wait">
         {/* ── Tab Content ── */}
-        {activeTab === 'registros' && (
+        {activeTab === 'registros' && puedeVerTab(user, 'registros') && (
           <RegistrosTab
             key="registros"
             salonId={salonId}
@@ -511,22 +535,22 @@ const FinanzasPage: React.FC = () => {
             onNavigateToCaja={() => setActiveTab('caja')}
           />
         )}
-        {activeTab === 'gastos' && (
+        {activeTab === 'gastos' && puedeVerTab(user, 'gastos') && (
           <GastosTab key="gastos" salonId={salonId} />
         )}
-        {activeTab === 'devoluciones' && (
+        {activeTab === 'devoluciones' && puedeVerTab(user, 'devoluciones') && (
           <DevolucionesTab key="devoluciones" salonId={salonId} />
         )}
-        {activeTab === 'nomina' && (
+        {activeTab === 'nomina' && puedeVerTab(user, 'nomina') && (
           <NominaTab key="nomina" salonId={salonId} />
         )}
-        {activeTab === 'reportes' && (
+        {activeTab === 'reportes' && puedeVerTab(user, 'reportes') && (
           <ReportesTab key="reportes" salonId={salonId} user={user} />
         )}
-        {activeTab === 'caja' && (
+        {activeTab === 'caja' && puedeVerTab(user, 'caja') && (
           <CajaTab key="caja" salonId={salonId} user={user} />
         )}
-        {activeTab === 'cuentas' && puedeVerCuentas(user) && (
+        {activeTab === 'cuentas' && puedeVerTab(user, 'cuentas') && (
           <CuentasTab key="cuentas" salonId={salonId} />
         )}
       </AnimatePresence>

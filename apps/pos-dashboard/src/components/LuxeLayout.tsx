@@ -39,6 +39,8 @@ import {
   AccessTime,
 } from '@mui/icons-material';
 import { useThemeMode } from '../context/ThemeContext';
+import { Rol } from '@pos-final/types';
+import { canAccessPage, rolLabel } from '../utils/roles';
 
 const DRAWER_WIDTH_EXPANDED = 260;
 const DRAWER_WIDTH_COLLAPSED = 72;
@@ -55,6 +57,7 @@ interface SalonInfo {
 interface LuxeLayoutProps {
   user?: {
     nombre?: string;
+    rol?: number;
     salon?: SalonInfo | null;
   } | null;
   onLogout: () => void;
@@ -75,6 +78,11 @@ const NAV_ITEMS = [
   { label: 'Horarios', href: '/horarios', icon: <AccessTime /> },
 ];
 
+/** Ítems de navegación visibles para el rol del usuario (matriz de roles). */
+function navItemsForRol(rol: number | null | undefined) {
+  return NAV_ITEMS.filter((item) => canAccessPage(rol, item.href));
+}
+
 const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -87,6 +95,8 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
 
   const drawerWidth = collapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED;
   const salonName = user?.salon?.nombre;
+  const roleLabel = rolLabel(user?.rol);
+  const visibleNavItems = navItemsForRol(user?.rol);
 
   /* ── Dynamic document title ── */
   useEffect(() => {
@@ -104,9 +114,7 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
   const getPageTitle = () => {
     const item = NAV_ITEMS.find((i) => i.href === location.pathname);
     return item ? item.label : 'Dashboard';
-  };
-
-  /* ── Helper to render a nav link with optional tooltip ── */
+  };  /* ── Helper to render a nav link with optional tooltip ── */
   const renderNavButton = (
     href: string,
     icon: React.ReactNode,
@@ -250,7 +258,7 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
 
         {/* Navigation */}
         <List sx={{ flex: 1, px: collapsed ? 0.5 : 1.5, pt: 1 }}>
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <ListItem key={item.href} disablePadding>
               {renderNavButton(item.href, item.icon, item.label)}
             </ListItem>
@@ -297,32 +305,34 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
 
         {/* Bottom actions */}
         <List sx={{ px: collapsed ? 0.5 : 1.5 }}>
-          <ListItem disablePadding>
-            <Tooltip title="Configuración" placement="right" arrow disableHoverListener={!collapsed}>
-              <ListItemButton
-                onClick={() => {}}
-                sx={{
-                  borderRadius: 3,
-                  mb: 0.5,
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  px: collapsed ? 1 : 2,
-                  minHeight: 44,
-                  color: 'text.secondary',
-                }}
-              >
-                <ListItemIcon
+          {user?.rol === Rol.SUPERADMIN && (
+            <ListItem disablePadding>
+              <Tooltip title="Configuración" placement="right" arrow disableHoverListener={!collapsed}>
+                <ListItemButton
+                  onClick={() => {}}
                   sx={{
-                    minWidth: collapsed ? 0 : 40,
-                    justifyContent: 'center',
+                    borderRadius: 3,
+                    mb: 0.5,
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    px: collapsed ? 1 : 2,
+                    minHeight: 44,
                     color: 'text.secondary',
                   }}
                 >
-                  <Settings />
-                </ListItemIcon>
-                {!collapsed && <ListItemText primary="Configuración" />}
-              </ListItemButton>
-            </Tooltip>
-          </ListItem>
+                  <ListItemIcon
+                    sx={{
+                      minWidth: collapsed ? 0 : 40,
+                      justifyContent: 'center',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    <Settings />
+                  </ListItemIcon>
+                  {!collapsed && <ListItemText primary="Configuración" />}
+                </ListItemButton>
+              </Tooltip>
+            </ListItem>
+          )}
           <ListItem disablePadding>
             <Tooltip title="Cerrar sesión" placement="right" arrow disableHoverListener={!collapsed}>
               <ListItemButton
@@ -396,10 +406,10 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 1 }}>
               <Box sx={{ textAlign: 'right' }}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {user?.nombre || 'Dueña'}
+                  {user?.nombre || roleLabel}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Dueña
+                  {roleLabel}
                 </Typography>
               </Box>
               <Avatar
