@@ -161,6 +161,9 @@ a:hover {
   .mobileBottomSheetContent {
     max-width: 100% !important;
     max-height: 92vh;
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    /* !important también aquí: los modales con estilos inline
+       (R3+ Servicios/Productos/Categorías) no ceden ante una clase
+       sin !important. Desktop intacto (regla dentro del MQ). */
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
   }
 }
