@@ -74,6 +74,10 @@ services:
       - /app/apps/api/node_modules
     environment:
       - NODE_ENV=development
+      # El contenedor corre en UTC por defecto; el navegador usa America/Bogota (UTC−5).
+      # Sin TZ, las fechas ISO generadas en el backend desplazan las citas 5h y el
+      # validador de solapamiento las rechaza ("Conflicto con cita existente").
+      - TZ=America/Bogota
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_USERNAME=posfinal
