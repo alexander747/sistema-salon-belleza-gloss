@@ -322,7 +322,6 @@ const DashboardPage: React.FC = () => {
     setDataError(null);
 
     const today = new Date();
-    const todayStr = toISODate(today);
     const monday = getMonday(today);
     const weekDays = getWeekDays(monday);
     const weekDesde = new Date(`${toISODate(weekDays[0])}T00:00:00`).toISOString();

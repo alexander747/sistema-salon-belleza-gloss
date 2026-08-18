@@ -205,8 +205,6 @@ function countMaxOverlap(citas: Cita[]): number {
   if (citas.length <= 1) return 1;
   let max = 1;
   for (let i = 0; i < citas.length; i++) {
-    const [ih, im] = citas[i].horaInicio.split(':').map(Number);
-    const istart = ih * 60 + im;
     const [ieh, iem] = citas[i].horaFin.split(':').map(Number);
     const iend = ieh * 60 + iem;
     let count = 1;
@@ -1462,7 +1460,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
     setCreatingCliente(true);
     setCreateClienteError('');
     try {
-      const { data, status } = await api.post(`/salones/${salonId}/clientes`, {
+      const { data } = await api.post(`/salones/${salonId}/clientes`, {
         nombre: newClienteForm.nombre.trim(),
         telefono: newClienteForm.telefono.trim(),
         cedula: newClienteForm.cedula.trim() || undefined,

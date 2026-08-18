@@ -323,20 +323,6 @@ const ServiciosPage: React.FC = () => {
     }
   };
 
-  /* ── Toggle active ── */
-  const handleToggleActive = async (svc: Servicio) => {
-    if (!salonId) return;
-    setActionError(null);
-    try {
-      await api.put(`/salones/${salonId}/servicios/${svc.id}`, {
-        activo: !svc.activo,
-      });
-      fetchData();
-    } catch {
-      setActionError('Error al cambiar estado del servicio. Intentá de nuevo.');
-    }
-  };
-
   /* ── Delete ── */
   const handleDelete = async () => {
     if (!salonId || !deleting) return;
