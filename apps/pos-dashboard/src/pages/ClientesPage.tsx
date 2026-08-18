@@ -38,7 +38,7 @@ interface PaginationMeta {
   totalPages: number;
 }
 
-type ModalMode = 'create' | 'edit' | 'detail' | 'delete' | null;
+type ModalMode = 'create' | 'edit' | 'detail' | null;
 
 interface ClienteForm {
   nombre: string;
@@ -144,6 +144,7 @@ const ClientesPage: React.FC = () => {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [form, setForm] = useState<ClienteForm>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
   const salonId = useMemo(() => {
     if (!user) return null;
@@ -236,11 +237,6 @@ const ClientesPage: React.FC = () => {
     setModalMode('detail');
   };
 
-  const openDelete = (cliente: Cliente) => {
-    setSelectedCliente(cliente);
-    setModalMode('delete');
-  };
-
   const closeModal = () => {
     setModalMode(null);
     setSelectedCliente(null);
@@ -293,19 +289,25 @@ const ClientesPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!salonId || !selectedCliente) return;
-    setSubmitting(true);
+  /* ── Toggle activo (soft-delete) ── */
+  // Los clientes con historial no se eliminan: se desactivan (activo=false).
+  // No existe endpoint DELETE /clientes/:id a propósito — el toggle usa
+  // PATCH /clientes/:id/activar|desactivar.
+  const handleToggleActivo = async (cliente: Cliente) => {
+    if (!salonId || togglingId !== null) return;
+    setTogglingId(cliente.id);
     try {
-      await api.delete(
-        `/salones/${salonId}/clientes/${selectedCliente.id}`,
+      const endpoint = cliente.activo ? 'desactivar' : 'activar';
+      await api.patch(`/salones/${salonId}/clientes/${cliente.id}/${endpoint}`);
+      setClientes((prev) =>
+        prev.map((c) =>
+          c.id === cliente.id ? { ...c, activo: !c.activo } : c,
+        ),
       );
-      closeModal();
-      fetchClientes();
     } catch {
       // silent
     } finally {
-      setSubmitting(false);
+      setTogglingId(null);
     }
   };
 
@@ -413,7 +415,8 @@ const ClientesPage: React.FC = () => {
                 itemVariants={itemVariants}
                 onDetail={openDetail}
                 onEdit={openEdit}
-                onDelete={openDelete}
+                onToggleActivo={handleToggleActivo}
+                togglingId={togglingId}
               />
 
               {/* ── Pagination controls ── */}
@@ -466,18 +469,6 @@ const ClientesPage: React.FC = () => {
           <RenderDetailModal
             cliente={selectedCliente}
             onClose={closeModal}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Delete Confirmation ── */}
-      <AnimatePresence>
-        {modalMode === 'delete' && selectedCliente && (
-          <RenderDeleteModal
-            cliente={selectedCliente}
-            submitting={submitting}
-            onCancel={closeModal}
-            onConfirm={handleDelete}
           />
         )}
       </AnimatePresence>
@@ -570,7 +561,8 @@ interface RenderTableProps {
   itemVariants: typeof defaultVariants;
   onDetail: (c: Cliente) => void;
   onEdit: (c: Cliente) => void;
-  onDelete: (c: Cliente) => void;
+  onToggleActivo: (c: Cliente) => void;
+  togglingId: number | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -582,7 +574,8 @@ const RenderTable: React.FC<RenderTableProps> = ({
   itemVariants,
   onDetail,
   onEdit,
-  onDelete,
+  onToggleActivo,
+  togglingId,
 }) => (
   <motion.div
     className={styles.tableWrapper}
@@ -639,7 +632,7 @@ const RenderTable: React.FC<RenderTableProps> = ({
               {formatDate(cliente.fechaNacimiento)}
             </td>
             <td>
-              <div style={{ display: 'flex', gap: '0.15rem' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                 <button
                   className={styles.actionBtn}
                   onClick={() => onDetail(cliente)}
@@ -656,14 +649,19 @@ const RenderTable: React.FC<RenderTableProps> = ({
                 >
                   ✏️
                 </button>
-                <button
-                  className={`${styles.actionBtn} ${styles.actionBtnDelete}`}
-                  onClick={() => onDelete(cliente)}
-                  title="Eliminar"
-                  aria-label="Eliminar"
-                >
-                  🗑️
-                </button>
+                {/* Toggle Activo/Inactivo (soft-delete): los clientes con historial
+                    no se eliminan, se desactivan. */}
+                <div className={styles.toggleWrapper}>
+                  <button
+                    className={`${styles.toggle} ${cliente.activo ? styles.toggleActive : ''}`}
+                    onClick={() => onToggleActivo(cliente)}
+                    disabled={togglingId === cliente.id}
+                    aria-label={cliente.activo ? 'Desactivar cliente' : 'Activar cliente'}
+                    title={cliente.activo ? 'Desactivar (inactivo)' : 'Activar (activo)'}
+                  >
+                    <span className={styles.toggleKnob} />
+                  </button>
+                </div>
               </div>
             </td>
           </motion.tr>
@@ -976,100 +974,6 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
       <div className={styles.modalFooter}>
         <Button variant="ghost" size="sm" onClick={onClose}>
           Cerrar
-        </Button>
-      </div>
-    </motion.div>
-  </motion.div>
-);
-
-/* ================================================================ */
-/*  SUB-COMPONENT: Delete Confirmation Modal                           */
-/* ================================================================ */
-
-interface DeleteModalProps {
-  cliente: Cliente;
-  submitting: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}
-
-const RenderDeleteModal: React.FC<DeleteModalProps> = ({
-  cliente,
-  submitting,
-  onCancel,
-  onConfirm,
-}) => (
-  <motion.div
-    className={styles.modalOverlay}
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.2 }}
-    onClick={(e) => {
-      if (e.target === e.currentTarget) onCancel();
-    }}
-  >
-    <motion.div
-      className={styles.modalContent}
-      initial={{ opacity: 0, scale: 0.92, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 10 }}
-      transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className={styles.modalHeader}>
-        <span className={styles.modalTitle}>Eliminar cliente</span>
-        <button
-          className={styles.modalCloseBtn}
-          onClick={onCancel}
-          aria-label="Cerrar"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className={styles.modalBody}>
-        <p
-          style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: '0.875rem',
-            color: 'var(--text-primary)',
-            marginBottom: '0.5rem',
-          }}
-        >
-          ¿Estás segura de eliminar a{' '}
-          <strong>{cliente.nombre}</strong>?
-        </p>
-        <p
-          style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: '0.8125rem',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          Esta acción no se puede deshacer.
-        </p>
-
-        {cliente.visitas > 0 && (
-          <div className={styles.deleteWarning}>
-            ⚠️ Este cliente tiene {cliente.visitas}{' '}
-            {cliente.visitas === 1 ? 'visita registrada' : 'visitas registradas'}.{' '}
-            Se eliminará su registro pero las citas asociadas se conservarán.
-          </div>
-        )}
-      </div>
-
-      <div className={styles.modalFooter}>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button
-          variant="danger"
-          size="sm"
-          loading={submitting}
-          onClick={onConfirm}
-        >
-          Eliminar
         </Button>
       </div>
     </motion.div>

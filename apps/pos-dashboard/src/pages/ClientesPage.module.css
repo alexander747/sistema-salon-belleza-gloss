@@ -125,6 +125,51 @@
   color: var(--danger);
 }
 
+/* ── Toggle Activo/Inactivo (soft-delete) ── */
+.toggleWrapper {
+  display: inline-flex;
+  align-items: center;
+}
+
+.toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.toggle:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.toggleActive {
+  background: rgba(74, 222, 128, 0.2);
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggleActive .toggleKnob {
+  transform: translateX(16px);
+  background: #4ade80;
+}
+
 /* ── Visits badge ── */
 .visitsBadge {
   display: inline-block;

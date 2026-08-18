@@ -3,15 +3,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 
-const { mockGet, mockPost, mockPut, mockDelete } = vi.hoisted(() => ({
+const { mockGet, mockPost, mockPut, mockPatch } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPost: vi.fn(),
   mockPut: vi.fn(),
-  mockDelete: vi.fn(),
+  mockPatch: vi.fn(),
 }));
 
 vi.mock('../../services/api.js', () => ({
-  default: { get: mockGet, post: mockPost, put: mockPut, delete: mockDelete },
+  default: { get: mockGet, post: mockPost, put: mockPut, patch: mockPatch },
 }));
 
 import ClientesPage from '../ClientesPage';
@@ -75,7 +75,7 @@ describe('ClientesPage — listado y CRUD', () => {
     mockGet.mockReset();
     mockPost.mockReset();
     mockPut.mockReset();
-    mockDelete.mockReset();
+    mockPatch.mockReset();
   });
 
   it('lista los clientes con teléfono formateado, cédula y visitas desde la API', async () => {
@@ -177,24 +177,37 @@ describe('ClientesPage — listado y CRUD', () => {
     expect(screen.getByText('Cliente frecuente')).toBeInTheDocument(); // notas
   }, 20000);
 
-  it('eliminar cliente: confirmación con aviso de visitas y DELETE', async () => {
+  it('toggle activo: desactiva al cliente activo con PATCH /desactivar y actualiza el estado', async () => {
     defaultApiMock();
-    mockDelete.mockResolvedValue({ data: {} });
+    mockPatch.mockResolvedValue({ data: {} });
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }, WAIT));
-
-    expect(await screen.findByText('Eliminar cliente', {}, WAIT)).toBeInTheDocument();
-    // El cliente tiene 3 visitas → se avisa que el registro se elimina pero las citas se conservan
-    expect(screen.getByText(/tiene 3 visitas registradas/i)).toBeInTheDocument();
-
-    const eliminarButtons = screen.getAllByRole('button', { name: 'Eliminar' });
-    fireEvent.click(eliminarButtons[eliminarButtons.length - 1]);
+    // Ana está activa → toggle ON → desactivar (soft-delete, no DELETE)
+    fireEvent.click(await screen.findByRole('button', { name: 'Desactivar cliente' }, WAIT));
 
     await waitFor(() => {
-      expect(mockDelete).toHaveBeenCalledWith('/salones/1/clientes/1');
-    });
+      expect(mockPatch).toHaveBeenCalledWith('/salones/1/clientes/1/desactivar');
+    }, WAIT);
+    // El toggle refleja el nuevo estado (activo → inactivo)
+    expect(await screen.findByRole('button', { name: 'Activar cliente' }, WAIT)).toBeInTheDocument();
+    // NUNCA se llama a DELETE: no existe endpoint DELETE /clientes/:id
+    expect(mockGet.mock.calls.some(([url]) => String(url).includes('/clientes'))).toBe(true);
+  }, 20000);
+
+  it('toggle activo: activa al cliente inactivo con PATCH /activar', async () => {
+    defaultApiMock([{ ...cliente, activo: false }]);
+    mockPatch.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    // Ana inactiva → toggle OFF → activar
+    fireEvent.click(await screen.findByRole('button', { name: 'Activar cliente' }, WAIT));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith('/salones/1/clientes/1/activar');
+    }, WAIT);
+    expect(await screen.findByRole('button', { name: 'Desactivar cliente' }, WAIT)).toBeInTheDocument();
   }, 20000);
 
   it('muestra la paginación y navega a la página 2', async () => {
