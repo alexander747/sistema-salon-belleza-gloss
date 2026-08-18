@@ -11,6 +11,7 @@ import {
   type CajaDTO,
 } from './CajaBanner.js';
 import MoneyInput from '../MoneyInput.js';
+import PaginationBar from '../PaginationBar.js';
 
 /* ================================================================ */
 /*  TIPOS                                                            */
@@ -580,53 +581,22 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
         )}
 
         {/* ── Paginación ── */}
-        {cierresMeta.totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '0.9rem', alignItems: 'center' }}>
-            <button
-              disabled={cierresPage <= 1}
-              onClick={() => {
-                const next = cierresPage - 1;
-                setCierresPage(next);
-                fetchCierres(next);
-              }}
-              style={{
-                fontSize: '0.8125rem',
-                padding: '0.35rem 0.85rem',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-surface)',
-                color: 'var(--text-primary)',
-                cursor: cierresPage <= 1 ? 'not-allowed' : 'pointer',
-                opacity: cierresPage <= 1 ? 0.5 : 1,
-              }}
-            >
-              ← Anterior
-            </button>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-              Página {cierresMeta.page} de {cierresMeta.totalPages} ({cierresMeta.total} cierres)
-            </span>
-            <button
-              disabled={cierresPage >= cierresMeta.totalPages}
-              onClick={() => {
-                const next = cierresPage + 1;
-                setCierresPage(next);
-                fetchCierres(next);
-              }}
-              style={{
-                fontSize: '0.8125rem',
-                padding: '0.35rem 0.85rem',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-surface)',
-                color: 'var(--text-primary)',
-                cursor: cierresPage >= cierresMeta.totalPages ? 'not-allowed' : 'pointer',
-                opacity: cierresPage >= cierresMeta.totalPages ? 0.5 : 1,
-              }}
-            >
-              Siguiente →
-            </button>
-          </div>
-        )}
+        <PaginationBar
+          page={cierresPage}
+          totalPages={cierresMeta.totalPages}
+          total={cierresMeta.total}
+          label="cierres"
+          onPrev={() => {
+            const next = cierresPage - 1;
+            setCierresPage(next);
+            fetchCierres(next);
+          }}
+          onNext={() => {
+            const next = cierresPage + 1;
+            setCierresPage(next);
+            fetchCierres(next);
+          }}
+        />
       </div>
 
       {/* ── Modal Abrir ── */}

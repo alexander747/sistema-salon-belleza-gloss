@@ -11,6 +11,7 @@ import EmpleadaSearchableSelect from '../components/EmpleadaSearchableSelect.js'
 import CajaBanner from '../components/caja/CajaBanner.js';
 import CajaTab from '../components/caja/CajaTab.js';
 import MoneyInput from '../components/MoneyInput.js';
+import PaginationBar from '../components/PaginationBar.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './FinanzasPage.module.css';
 
@@ -1155,25 +1156,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
       )}
 
       {/* ── Pagination controls ── */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem', alignItems: 'center' }}>
-          <button
-            disabled={registroPage <= 1}
-            onClick={() => setRegistroPage((p) => p - 1)}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: registroPage <= 1 ? 'not-allowed' : 'pointer', opacity: registroPage <= 1 ? 0.5 : 1 }}
-          >
-            ← Anterior
-          </button>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-            Página {registroMeta.page} de {registroMeta.totalPages} ({registroMeta.total} registros)
-          </span>
-          <button
-            disabled={registroPage >= registroMeta.totalPages}
-            onClick={() => setRegistroPage((p) => p + 1)}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: registroPage >= registroMeta.totalPages ? 'not-allowed' : 'pointer', opacity: registroPage >= registroMeta.totalPages ? 0.5 : 1 }}
-          >
-            Siguiente →
-          </button>
-        </div>
+      <PaginationBar
+        page={registroPage}
+        totalPages={registroMeta.totalPages}
+        total={registroMeta.total}
+        label="registros"
+        onPrev={() => setRegistroPage((p) => p - 1)}
+        onNext={() => setRegistroPage((p) => p + 1)}
+      />
 
       {/* ── Detail Modal ── */}
       <AnimatePresence>
@@ -1821,27 +1811,14 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       )}
 
       {/* ── Pagination controls ── */}
-      {gastoMeta.totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem', alignItems: 'center' }}>
-          <button
-            disabled={gastoPage <= 1}
-            onClick={() => setGastoPage((p) => p - 1)}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: gastoPage <= 1 ? 'not-allowed' : 'pointer', opacity: gastoPage <= 1 ? 0.5 : 1 }}
-          >
-            ← Anterior
-          </button>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-            Página {gastoMeta.page} de {gastoMeta.totalPages} ({gastoMeta.total} registros)
-          </span>
-          <button
-            disabled={gastoPage >= gastoMeta.totalPages}
-            onClick={() => setGastoPage((p) => p + 1)}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: gastoPage >= gastoMeta.totalPages ? 'not-allowed' : 'pointer', opacity: gastoPage >= gastoMeta.totalPages ? 0.5 : 1 }}
-          >
-            Siguiente →
-          </button>
-        </div>
-      )}
+      <PaginationBar
+        page={gastoPage}
+        totalPages={gastoMeta.totalPages}
+        total={gastoMeta.total}
+        label="registros"
+        onPrev={() => setGastoPage((p) => p - 1)}
+        onNext={() => setGastoPage((p) => p + 1)}
+      />
 
       {/* ── Create Gasto Modal ── */}
       <AnimatePresence>
@@ -2183,27 +2160,14 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       )}
 
       {/* ── Pagination controls ── */}
-      {devolucionMeta.totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem', alignItems: 'center' }}>
-          <button
-            disabled={devolucionPage <= 1}
-            onClick={() => setDevolucionPage((p) => p - 1)}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: devolucionPage <= 1 ? 'not-allowed' : 'pointer', opacity: devolucionPage <= 1 ? 0.5 : 1 }}
-          >
-            ← Anterior
-          </button>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-            Página {devolucionMeta.page} de {devolucionMeta.totalPages} ({devolucionMeta.total} registros)
-          </span>
-          <button
-            disabled={devolucionPage >= devolucionMeta.totalPages}
-            onClick={() => setDevolucionPage((p) => p + 1)}
-            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.85rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: devolucionPage >= devolucionMeta.totalPages ? 'not-allowed' : 'pointer', opacity: devolucionPage >= devolucionMeta.totalPages ? 0.5 : 1 }}
-          >
-            Siguiente →
-          </button>
-        </div>
-      )}
+      <PaginationBar
+        page={devolucionPage}
+        totalPages={devolucionMeta.totalPages}
+        total={devolucionMeta.total}
+        label="registros"
+        onPrev={() => setDevolucionPage((p) => p - 1)}
+        onNext={() => setDevolucionPage((p) => p + 1)}
+      />
 
       {/* ── Create Devolución Modal ── */}
       <AnimatePresence>
@@ -3065,47 +3029,14 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
           )}
 
           {/* ── Pagination controls ── */}
-          {historialTotalPages > 1 && (
-            <div style={{
-              display: 'flex', justifyContent: 'center', gap: '0.5rem',
-              marginTop: '1rem', alignItems: 'center',
-            }}>
-              <button
-                disabled={historialPage <= 1}
-                onClick={() => setHistorialPage((p) => p - 1)}
-                style={{
-                  fontSize: '0.8125rem', padding: '0.35rem 0.85rem',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                  background: 'var(--bg-surface)', color: 'var(--text-primary)',
-                  cursor: historialPage <= 1 ? 'not-allowed' : 'pointer',
-                  opacity: historialPage <= 1 ? 0.5 : 1,
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                ← Anterior
-              </button>
-              <span style={{
-                fontSize: '0.8125rem', color: 'var(--text-secondary)',
-                fontFamily: "'DM Sans', sans-serif",
-              }}>
-                Página {historialPage} de {historialTotalPages} ({filteredHistorial.length} registros)
-              </span>
-              <button
-                disabled={historialPage >= historialTotalPages}
-                onClick={() => setHistorialPage((p) => p + 1)}
-                style={{
-                  fontSize: '0.8125rem', padding: '0.35rem 0.85rem',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                  background: 'var(--bg-surface)', color: 'var(--text-primary)',
-                  cursor: historialPage >= historialTotalPages ? 'not-allowed' : 'pointer',
-                  opacity: historialPage >= historialTotalPages ? 0.5 : 1,
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                Siguiente →
-              </button>
-            </div>
-          )}
+          <PaginationBar
+            page={historialPage}
+            totalPages={historialTotalPages}
+            total={filteredHistorial.length}
+            label="registros"
+            onPrev={() => setHistorialPage((p) => p - 1)}
+            onNext={() => setHistorialPage((p) => p + 1)}
+          />
         </>
       )}
 
@@ -4430,58 +4361,6 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
 /*  CUENTAS TAB                                                      */
 /* ================================================================ */
 
-interface CuentasPaginacionProps {
-  page: number;
-  meta: { page: number; limit: number; total: number; totalPages: number };
-  totalLabel: string;
-  onPrev: () => void;
-  onNext: () => void;
-}
-
-/** Controles de paginación del tab Cuentas (mismo patrón visual que CajaTab). */
-const CuentasPaginacion: React.FC<CuentasPaginacionProps> = ({ page, meta, totalLabel, onPrev, onNext }) => {
-  if (meta.totalPages <= 1) return null;
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '0.9rem', alignItems: 'center' }}>
-      <button
-        disabled={page <= 1}
-        onClick={onPrev}
-        style={{
-          fontSize: '0.8125rem',
-          padding: '0.35rem 0.85rem',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)',
-          background: 'var(--bg-surface)',
-          color: 'var(--text-primary)',
-          cursor: page <= 1 ? 'not-allowed' : 'pointer',
-          opacity: page <= 1 ? 0.5 : 1,
-        }}
-      >
-        ← Anterior
-      </button>
-      <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-        Página {meta.page} de {meta.totalPages} ({meta.total} {totalLabel})
-      </span>
-      <button
-        disabled={page >= meta.totalPages}
-        onClick={onNext}
-        style={{
-          fontSize: '0.8125rem',
-          padding: '0.35rem 0.85rem',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)',
-          background: 'var(--bg-surface)',
-          color: 'var(--text-primary)',
-          cursor: page >= meta.totalPages ? 'not-allowed' : 'pointer',
-          opacity: page >= meta.totalPages ? 0.5 : 1,
-        }}
-      >
-        Siguiente →
-      </button>
-    </div>
-  );
-};
-
 /** Badge de tipo de deuda en Por cobrar: CLIENTE (neutral) | PRESTAMO (ámbar). */
 const CuentaTipoBadge: React.FC<{ tipo: CuentaCobrar['tipo'] }> = ({ tipo }) => {
   const esPrestamo = tipo === 'PRESTAMO';
@@ -4687,10 +4566,11 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 </table>
               </div>
 
-              <CuentasPaginacion
+              <PaginationBar
                 page={cobrarPage}
-                meta={cobrarMeta}
-                totalLabel="deudas"
+                totalPages={cobrarMeta.totalPages}
+                total={cobrarMeta.total}
+                label="deudas"
                 onPrev={() => goCobrarPage(cobrarPage - 1)}
                 onNext={() => goCobrarPage(cobrarPage + 1)}
               />
@@ -4822,10 +4702,11 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 )}
               </div>
 
-              <CuentasPaginacion
+              <PaginationBar
                 page={pagarPage}
-                meta={pagarMeta}
-                totalLabel="empleadas"
+                totalPages={pagarMeta.totalPages}
+                total={pagarMeta.total}
+                label="empleadas"
                 onPrev={() => goPagarPage(pagarPage - 1)}
                 onNext={() => goPagarPage(pagarPage + 1)}
               />
