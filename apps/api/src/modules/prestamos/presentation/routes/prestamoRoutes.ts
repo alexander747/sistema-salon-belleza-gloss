@@ -12,12 +12,17 @@ const prestamoController = container.resolve(PrestamoController);
 
 // ── Préstamos ────────────────────────────────────────────────
 
-router.get('/prestamos', prestamoController.list);
+router.get(
+  '/prestamos',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
+  prestamoController.list,
+);
 
 // ── Préstamos por empleado (MUST be before :id) ─────────────
 
 router.get(
   '/prestamos/empleado/:usuarioId',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   prestamoController.prestamosPorEmpleado,
 );
 
@@ -28,7 +33,11 @@ router.post(
   prestamoController.create,
 );
 
-router.get('/prestamos/:id', prestamoController.get);
+router.get(
+  '/prestamos/:id',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
+  prestamoController.get,
+);
 
 router.put(
   '/prestamos/:id',

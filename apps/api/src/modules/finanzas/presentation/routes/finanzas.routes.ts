@@ -63,13 +63,21 @@ router.post(
 
 // ── Liquidación / Nómina ──────────────────────────────────────
 
-router.get('/finanzas/nomina', liquidacionController.nominaPendiente);
+router.get(
+  '/finanzas/nomina',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
+  liquidacionController.nominaPendiente,
+);
 router.post(
   '/finanzas/nomina/liquidar',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   liquidacionController.liquidarEmpleada,
 );
-router.get('/finanzas/nomina/historial', liquidacionController.historial);
+router.get(
+  '/finanzas/nomina/historial',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
+  liquidacionController.historial,
+);
 
 // ── Cuentas por cobrar / pagar (read-only, deuda sensible) ────
 
