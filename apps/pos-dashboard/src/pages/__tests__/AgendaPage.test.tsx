@@ -377,8 +377,10 @@ describe('AgendaPage — quick-add cliente en el modal de nueva cita (C3)', () =
       expect(clientesGets().length).toBeGreaterThan(antes);
     }, WAIT);
 
-    // El mini-modal se cierra (no queda abierto con error)
-    expect(screen.queryByText('Crear nuevo cliente')).not.toBeInTheDocument();
+    // El mini-modal se cierra (no queda abierto con error) — espera el re-render
+    await waitFor(() => {
+      expect(screen.queryByText('Crear nuevo cliente')).not.toBeInTheDocument();
+    }, WAIT);
   }, 20000);
 });
 
