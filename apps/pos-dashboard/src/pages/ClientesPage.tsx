@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './ClientesPage.module.css';
 
@@ -146,6 +147,10 @@ const ClientesPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
+  /* ── Mutation error state (errores del backend visibles en la UI) ── */
+  const [formError, setFormError] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
   const salonId = useMemo(() => {
     if (!user) return null;
     const stored = localStorage.getItem('xSalonId');
@@ -214,6 +219,7 @@ const ClientesPage: React.FC = () => {
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setSelectedCliente(null);
+    setFormError(null);
     setModalMode('create');
   };
 
@@ -229,6 +235,7 @@ const ClientesPage: React.FC = () => {
       notas: cliente.notas || '',
       preferencias: cliente.preferencias || '',
     });
+    setFormError(null);
     setModalMode('edit');
   };
 
@@ -241,6 +248,7 @@ const ClientesPage: React.FC = () => {
     setModalMode(null);
     setSelectedCliente(null);
     setForm(EMPTY_FORM);
+    setFormError(null);
   };
 
   /* ── CRUD handlers ── */
@@ -261,12 +269,13 @@ const ClientesPage: React.FC = () => {
   const handleCreate = async () => {
     if (!salonId) return;
     setSubmitting(true);
+    setFormError(null);
     try {
       await api.post(`/salones/${salonId}/clientes`, buildPayload());
       closeModal();
       fetchClientes();
-    } catch {
-      // silent — could show toast
+    } catch (err) {
+      setFormError(extractApiErrorMessage(err, 'Error al crear el cliente. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -275,6 +284,7 @@ const ClientesPage: React.FC = () => {
   const handleUpdate = async () => {
     if (!salonId || !selectedCliente) return;
     setSubmitting(true);
+    setFormError(null);
     try {
       await api.put(
         `/salones/${salonId}/clientes/${selectedCliente.id}`,
@@ -282,8 +292,8 @@ const ClientesPage: React.FC = () => {
       );
       closeModal();
       fetchClientes();
-    } catch {
-      // silent
+    } catch (err) {
+      setFormError(extractApiErrorMessage(err, 'Error al guardar los cambios. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -296,6 +306,7 @@ const ClientesPage: React.FC = () => {
   const handleToggleActivo = async (cliente: Cliente) => {
     if (!salonId || togglingId !== null) return;
     setTogglingId(cliente.id);
+    setToggleError(null);
     try {
       const endpoint = cliente.activo ? 'desactivar' : 'activar';
       await api.patch(`/salones/${salonId}/clientes/${cliente.id}/${endpoint}`);
@@ -304,8 +315,8 @@ const ClientesPage: React.FC = () => {
           c.id === cliente.id ? { ...c, activo: !c.activo } : c,
         ),
       );
-    } catch {
-      // silent
+    } catch (err) {
+      setToggleError(extractApiErrorMessage(err, 'Error al cambiar el estado del cliente.'));
     } finally {
       setTogglingId(null);
     }
@@ -394,6 +405,29 @@ const ClientesPage: React.FC = () => {
             </motion.div>
           </motion.div>
 
+          {/* ── Error de mutación (toggle activo) — visible junto a la acción ── */}
+          {toggleError && (
+            <div
+              role="alert"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem 1rem',
+                marginBottom: '1rem',
+                background: 'rgba(224,85,106,0.12)',
+                border: '1px solid rgba(224,85,106,0.3)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--danger)',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+              }}
+            >
+              ⚠️ {toggleError}
+            </div>
+          )}
+
           {/* ── Content ── */}
           {loading ? (
             <TableSkeleton
@@ -443,6 +477,7 @@ const ClientesPage: React.FC = () => {
             submitting={submitting}
             valid={isValidCreate}
             submitLabel="Crear cliente"
+            error={formError}
           />
         )}
       </AnimatePresence>
@@ -459,6 +494,7 @@ const ClientesPage: React.FC = () => {
             submitting={submitting}
             valid={isValidUpdate}
             submitLabel="Guardar cambios"
+            error={formError}
           />
         )}
       </AnimatePresence>
@@ -684,6 +720,8 @@ interface FormModalProps {
   submitting: boolean;
   valid: boolean;
   submitLabel: string;
+  /** Error de mutación (fallo del POST/PUT) — se muestra inline en el modal. */
+  error?: string | null;
 }
 
 const RenderFormModal: React.FC<FormModalProps> = ({
@@ -695,6 +733,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
   submitting,
   valid,
   submitLabel,
+  error,
 }) => (
   <motion.div
     className={styles.modalOverlay}
@@ -829,6 +868,27 @@ const RenderFormModal: React.FC<FormModalProps> = ({
           />
         </div>
       </div>
+
+      {/* ── Error de mutación (mensaje real del backend) — el modal permanece abierto ── */}
+      {error && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.75rem 1.5rem',
+            background: 'rgba(224,85,106,0.12)',
+            borderBottom: '1px solid rgba(224,85,106,0.3)',
+            color: 'var(--danger)',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+          }}
+        >
+          ⚠️ {error}
+        </div>
+      )}
 
       <div className={styles.modalFooter}>
         <Button variant="ghost" size="sm" onClick={onCancel}>

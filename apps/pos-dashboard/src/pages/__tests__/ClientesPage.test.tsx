@@ -235,4 +235,54 @@ describe('ClientesPage — listado y CRUD', () => {
     expect(await screen.findByText('No hay clientes registrados', {}, WAIT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Crear primer cliente' })).toBeInTheDocument();
   }, 20000);
+
+  it('crear cliente: muestra el error del backend inline cuando la API rechaza (modal queda abierto)', async () => {
+    defaultApiMock();
+    mockPost.mockRejectedValue({
+      response: { data: { error: { message: 'No hay caja abierta para el salón' } } },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo cliente' }, WAIT));
+
+    fireEvent.change(screen.getByPlaceholderText('Nombre completo'), {
+      target: { value: 'Lina Pérez' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Ej: 3128553060'), {
+      target: { value: '3001234567' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear cliente' }));
+
+    // El mensaje real del backend aparece en la UI y el modal NO se cierra
+    expect(await screen.findByText(/No hay caja abierta para el salón/, {}, WAIT)).toBeInTheDocument();
+    expect(screen.getByText('Nuevo cliente')).toBeInTheDocument();
+  }, 20000);
+
+  it('editar cliente: muestra el error inline cuando la API rechaza', async () => {
+    defaultApiMock();
+    mockPut.mockRejectedValue({ message: 'Error de red al guardar los cambios' });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(await screen.findByText(/Error de red al guardar los cambios/, {}, WAIT)).toBeInTheDocument();
+    // El modal de edición permanece abierto para corregir
+    expect(screen.getByText('Editar cliente')).toBeInTheDocument();
+  }, 20000);
+
+  it('toggle activo: muestra el error inline cuando la API rechaza', async () => {
+    defaultApiMock();
+    mockPatch.mockRejectedValue({
+      response: { data: { message: 'No se pudo cambiar el estado del cliente' } },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Desactivar cliente' }, WAIT));
+
+    expect(await screen.findByText(/No se pudo cambiar el estado del cliente/, {}, WAIT)).toBeInTheDocument();
+  }, 20000);
 });

@@ -165,6 +165,80 @@ describe('EmpleadasPage — esquema de pago (tipoPago)', () => {
   });
 });
 
+describe('EmpleadasPage — errores de mutación visibles en la UI', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockPatch.mockReset();
+  });
+
+  it('crear empleado: muestra el error del backend inline cuando la API rechaza', async () => {
+    defaultApiMock();
+    mockPost.mockRejectedValue({
+      response: { data: { error: { message: 'Ya existe una empleada con ese email' } } },
+    });
+
+    renderPage();
+    await openCreateModal();
+    fireEvent.click(screen.getByRole('button', { name: 'Crear empleado' }));
+
+    expect(await screen.findByText(/Ya existe una empleada con ese email/)).toBeInTheDocument();
+    // El modal permanece abierto para corregir
+    expect(screen.getByText('Nuevo empleado')).toBeInTheDocument();
+  }, 20000);
+
+  it('editar empleado: muestra el error inline cuando la API rechaza', async () => {
+    defaultApiMock([
+      {
+        id: 1,
+        nombre: 'Ana',
+        email: 'ana@test.com',
+        numeroWhatsApp: '3000000000',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: true,
+      },
+    ]);
+    mockPut.mockRejectedValue({ message: 'Error de red al guardar' });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByLabelText('Editar'));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(await screen.findByText(/Error de red al guardar/)).toBeInTheDocument();
+    expect(screen.getByText('Editar empleado')).toBeInTheDocument();
+  }, 20000);
+
+  it('toggle activo: muestra el error inline cuando la API rechaza', async () => {
+    defaultApiMock([
+      {
+        id: 1,
+        nombre: 'Ana',
+        email: 'ana@test.com',
+        numeroWhatsApp: '3000000000',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: true,
+      },
+    ]);
+    mockPatch.mockRejectedValue({
+      response: { data: { message: 'No se pudo cambiar el estado de la empleada' } },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Desactivar empleado' }));
+
+    expect(await screen.findByText(/No se pudo cambiar el estado de la empleada/)).toBeInTheDocument();
+  }, 20000);
+});
+
 describe('EmpleadasPage — frecuencia de pago', () => {
   beforeEach(() => {
     mockGet.mockReset();

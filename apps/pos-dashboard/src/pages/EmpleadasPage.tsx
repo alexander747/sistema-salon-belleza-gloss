@@ -8,6 +8,7 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import MoneyInput from '../components/MoneyInput.js';
+import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './EmpleadasPage.module.css';
 
@@ -164,6 +165,10 @@ const EmpleadasPage: React.FC = () => {
   const [form, setForm] = useState<EmpleadaForm>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
 
+  /* ── Mutation error state (errores del backend visibles en la UI) ── */
+  const [formError, setFormError] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
   /* ── Toggle loading state ── */
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
@@ -231,6 +236,7 @@ const EmpleadasPage: React.FC = () => {
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setSelectedEmpleada(null);
+    setFormError(null);
     setModalMode('create');
   };
 
@@ -255,6 +261,7 @@ const EmpleadasPage: React.FC = () => {
       frecuenciaPago: (empleada.frecuenciaPago ?? 'MENSUAL') as EmpleadaForm['frecuenciaPago'],
       fechaNacimiento: empleada.fechaNacimiento ? new Date(empleada.fechaNacimiento).toISOString().split('T')[0] : '',
     });
+    setFormError(null);
     setModalMode('edit');
   };
 
@@ -262,6 +269,7 @@ const EmpleadasPage: React.FC = () => {
     setModalMode(null);
     setSelectedEmpleada(null);
     setForm(EMPTY_FORM);
+    setFormError(null);
   };
 
   /* ── CRUD handlers ── */
@@ -289,12 +297,13 @@ const EmpleadasPage: React.FC = () => {
   const handleCreate = async () => {
     if (!salonId) return;
     setSubmitting(true);
+    setFormError(null);
     try {
       await api.post(`/salones/${salonId}/empleadas`, buildPayload());
       closeModal();
       fetchEmpleadas();
-    } catch {
-      // silent — could show toast
+    } catch (err) {
+      setFormError(extractApiErrorMessage(err, 'Error al crear la empleada. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -303,6 +312,7 @@ const EmpleadasPage: React.FC = () => {
   const handleUpdate = async () => {
     if (!salonId || !selectedEmpleada) return;
     setSubmitting(true);
+    setFormError(null);
     try {
       await api.put(
         `/salones/${salonId}/empleadas/${selectedEmpleada.id}`,
@@ -310,8 +320,8 @@ const EmpleadasPage: React.FC = () => {
       );
       closeModal();
       fetchEmpleadas();
-    } catch {
-      // silent
+    } catch (err) {
+      setFormError(extractApiErrorMessage(err, 'Error al guardar los cambios. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -321,6 +331,7 @@ const EmpleadasPage: React.FC = () => {
   const handleToggleActivo = async (empleada: Empleada) => {
     if (!salonId || togglingId !== null) return;
     setTogglingId(empleada.id);
+    setToggleError(null);
     try {
       const endpoint = empleada.activo ? 'desactivar' : 'activar';
       await api.patch(`/salones/${salonId}/empleadas/${empleada.id}/${endpoint}`);
@@ -329,8 +340,8 @@ const EmpleadasPage: React.FC = () => {
           e.id === empleada.id ? { ...e, activo: !e.activo } : e,
         ),
       );
-    } catch {
-      // silent
+    } catch (err) {
+      setToggleError(extractApiErrorMessage(err, 'Error al cambiar el estado de la empleada.'));
     } finally {
       setTogglingId(null);
     }
@@ -431,6 +442,29 @@ const EmpleadasPage: React.FC = () => {
             </motion.div>
           </motion.div>
 
+          {/* ── Error de mutación (toggle activo) — visible junto a la acción ── */}
+          {toggleError && (
+            <div
+              role="alert"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem 1rem',
+                marginBottom: '1rem',
+                background: 'rgba(224,85,106,0.12)',
+                border: '1px solid rgba(224,85,106,0.3)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--danger)',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+              }}
+            >
+              ⚠️ {toggleError}
+            </div>
+          )}
+
           {/* ── Content ── */}
           {loading ? (
             <TableSkeleton
@@ -475,6 +509,7 @@ const EmpleadasPage: React.FC = () => {
             valid={isCreateValid}
             submitLabel="Crear empleado"
             isEdit={false}
+            error={formError}
           />
         )}
       </AnimatePresence>
@@ -492,6 +527,7 @@ const EmpleadasPage: React.FC = () => {
             valid={isEditValid}
             submitLabel="Guardar cambios"
             isEdit={true}
+            error={formError}
           />
         )}
       </AnimatePresence>
@@ -712,6 +748,8 @@ interface FormModalProps {
   valid: boolean;
   submitLabel: string;
   isEdit: boolean;
+  /** Error de mutación (fallo del POST/PUT) — se muestra inline en el modal. */
+  error?: string | null;
 }
 
 const RenderFormModal: React.FC<FormModalProps> = ({
@@ -724,6 +762,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
   valid,
   submitLabel,
   isEdit,
+  error,
 }) => (
   <motion.div
     className={styles.modalOverlay}
@@ -944,6 +983,27 @@ const RenderFormModal: React.FC<FormModalProps> = ({
           />
         </div>
       </div>
+
+      {/* ── Error de mutación (mensaje real del backend) — el modal permanece abierto ── */}
+      {error && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.75rem 1.5rem',
+            background: 'rgba(224,85,106,0.12)',
+            borderBottom: '1px solid rgba(224,85,106,0.3)',
+            color: 'var(--danger)',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+          }}
+        >
+          ⚠️ {error}
+        </div>
+      )}
 
       <div className={styles.modalFooter}>
         <Button variant="ghost" size="sm" onClick={onCancel}>

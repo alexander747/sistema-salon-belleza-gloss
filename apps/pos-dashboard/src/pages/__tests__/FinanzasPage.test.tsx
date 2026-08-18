@@ -3,13 +3,14 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 
-const { mockGet, mockPost } = vi.hoisted(() => ({
+const { mockGet, mockPost, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPost: vi.fn(),
+  mockDelete: vi.fn(),
 }));
 
 vi.mock('../../services/api.js', () => ({
-  default: { get: mockGet, post: mockPost },
+  default: { get: mockGet, post: mockPost, delete: mockDelete },
 }));
 
 const { mockCreateObjectURL, mockRevokeObjectURL } = vi.hoisted(() => ({
@@ -88,6 +89,7 @@ describe('FinanzasPage — tab Caja', () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
+    mockDelete.mockReset();
   });
 
   it('agrega el tab "💰 Caja" a la navegación', async () => {
@@ -178,6 +180,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
+    mockDelete.mockReset();
   });
 
   async function openReportesTab(mockImpl: (url: string) => Promise<unknown>) {
@@ -516,6 +519,7 @@ describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
+    mockDelete.mockReset();
   });
 
   it('agrega el tab "💳 Cuentas" a la navegación para roles privilegiados', async () => {
@@ -716,6 +720,7 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
+    mockDelete.mockReset();
   });
 
   const nominaApiMock = (url: string): Promise<unknown> => {
@@ -766,6 +771,7 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
+    mockDelete.mockReset();
   });
 
   const pendienteSemanal: Record<string, unknown> = {
@@ -929,4 +935,109 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     expect(within(alerta).getByText(/#5/i)).toBeInTheDocument();
     expect(alerta).toHaveTextContent(/comp fijo podría pagarse nuevamente/i);
   });
+});
+
+describe('FinanzasPage — errores de mutación visibles en la UI', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+  });
+
+  function registroMock(registro: unknown) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({
+          data: { data: [registro], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+        });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  it('anular registro: muestra el error del backend inline cuando la API rechaza', async () => {
+    registroMock({
+      id: 42,
+      salonId: 1,
+      clienteId: 1,
+      usuarioId: 2,
+      totalServicios: 50000,
+      totalProductos: 0,
+      montoTotal: 50000,
+      montoPendiente: 0,
+      propina: 0,
+      comisionCalculada: 0,
+      esRetoque: false,
+      descripcionServicio: null,
+      estaPagadaEmpleada: false,
+      estado: 'ACTIVO',
+      creadoEn: '2026-08-01T12:00:00.000Z',
+      actualizadoEn: '2026-08-01T12:00:00.000Z',
+      pagos: [],
+      divisiones: [],
+      _clienteNombre: 'Ana Gómez',
+    });
+    mockDelete.mockRejectedValue({
+      response: { data: { error: { message: 'No se puede anular este registro' } } },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Anular' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sí, anular' }));
+
+    expect(await screen.findByText(/No se puede anular este registro/)).toBeInTheDocument();
+    // El modal de confirmación permanece abierto
+    expect(screen.getByText('Anular registro')).toBeInTheDocument();
+  }, 20000);
+
+  it('borrar gasto: muestra el error inline cuando la API rechaza', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/gastos')) {
+        return Promise.resolve({
+          data: {
+            data: [{ id: 7, descripcion: 'Arriendo local', monto: 200000, categoria: 'ARRIENDO', fecha: '2026-08-05T12:00:00.000Z', metodoPago: 'TRANSFERENCIA', esGastoFijo: true }],
+            meta: { page: 1, limit: 12, total: 1, totalPages: 1 },
+          },
+        });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    });
+    mockDelete.mockRejectedValue({
+      response: { data: { message: 'El gasto ya fue conciliado y no se puede eliminar' } },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '💸 Gastos' }));
+    // La fila del gasto tiene un botón con aria-label "Eliminar"; abre el modal
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }));
+    // El modal de confirmación tiene su propio botón "Eliminar" (el 2º en el DOM)
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Eliminar' }))[1]);
+
+    expect(await screen.findByText(/El gasto ya fue conciliado y no se puede eliminar/)).toBeInTheDocument();
+  }, 20000);
 });

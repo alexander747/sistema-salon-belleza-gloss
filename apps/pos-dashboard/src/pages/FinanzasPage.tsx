@@ -13,6 +13,7 @@ import CajaTab from '../components/caja/CajaTab.js';
 import MoneyInput from '../components/MoneyInput.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './FinanzasPage.module.css';
 
@@ -553,6 +554,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   const [selectedRegistro, setSelectedRegistro] = useState<Registro | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
+  const [anularError, setAnularError] = useState<string | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -688,13 +690,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   const handleAnular = async () => {
     if (!salonId || !selectedRegistro) return;
     setSubmitting(true);
+    setAnularError(null);
     try {
       await api.delete(`/salones/${salonId}/registros/${selectedRegistro.id}`);
       setAnularOpen(false);
       setSelectedRegistro(null);
       fetchData();
-    } catch {
-      // silent
+    } catch (err) {
+      setAnularError(extractApiErrorMessage(err, 'Error al anular el registro. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -712,12 +715,14 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
 
   const openAnular = (r: Registro) => {
     setSelectedRegistro(r);
+    setAnularError(null);
     setAnularOpen(true);
   };
 
   const closeAnular = () => {
     setAnularOpen(false);
     setSelectedRegistro(null);
+    setAnularError(null);
   };
 
   const calcTotal = (r: Registro): number => {
@@ -1188,6 +1193,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
             submitting={submitting}
             onCancel={closeAnular}
             onConfirm={handleAnular}
+            error={anularError}
           />
         )}
       </AnimatePresence>
@@ -1558,9 +1564,11 @@ interface AnularConfirmProps {
   submitting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  /** Error del DELETE — se muestra inline y el modal permanece abierto. */
+  error?: string | null;
 }
 
-const RenderConfirmAnular: React.FC<AnularConfirmProps> = ({ registro, submitting, onCancel, onConfirm }) => (
+const RenderConfirmAnular: React.FC<AnularConfirmProps> = ({ registro, submitting, onCancel, onConfirm, error }) => (
   <motion.div
     className={styles.modalOverlay}
     initial={{ opacity: 0 }}
@@ -1600,6 +1608,27 @@ const RenderConfirmAnular: React.FC<AnularConfirmProps> = ({ registro, submittin
         )}
       </div>
 
+      {/* ── Error de anulación (mensaje real del backend) — el modal permanece abierto ── */}
+      {error && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.75rem 1.5rem',
+            background: 'rgba(224,85,106,0.12)',
+            borderBottom: '1px solid rgba(224,85,106,0.3)',
+            color: 'var(--danger)',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+          }}
+        >
+          ⚠️ {error}
+        </div>
+      )}
+
       <div className={styles.modalFooter}>
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancelar
@@ -1627,6 +1656,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedGasto, setSelectedGasto] = useState<Gasto | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -1669,6 +1699,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const openDelete = (g: Gasto) => {
     setSelectedGasto(g);
+    setDeleteError(null);
     setDeleteOpen(true);
   };
 
@@ -1695,13 +1726,14 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const handleDelete = async () => {
     if (!salonId || !selectedGasto) return;
     setSubmitting(true);
+    setDeleteError(null);
     try {
       await api.delete(`/salones/${salonId}/gastos/${selectedGasto.id}`);
       setDeleteOpen(false);
       setSelectedGasto(null);
       fetchGastos();
-    } catch {
-      // silent
+    } catch (err) {
+      setDeleteError(extractApiErrorMessage(err, 'Error al eliminar el gasto. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -1952,6 +1984,27 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   ⚠️ Monto: {formatCurrency(Number(selectedGasto.monto ?? 0))} — {GASTO_CATEGORIAS.find((c) => c.value === (selectedGasto.categoria ?? '').toUpperCase())?.label ?? selectedGasto.categoria ?? '—'}
                 </div>
               </div>
+
+              {/* ── Error de borrado (mensaje real del backend) — el modal permanece abierto ── */}
+              {deleteError && (
+                <div
+                  role="alert"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.75rem 1.5rem',
+                    background: 'rgba(224,85,106,0.12)',
+                    borderBottom: '1px solid rgba(224,85,106,0.3)',
+                    color: 'var(--danger)',
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  ⚠️ {deleteError}
+                </div>
+              )}
 
               <div className={styles.modalFooter}>
                 <Button variant="ghost" size="sm" onClick={() => { setDeleteOpen(false); setSelectedGasto(null); }}>Cancelar</Button>
