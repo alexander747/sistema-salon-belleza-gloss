@@ -94,9 +94,13 @@ export class CreateRegistroUseCase {
     );
 
     const totalPagado = (input.pagos ?? []).reduce((sum, p) => sum + p.monto, 0);
+    // montoPendiente se computa sobre el valor REAL cobrado (valorFinal, ya
+    // ajustado por descuento/precio personalizado), excluyendo la propina —
+    // misma semántica que la comisión. Con el bruto pre-descuento el cliente
+    // que paga el total descontado quedaría debiendo el descuento (deuda falsa).
     const montoPendiente = this.comisionService.calcularMontoPendiente(
-      input.totalServicios,
-      input.totalProductos,
+      valorFinal,
+      propina,
       totalPagado,
     );
 

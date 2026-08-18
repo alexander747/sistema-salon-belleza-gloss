@@ -65,26 +65,26 @@ describe('ComisionService', () => {
   });
 
   describe('calcularMontoPendiente', () => {
-    it('should calculate (50000+20000) - 40000 = 30000 (propina excluded)', () => {
-      const result = service.calcularMontoPendiente(50000, 20000, 40000);
-      expect(result).toBe(30000);
-    });
-
-    it('should return 0 when pagado exceeds total', () => {
-      const result = service.calcularMontoPendiente(30000, 10000, 50000);
+    it('should compute pendiente over the FINAL value actually charged: 90000 - 0 - 90000 = 0 (full payment of discounted total)', () => {
+      const result = service.calcularMontoPendiente(90000, 0, 90000);
       expect(result).toBe(0);
     });
 
-    it('should return 0 when fully paid', () => {
-      const result = service.calcularMontoPendiente(50000, 20000, 70000);
-      expect(result).toBe(0);
+    it('should compute pendiente over the FINAL value actually charged: 90000 - 0 - 50000 = 40000 (partial payment of discounted total)', () => {
+      const result = service.calcularMontoPendiente(90000, 0, 50000);
+      expect(result).toBe(40000);
     });
 
-    it('should not include propina in the calculation', () => {
-      // Even if there's a propina (10000), montoPendiente only considers
-      // totalServicios + totalProductos - totalPagado
-      const result = service.calcularMontoPendiente(50000, 20000, 40000);
+    it('should exclude propina: valorFinal 80000 - propina 10000 - pagado 40000 = 30000', () => {
+      // Same business semantics as the legacy formula (servicios + productos - pagado):
+      // servicios + productos = 70000, propina = 10000 → 80000 - 10000 - 40000 = 30000
+      const result = service.calcularMontoPendiente(80000, 10000, 40000);
       expect(result).toBe(30000);
+    });
+
+    it('should return 0 when pagado exceeds the final value', () => {
+      const result = service.calcularMontoPendiente(50000, 0, 60000);
+      expect(result).toBe(0);
     });
   });
 

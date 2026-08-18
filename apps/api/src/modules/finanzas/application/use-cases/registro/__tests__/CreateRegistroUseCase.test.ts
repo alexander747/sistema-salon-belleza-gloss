@@ -212,7 +212,8 @@ describe('CreateRegistroUseCase', () => {
 
     expect(mockComisionService.calcularComision).toHaveBeenCalledWith(100000, 60, 0);
     expect(mockComisionService.calcularMontoTotal).toHaveBeenCalledWith(100000, 50000, 10000);
-    expect(mockComisionService.calcularMontoPendiente).toHaveBeenCalledWith(100000, 50000, 100000);
+    // montoPendiente se computa sobre el VALOR FINAL cobrado (montoTotal 160000), excluye propina
+    expect(mockComisionService.calcularMontoPendiente).toHaveBeenCalledWith(160000, 10000, 100000);
 
     expect(mockRegistroRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -461,6 +462,74 @@ describe('CreateRegistroUseCase', () => {
     // Should NOT have called repository for servicio items
     // (create and save may be called for other entities, but we verify cantidad)
     expect(mockSaved.serviciosItems).toEqual([]);
+  });
+
+  describe('montoPendiente sobre el valor real cobrado (descuento/precio ajustado)', () => {
+    const inputConDescuento = (montoPagado: number) => ({
+      ...validInput,
+      totalServicios: 100000,
+      totalProductos: 0,
+      propina: 0,
+      precioAjustado: true,
+      porcentajeDescuento: 10,
+      valorOriginal: 100000,
+      valorFinal: 90000,
+      pagos: [{ monto: montoPagado, metodoPago: 'EFECTIVO' as const }],
+    });
+
+    const mockSaved = {
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      usuarioId: 2,
+      totalServicios: 100000,
+      totalProductos: 0,
+      montoTotal: 100000,
+      propina: 0,
+      comisionCalculada: 45000,
+      esRetoque: false,
+      montoPendiente: 0,
+      estaPagadaEmpleada: false,
+      notas: null,
+      descripcionServicio: null,
+      pagos: [],
+      divisiones: [],
+      creadoEn: new Date(),
+      actualizadoEn: new Date(),
+    };
+
+    const setup = (montoPendienteMock: number) => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 5, deudaTotal: 0 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '50' });
+      mockComisionService.calcularComision.mockReturnValue(45000);
+      mockComisionService.calcularMontoTotal.mockReturnValue(100000);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(montoPendienteMock);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue(mockSaved);
+    };
+
+    it('should set montoPendiente=0 when the client pays the full DISCOUNTED total (90000/90000) — no false debt', async () => {
+      setup(0);
+      await useCase.execute(inputConDescuento(90000));
+
+      // El pendiente se calcula sobre valorFinal (90000), NO sobre el bruto pre-descuento (100000)
+      expect(mockComisionService.calcularMontoPendiente).toHaveBeenCalledWith(90000, 0, 90000);
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ montoPendiente: 0 }),
+        expect.anything(),
+      );
+    });
+
+    it('should set montoPendiente=40000 when the client pays only part of the DISCOUNTED total (50000/90000)', async () => {
+      setup(40000);
+      await useCase.execute(inputConDescuento(50000));
+
+      expect(mockComisionService.calcularMontoPendiente).toHaveBeenCalledWith(90000, 0, 50000);
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ montoPendiente: 40000 }),
+        expect.anything(),
+      );
+    });
   });
 
   describe('queryRunner externo (modo transacción compartida)', () => {

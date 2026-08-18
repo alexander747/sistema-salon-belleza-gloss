@@ -25,11 +25,14 @@ export class ComisionService {
   }
 
   /**
-   * Calcula el monto pendiente de pago.
+   * Calcula el monto pendiente de pago sobre el VALOR FINAL realmente cobrado
+   * (ya ajustado por descuento/precio personalizado), NO sobre los brutos
+   * pre-descuento — si no, un cliente que paga el total descontado quedaría
+   * debiendo el descuento (deuda falsa).
    * Propina NO incluida — el cliente paga servicios + productos.
    */
-  calcularMontoPendiente(totalServicios: number, totalProductos: number, totalPagado: number): number {
-    const pendiente = totalServicios + totalProductos - totalPagado;
+  calcularMontoPendiente(valorFinal: number, propina: number, totalPagado: number): number {
+    const pendiente = valorFinal - propina - totalPagado;
     return Number(Math.max(0, pendiente).toFixed(2));
   }
 
