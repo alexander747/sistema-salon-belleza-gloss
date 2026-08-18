@@ -102,11 +102,14 @@ const LoginPage: React.FC = () => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4, ease: [0.22, 0.61, 0.36, 1] as const }}
+        style={{ width: '100%' }}
       >
         <Paper
           elevation={8}
           sx={{
-            width: 400,
+            width: '100%',
+            maxWidth: 400,
+            mx: 'auto',
             position: 'relative',
             zIndex: 1,
             borderRadius: 3,
