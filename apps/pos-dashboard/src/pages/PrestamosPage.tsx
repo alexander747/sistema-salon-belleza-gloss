@@ -420,7 +420,7 @@ const PrestamosPage: React.FC = () => {
               ) : (
                 paginatedPrestamos.map((p) => (
                   <tr key={p.id} className={styles.tableRow}>
-                    <td>
+                    <td data-label="Deudor">
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                         <span style={{ fontWeight: 600 }}>
                           {p.nombreEmpleado ?? p.nombreTercero ?? '-'}
@@ -437,8 +437,8 @@ const PrestamosPage: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td>{formatCurrency(Number(p.monto))}</td>
-                    <td>
+                    <td data-label="Monto">{formatCurrency(Number(p.monto))}</td>
+                    <td data-label="Saldo pendiente">
                       <span
                         style={{
                           fontWeight: 600,
@@ -451,10 +451,10 @@ const PrestamosPage: React.FC = () => {
                         {formatCurrency(Number(p.saldoPendiente))}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Estado">
                       <span className={getEstadoBadgeClass(p.estado)}>{p.estado}</span>
                     </td>
-                    <td>
+                    <td data-label="Motivo">
                       <span
                         style={{
                           color: p.motivo ? 'var(--text-primary)' : 'var(--text-dim)',
@@ -464,14 +464,14 @@ const PrestamosPage: React.FC = () => {
                         {p.motivo || 'Sin motivo'}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Fecha">
                       {new Date(p.fechaCreacion).toLocaleDateString('es-CO', {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',
                       })}
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right' }} data-label="Acciones">
                       <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
                         <button
                           className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
@@ -513,14 +513,14 @@ const PrestamosPage: React.FC = () => {
       <AnimatePresence>
         {showCreateModal && (
           <motion.div
-            className={styles.modalOverlay}
+            className={`${styles.modalOverlay} mobileBottomSheet`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setShowCreateModal(false)}
           >
             <motion.div
-              className={`${styles.modalContent} ${styles.modalContentXl}`}
+              className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -667,7 +667,7 @@ const PrestamosPage: React.FC = () => {
       <AnimatePresence>
         {showPagosModal && selectedPrestamo && (
           <motion.div
-            className={styles.modalOverlay}
+            className={`${styles.modalOverlay} mobileBottomSheet`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -677,7 +677,7 @@ const PrestamosPage: React.FC = () => {
             }}
           >
             <motion.div
-              className={`${styles.modalContent} ${styles.modalContentWide}`}
+              className={`${styles.modalContent} ${styles.modalContentWide} mobileBottomSheetContent`}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
