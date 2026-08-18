@@ -31,6 +31,7 @@ vi.mock('../../../../../shared/database.js', () => ({
 }));
 
 import type { Request, Response } from 'express';
+import { Rol } from '@pos-final/types';
 import { RegistroController } from '../RegistroController';
 
 describe('RegistroController', () => {
@@ -60,7 +61,11 @@ describe('RegistroController', () => {
       const expected = [{ id: 1, totalServicios: 100000 }];
       mockListUseCase.execute.mockResolvedValue(expected);
 
-      const req = { salonId: 1, query: {} } as Request;
+      const req = {
+        salonId: 1,
+        query: {},
+        user: { id: 2, nombre: 'Dueña', email: 'd@test.com', rol: Rol.DUEÑA, salonId: 1 },
+      } as unknown as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
       await controller.list(req, res, next);
@@ -88,6 +93,7 @@ describe('RegistroController', () => {
           usuarioId: '3',
           clienteId: '7',
         },
+        user: { id: 2, nombre: 'Dueña', email: 'd@test.com', rol: Rol.DUEÑA, salonId: 1 },
       } as unknown as Request;
       const res = { json: vi.fn() } as unknown as Response;
 
