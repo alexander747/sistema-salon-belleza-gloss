@@ -8,19 +8,21 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// jsdom no implementa matchMedia — framer-motion lo necesita
+// jsdom no implementa matchMedia — framer-motion lo necesita y useMediaQuery (MUI) también.
+// Nota: debe ser una función plana (NO vi.fn()): vi.restoreAllMocks() resetea los mocks de
+// vitest tras cada test y dejaría matchMedia devolviendo undefined (MUI crashea leyendo .matches).
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
+  value: (query: string) => ({
     matches: false,
     media: query,
     onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
 });
 
 // ResizeObserver también lo usa framer-motion en algunos casos

@@ -16,7 +16,9 @@ import {
   Divider,
   CircularProgress,
   Tooltip,
+  useMediaQuery,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import {
   Dashboard as DashboardIcon,
   CalendarMonth,
@@ -35,6 +37,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AccessTime,
+  Menu as MenuIcon,
 } from '@mui/icons-material';
 import { useThemeMode } from '../context/ThemeContext';
 import { canAccessPage, rolLabel } from '../utils/roles';
@@ -61,7 +64,13 @@ interface LuxeLayoutProps {
   loading?: boolean;
 }
 
-const NAV_ITEMS = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ReactNode;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: <DashboardIcon /> },
   { label: 'Citas', href: '/agenda', icon: <CalendarMonth /> },
   { label: 'Clientes', href: '/clientes', icon: <Group /> },
@@ -80,49 +89,37 @@ function navItemsForRol(rol: number | null | undefined) {
   return NAV_ITEMS.filter((item) => canAccessPage(rol, item.href));
 }
 
-const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
-  const navigate = useNavigate();
+/* ── Contenido del sidebar (compartido entre drawer permanente y temporal) ── */
+
+interface SidebarContentProps {
+  collapsed: boolean;
+  salonName?: string;
+  visibleNavItems: NavItem[];
+  /** En móvil el bloque de usuario vive acá (el header queda limpio). */
+  showUser: boolean;
+  userName?: string;
+  roleLabel: string;
+  onNavigate: (href: string) => void;
+  onLogout: () => void;
+}
+
+const SidebarContent: React.FC<SidebarContentProps> = ({
+  collapsed,
+  salonName,
+  visibleNavItems,
+  showUser,
+  userName,
+  roleLabel,
+  onNavigate,
+  onLogout,
+}) => {
   const location = useLocation();
-  const { mode, toggleColorMode } = useThemeMode();
 
-  const [collapsed, setCollapsed] = useState(() => {
-    const stored = localStorage.getItem('sidebarCollapsed');
-    return stored === 'true';
-  });
-
-  const drawerWidth = collapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED;
-  const salonName = user?.salon?.nombre;
-  const roleLabel = rolLabel(user?.rol);
-  const visibleNavItems = navItemsForRol(user?.rol);
-
-  /* ── Dynamic document title ── */
-  useEffect(() => {
-    document.title = salonName ? `${salonName} | Dashboard` : 'Dashboard';
-  }, [salonName]);
-
-  const toggleSidebar = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem('sidebarCollapsed', String(next));
-      return next;
-    });
-  };
-
-  const getPageTitle = () => {
-    const item = NAV_ITEMS.find((i) => i.href === location.pathname);
-    return item ? item.label : 'Dashboard';
-  };  /* ── Helper to render a nav link with optional tooltip ── */
-  const renderNavButton = (
-    href: string,
-    icon: React.ReactNode,
-    label: string,
-    extraSx?: Record<string, unknown>,
-    extraIconSx?: Record<string, unknown>,
-  ) => {
-    const isActive = location.pathname === href;
+  const renderNavButton = (item: NavItem) => {
+    const isActive = location.pathname === item.href;
     const button = (
       <ListItemButton
-        onClick={() => navigate(href)}
+        onClick={() => onNavigate(item.href)}
         sx={{
           borderRadius: 3,
           mb: 0.5,
@@ -134,7 +131,6 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
           '&:hover': {
             bgcolor: isActive ? 'primary.dark' : 'action.hover',
           },
-          ...extraSx,
         }}
       >
         <ListItemIcon
@@ -142,14 +138,13 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
             color: isActive ? '#000' : 'text.secondary',
             minWidth: collapsed ? 0 : 40,
             justifyContent: 'center',
-            ...extraIconSx,
           }}
         >
-          {icon}
+          {item.icon}
         </ListItemIcon>
         {!collapsed && (
           <ListItemText
-            primary={label}
+            primary={item.label}
             slotProps={{
               primary: {
                 sx: {
@@ -165,12 +160,215 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
 
     if (collapsed) {
       return (
-        <Tooltip title={label} placement="right" arrow>
+        <Tooltip title={item.label} placement="right" arrow>
           {button}
         </Tooltip>
       );
     }
     return button;
+  };
+
+  return (
+    <>
+      {/* Logo / Salon name */}
+      <Box
+        sx={{
+          p: collapsed ? 1.5 : 2.5,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          gap: 1,
+          minHeight: 64,
+        }}
+      >
+        {collapsed ? (
+          <Typography
+            variant="h6"
+            sx={{
+              fontFamily: '"Playfair Display", serif',
+              color: 'primary.main',
+              fontWeight: 700,
+            }}
+          >
+            {salonName?.charAt(0)?.toUpperCase() || 'S'}
+          </Typography>
+        ) : (
+          <Typography
+            variant="h6"
+            sx={{
+              fontFamily: '"Playfair Display", serif',
+              color: 'primary.main',
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: 160,
+            }}
+          >
+            {salonName || 'Sistema'}
+          </Typography>
+        )}
+      </Box>
+      <Divider />
+
+      {/* Usuario (solo móvil: el header desktop lo muestra) */}
+      {showUser && (
+        <Box
+          sx={{
+            px: 2.5,
+            py: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Avatar sx={{ bgcolor: 'primary.main', color: '#000', fontWeight: 700 }}>
+            {userName?.charAt(0)?.toUpperCase() || 'D'}
+          </Avatar>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {userName || roleLabel}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {roleLabel}
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
+      {/* Navigation */}
+      <List sx={{ flex: 1, px: collapsed ? 0.5 : 1.5, pt: 1 }}>
+        {visibleNavItems.map((item) => (
+          <ListItem key={item.href} disablePadding>
+            {renderNavButton(item)}
+          </ListItem>
+        ))}
+      </List>
+
+      <Divider />
+
+      {/* New Appointment CTA */}
+      <Box sx={{ p: collapsed ? 1 : 2, display: 'flex', justifyContent: 'center' }}>
+        {collapsed ? (
+          <Tooltip title="Nueva Cita" placement="right" arrow>
+            <IconButton
+              onClick={() => onNavigate('/agenda')}
+              sx={{
+                bgcolor: 'primary.main',
+                color: '#000',
+                borderRadius: 2,
+                '&:hover': { bgcolor: 'primary.dark' },
+              }}
+            >
+              <AddCircle />
+            </IconButton>
+          </Tooltip>
+        ) : (
+          <ListItemButton
+            onClick={() => onNavigate('/agenda')}
+            sx={{
+              borderRadius: 3,
+              bgcolor: 'primary.main',
+              color: '#000',
+              justifyContent: 'center',
+              '&:hover': { bgcolor: 'primary.dark' },
+            }}
+          >
+            <AddCircle sx={{ mr: 1 }} />
+            <ListItemText
+              primary="Nueva Cita"
+              slotProps={{ primary: { sx: { fontWeight: 600 } } }}
+            />
+          </ListItemButton>
+        )}
+      </Box>
+
+      {/* Bottom actions */}
+      <List sx={{ px: collapsed ? 0.5 : 1.5 }}>
+        <ListItem disablePadding>
+          <Tooltip title="Cerrar sesión" placement="right" arrow disableHoverListener={!collapsed}>
+            <ListItemButton
+              onClick={onLogout}
+              sx={{
+                borderRadius: 3,
+                color: 'error.main',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                px: collapsed ? 1 : 2,
+                minHeight: 44,
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: collapsed ? 0 : 40,
+                  justifyContent: 'center',
+                  color: 'error.main',
+                }}
+              >
+                <Logout />
+              </ListItemIcon>
+              {!collapsed && <ListItemText primary="Cerrar sesión" />}
+            </ListItemButton>
+          </Tooltip>
+        </ListItem>
+      </List>
+    </>
+  );
+};
+
+/* ── Layout principal ── */
+
+const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { mode, toggleColorMode } = useThemeMode();
+
+  const [collapsed, setCollapsed] = useState(() => {
+    const stored = localStorage.getItem('sidebarCollapsed');
+    return stored === 'true';
+  });
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // El colapso es un concepto de desktop: en móvil el drawer siempre se abre expandido.
+  const isCollapsed = !isMobile && collapsed;
+  const drawerWidth = isCollapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED;
+  const salonName = user?.salon?.nombre;
+  const roleLabel = rolLabel(user?.rol);
+  const visibleNavItems = navItemsForRol(user?.rol);
+
+  /* ── Dynamic document title ── */
+  useEffect(() => {
+    document.title = salonName ? `${salonName} | Dashboard` : 'Dashboard';
+  }, [salonName]);
+
+  const toggleSidebar = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      // La preferencia de colapso solo se persiste en desktop (≥ md).
+      if (!isMobile) localStorage.setItem('sidebarCollapsed', String(next));
+      return next;
+    });
+  };
+
+  const handleNavigate = (href: string) => {
+    navigate(href);
+    if (isMobile) setMobileOpen(false);
+  };
+
+  const getPageTitle = () => {
+    const item = NAV_ITEMS.find((i) => i.href === location.pathname);
+    return item ? item.label : 'Dashboard';
   };
 
   if (loading) {
@@ -191,13 +389,20 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar: temporal < md (hamburger), permanente ≥ md ── */}
       <Drawer
-        variant="permanent"
+        variant={isMobile ? 'temporary' : 'permanent'}
+        open={isMobile ? mobileOpen : undefined}
+        onClose={() => setMobileOpen(false)}
+        {...(isMobile ? { keepMounted: true } : {})}
         sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          transition: 'width 0.3s ease',
+          // En el drawer temporal (Modal) no se aplican width/flexShrink al root:
+          // romperían el overlay. Solo importan para el docked (permanente).
+          ...(!isMobile && {
+            width: drawerWidth,
+            flexShrink: 0,
+            transition: 'width 0.3s ease',
+          }),
           '& .MuiDrawer-paper': {
             width: drawerWidth,
             boxSizing: 'border-box',
@@ -209,125 +414,16 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
           },
         }}
       >
-        {/* Logo / Salon name */}
-        <Box
-          sx={{
-            p: collapsed ? 1.5 : 2.5,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            gap: 1,
-            minHeight: 64,
-          }}
-        >
-          {collapsed ? (
-            <Typography
-              variant="h6"
-              sx={{
-                fontFamily: '"Playfair Display", serif',
-                color: 'primary.main',
-                fontWeight: 700,
-              }}
-            >
-              {salonName?.charAt(0)?.toUpperCase() || 'S'}
-            </Typography>
-          ) : (
-            <>
-              <Typography
-                variant="h6"
-                sx={{
-                  fontFamily: '"Playfair Display", serif',
-                  color: 'primary.main',
-                  fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  maxWidth: 160,
-                }}
-              >
-                {salonName || 'Sistema'}
-              </Typography>
-
-            </>
-          )}
-        </Box>
-        <Divider />
-
-        {/* Navigation */}
-        <List sx={{ flex: 1, px: collapsed ? 0.5 : 1.5, pt: 1 }}>
-          {visibleNavItems.map((item) => (
-            <ListItem key={item.href} disablePadding>
-              {renderNavButton(item.href, item.icon, item.label)}
-            </ListItem>
-          ))}
-        </List>
-
-        <Divider />
-
-        {/* New Appointment CTA */}
-        <Box sx={{ p: collapsed ? 1 : 2, display: 'flex', justifyContent: 'center' }}>
-          {collapsed ? (
-            <Tooltip title="Nueva Cita" placement="right" arrow>
-              <IconButton
-                onClick={() => navigate('/agenda')}
-                sx={{
-                  bgcolor: 'primary.main',
-                  color: '#000',
-                  borderRadius: 2,
-                  '&:hover': { bgcolor: 'primary.dark' },
-                }}
-              >
-                <AddCircle />
-              </IconButton>
-            </Tooltip>
-          ) : (
-            <ListItemButton
-              onClick={() => navigate('/agenda')}
-              sx={{
-                borderRadius: 3,
-                bgcolor: 'primary.main',
-                color: '#000',
-                justifyContent: 'center',
-                '&:hover': { bgcolor: 'primary.dark' },
-              }}
-            >
-              <AddCircle sx={{ mr: 1 }} />
-              <ListItemText
-                primary="Nueva Cita"
-                slotProps={{ primary: { sx: { fontWeight: 600 } } }}
-              />
-            </ListItemButton>
-          )}
-        </Box>
-
-        {/* Bottom actions */}
-        <List sx={{ px: collapsed ? 0.5 : 1.5 }}>
-          <ListItem disablePadding>
-            <Tooltip title="Cerrar sesión" placement="right" arrow disableHoverListener={!collapsed}>
-              <ListItemButton
-                onClick={onLogout}
-                sx={{
-                  borderRadius: 3,
-                  color: 'error.main',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  px: collapsed ? 1 : 2,
-                  minHeight: 44,
-                }}
-              >
-                <ListItemIcon
-                  sx={{
-                    minWidth: collapsed ? 0 : 40,
-                    justifyContent: 'center',
-                    color: 'error.main',
-                  }}
-                >
-                  <Logout />
-                </ListItemIcon>
-                {!collapsed && <ListItemText primary="Cerrar sesión" />}
-              </ListItemButton>
-            </Tooltip>
-          </ListItem>
-        </List>
+        <SidebarContent
+          collapsed={isCollapsed}
+          salonName={salonName}
+          visibleNavItems={visibleNavItems}
+          showUser={isMobile}
+          userName={user?.nombre}
+          roleLabel={roleLabel}
+          onNavigate={handleNavigate}
+          onLogout={onLogout}
+        />
       </Drawer>
 
       {/* ── Main content ── */}
@@ -343,10 +439,25 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
           }}
         >
           <Toolbar>
-            {/* Sidebar toggle */}
-            <IconButton onClick={toggleSidebar} sx={{ mr: 1 }} size="small">
-              {collapsed ? <ChevronRight /> : <ChevronLeft />}
-            </IconButton>
+            {/* Móvil: hamburger abre el drawer temporal. Desktop: toggle de colapso. */}
+            {isMobile ? (
+              <IconButton
+                onClick={() => setMobileOpen(true)}
+                sx={{ mr: 1, width: 44, height: 44 }}
+                aria-label="Abrir menú"
+              >
+                <MenuIcon />
+              </IconButton>
+            ) : (
+              <IconButton
+                onClick={toggleSidebar}
+                sx={{ mr: 1 }}
+                size="small"
+                aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+              >
+                {collapsed ? <ChevronRight /> : <ChevronLeft />}
+              </IconButton>
+            )}
 
             <Typography
               variant="h1"
@@ -369,26 +480,28 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
             <IconButton onClick={toggleColorMode}>
               {mode === 'dark' ? <LightMode /> : <DarkMode />}
             </IconButton>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 1 }}>
-              <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {user?.nombre || roleLabel}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {roleLabel}
-                </Typography>
+            {!isMobile && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 1 }}>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {user?.nombre || roleLabel}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {roleLabel}
+                  </Typography>
+                </Box>
+                <Avatar
+                  sx={{ bgcolor: 'primary.main', color: '#000', fontWeight: 700 }}
+                >
+                  {user?.nombre?.charAt(0)?.toUpperCase() || 'D'}
+                </Avatar>
               </Box>
-              <Avatar
-                sx={{ bgcolor: 'primary.main', color: '#000', fontWeight: 700 }}
-              >
-                {user?.nombre?.charAt(0)?.toUpperCase() || 'D'}
-              </Avatar>
-            </Box>
+            )}
           </Toolbar>
         </AppBar>
 
         {/* Page content */}
-        <Box sx={{ p: 3, flex: 1 }}>
+        <Box sx={{ p: { xs: 1.5, md: 3 }, flex: 1 }}>
           <Outlet />
         </Box>
       </Box>
