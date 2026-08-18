@@ -9,6 +9,7 @@ import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
+import styles from './ServiciosPage.module.css';
 import {
   fetchServicios,
   type Servicio,
@@ -82,33 +83,6 @@ const ghostBtnStyle: React.CSSProperties = {
   fontSize: '0.8125rem',
   cursor: 'pointer',
   transition: 'background 0.2s',
-};
-
-const tableHeaderStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 80px 100px 110px 120px 70px 100px 100px 80px',
-  gap: '0.75rem',
-  padding: '0.65rem 1rem',
-  borderBottom: '1px solid var(--border)',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.6875rem',
-  fontWeight: 600,
-  color: 'var(--text-dim)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-};
-
-const tableRowStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 80px 100px 110px 120px 70px 100px 100px 80px',
-  gap: '0.75rem',
-  padding: '0.75rem 1rem',
-  borderBottom: '1px solid var(--border)',
-  alignItems: 'center',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.8125rem',
-  color: 'var(--text-primary)',
-  transition: 'background 0.15s',
 };
 
 const modalOverlayStyle: React.CSSProperties = {
@@ -532,7 +506,7 @@ const ServiciosPage: React.FC = () => {
                 }}
               >
               {/* Table header */}
-              <div style={tableHeaderStyle}>
+              <div className={styles.gridHeader}>
                 <span>Nombre</span>
                 <span>Duración</span>
                 <span>Precio</span>
@@ -548,26 +522,26 @@ const ServiciosPage: React.FC = () => {
               {servicios.map((svc) => (
                 <motion.div
                   key={svc.id}
-                  style={tableRowStyle}
+                  className={styles.gridRow}
                   whileHover={{ background: 'var(--bg-hover)' }}
                   transition={{ duration: 0.15 }}
                 >
-                  <span style={{ fontWeight: 500, color: svc.activo ? 'var(--text-primary)' : 'var(--text-dim)' }}>
+                  <span style={{ fontWeight: 500, color: svc.activo ? 'var(--text-primary)' : 'var(--text-dim)' }} data-label="Nombre">
                     {svc.nombre}
                   </span>
-                  <span style={{ color: 'var(--text-secondary)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }} data-label="Duración">
                     {svc.duracionMinutos} min
                   </span>
-                  <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                  <span style={{ color: 'var(--accent)', fontWeight: 500 }} data-label="Precio">
                     {formatCurrency(svc.precioBase)}
                   </span>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }} data-label="Costo base insumos">
                     {(svc.costoBaseInsumos ?? 0) > 0 ? formatCurrency(svc.costoBaseInsumos ?? 0) : '—'}
                   </span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }} data-label="Categoría">
                     {svc.categoria?.nombre ?? '—'}
                   </span>
-                  <span>
+                  <span data-label="Estado">
                     <span style={{
                       fontSize: '0.65rem',
                       padding: '0.15rem 0.45rem',
@@ -582,13 +556,13 @@ const ServiciosPage: React.FC = () => {
                       {svc.activo ? 'Activo' : 'Inactivo'}
                     </span>
                   </span>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Creado">
                     {svc.creadoEn ? new Date(svc.creadoEn).toLocaleDateString('es-CL') : '—'}
                   </span>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Modificado">
                     {svc.actualizadoEn ? new Date(svc.actualizadoEn).toLocaleDateString('es-CL') : '—'}
                   </span>
-                  <span style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                  <span style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }} data-label="Acciones">
                     <button
                       onClick={() => openEdit(svc)}
                       style={{
@@ -645,6 +619,7 @@ const ServiciosPage: React.FC = () => {
         {showModal && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -658,6 +633,7 @@ const ServiciosPage: React.FC = () => {
           >
             <motion.div
               style={modalContentStyle}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -844,6 +820,7 @@ const ServiciosPage: React.FC = () => {
         {deleting && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -854,6 +831,7 @@ const ServiciosPage: React.FC = () => {
           >
             <motion.div
               style={{ ...modalContentStyle, maxWidth: '380px' }}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}

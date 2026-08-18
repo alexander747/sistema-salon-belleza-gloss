@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
+import { setMobileMedia } from '../../test/setMobileMedia';
 
 const { mockGet, mockPost, mockPut, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -212,4 +213,54 @@ describe('ServiciosPage — listado y CRUD', () => {
     // El botón existe en el toolbar y en el estado vacío
     expect(screen.getAllByRole('button', { name: '+ Nuevo Servicio' }).length).toBeGreaterThanOrEqual(1);
   }, 20000);
+});
+
+describe('ServiciosPage — móvil (grid apilado ≤640px)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockDelete.mockReset();
+    setMobileMedia(true);
+  });
+
+  const ROW_LABELS = ['Nombre', 'Duración', 'Precio', 'Costo base insumos', 'Categoría', 'Estado', 'Creado', 'Modificado', 'Acciones'];
+
+  it('cada celda de fila expone su data-label en orden (contrato de grids apilados)', async () => {
+    defaultApiMock([
+      servicio,
+      { ...servicio, id: 2, nombre: 'Manicure', precioBase: 25000 },
+    ]);
+
+    renderPage();
+
+    // Esperar a que las filas de datos rendericen (no el skeleton)
+    await screen.findByText('Corte de cabello', {}, WAIT);
+    await screen.findByText('Manicure', {}, WAIT);
+    const rows = [screen.getByText('Corte de cabello'), screen.getByText('Manicure')].map(
+      (cell) => cell.parentElement as HTMLElement,
+    );
+    expect(rows).toHaveLength(2);
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll('[data-label]');
+      expect(cells).toHaveLength(ROW_LABELS.length);
+      cells.forEach((cell, i) => {
+        expect(cell).toHaveAttribute('data-label', ROW_LABELS[i]);
+      });
+    });
+  });
+
+  it('el modal de crear servicio usa las clases bottom-sheet en móvil (D10)', async () => {
+    defaultApiMock();
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo Servicio' }, WAIT));
+
+    const overlay = document.querySelector('.mobileBottomSheet');
+    const panel = document.querySelector('.mobileBottomSheetContent');
+    expect(overlay).not.toBeNull();
+    expect(panel).not.toBeNull();
+    // El panel con la clase bottom-sheet es el modal real, con su título
+    expect(within(panel as HTMLElement).getByText('Nuevo Servicio')).toBeInTheDocument();
+  });
 });
