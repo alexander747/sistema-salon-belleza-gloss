@@ -3071,12 +3071,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               </p>
             </div>
           ) : (
-            <div style={{
-              maxHeight: '400px',
-              overflowY: 'auto',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-            }}>
+            <div className={styles.historialScroll}>
               <div className={styles.tableWrapper} style={{ border: 'none' }}>
                 <table className={styles.historialTable}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
@@ -3100,18 +3095,18 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                         animate="show"
                         transition={{ delay: idx * 0.03 }}
                       >
-                        <td style={{ fontWeight: 500 }}>
+                        <td data-label="Empleada" style={{ fontWeight: 500 }}>
                           {empleadasMap.get(h.usuarioId) ?? `Empleada #${h.usuarioId}`}
                         </td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                        <td data-label="Período" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                           {formatDate(h.fechaDesde)} — {formatDate(h.fechaHasta)}
                         </td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.totalComisiones)}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.totalPropinas)}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.bonoHorario)}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.sueldoFijo)}</td>
-                        <td style={{ fontWeight: 600, color: 'var(--accent)' }}>{formatCurrency(h.totalPagado)}</td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(h.creadoEn)}</td>
+                        <td data-label="Comisiones" style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.totalComisiones)}</td>
+                        <td data-label="Propinas" style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.totalPropinas)}</td>
+                        <td data-label="Bono horario" style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.bonoHorario)}</td>
+                        <td data-label="Sueldo fijo" style={{ color: 'var(--text-secondary)' }}>{formatCurrency(h.sueldoFijo)}</td>
+                        <td data-label="Total Pagado" style={{ fontWeight: 600, color: 'var(--accent)' }}>{formatCurrency(h.totalPagado)}</td>
+                        <td data-label="Fecha" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(h.creadoEn)}</td>
                       </motion.tr>
                     ))}
                   </tbody>
@@ -3136,7 +3131,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       <AnimatePresence>
         {auditarOpen && selectedEmpleada && (
           <motion.div
-            className={styles.modalOverlay}
+            className={`${styles.modalOverlay} mobileBottomSheet`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -3149,7 +3144,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             }}
           >
             <motion.div
-              className={`${styles.modalContent} ${styles.modalContentXl}`}
+              className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -4634,17 +4629,17 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   <tbody>
                     {cobrar.map((c) => (
                       <tr key={c.id} className={styles.tableRow}>
-                        <td style={{ fontWeight: 500 }}>{c.nombre}</td>
-                        <td>
+                        <td data-label="Cliente / Préstamo" style={{ fontWeight: 500 }}>{c.nombre}</td>
+                        <td data-label="Tipo">
                           <CuentaTipoBadge tipo={c.tipo ?? 'CLIENTE'} />
                         </td>
-                        <td style={{ fontWeight: 600, color: 'var(--danger)' }}>
+                        <td data-label="Deuda total" style={{ fontWeight: 600, color: 'var(--danger)' }}>
                           {formatCurrency(c.deudaTotal)}
                         </td>
-                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                        <td data-label="Registros" style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                           {c.cantidadRegistros ?? '—'}
                         </td>
-                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                        <td data-label="Antigüedad" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                           {antiguedadLabel(c.antiguedadBucket)}
                         </td>
                       </tr>
@@ -4702,19 +4697,19 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                           .sort((a, b) => b.pendienteActual - a.pendienteActual)
                           .map((e) => (
                             <tr key={e.empleadaId} className={styles.tableRow}>
-                              <td style={{ fontWeight: 500 }}>{e.nombre}</td>
-                              <td>
+                              <td data-label="Empleada" style={{ fontWeight: 500 }}>{e.nombre}</td>
+                              <td data-label="Pendiente">
                                 <span style={{ fontWeight: 600, color: 'var(--danger)' }}>
                                   {formatCurrency(e.pendienteActual)}
                                 </span>
                               </td>
-                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                              <td data-label="Liquidado acumulado" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                                 {formatCurrency(e.liquidadoAcumulado)}
                               </td>
-                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                              <td data-label="Sueldo fijo" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                                 {formatCurrency(e.sueldoFijo)}
                               </td>
-                              <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                              <td data-label="Comisión %" style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                                 {e.porcentajeComisionServicio}%
                               </td>
                             </tr>
@@ -4752,8 +4747,8 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                           .sort((a, b) => a.nombre.localeCompare(b.nombre))
                           .map((e) => (
                             <tr key={e.empleadaId} className={styles.tableRow}>
-                              <td style={{ fontWeight: 500 }}>{e.nombre}</td>
-                              <td>
+                              <td data-label="Empleada" style={{ fontWeight: 500 }}>{e.nombre}</td>
+                              <td data-label="Pendiente">
                                 <span
                                   style={{
                                     background: 'rgba(92,186,123,0.15)',
@@ -4768,13 +4763,13 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                                   ✅ Al día
                                 </span>
                               </td>
-                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                              <td data-label="Liquidado acumulado" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                                 {formatCurrency(e.liquidadoAcumulado)}
                               </td>
-                              <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                              <td data-label="Sueldo fijo" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                                 {formatCurrency(e.sueldoFijo)}
                               </td>
-                              <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                              <td data-label="Comisión %" style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                                 {e.porcentajeComisionServicio}%
                               </td>
                             </tr>

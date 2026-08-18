@@ -1201,6 +1201,8 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
 
   const REGISTROS_LABELS = ['#', 'Fecha', 'Hora', 'Cliente', 'Empleada', 'Servicios', 'Productos', 'Dto.%', 'Ajustado', 'Total', 'Método de pago', 'Estado', 'Acciones'];
   const GASTOS_LABELS = ['Descripción', 'Categoría', 'Monto', 'Fecha', 'Acciones'];
+  const COBRAR_LABELS = ['Cliente / Préstamo', 'Tipo', 'Deuda total', 'Registros', 'Antigüedad'];
+  const PAGAR_LABELS = ['Empleada', 'Pendiente', 'Liquidado acumulado', 'Sueldo fijo', 'Comisión %'];
 
   const registroFila = {
     id: 1,
@@ -1234,6 +1236,26 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
     estado: 'ACTIVO',
   };
 
+  const cuentasCobrarMovil = [
+    { id: 1, tipo: 'CLIENTE', nombre: 'Ana Gómez', deudaTotal: 120000, cantidadRegistros: 2, antiguedadDias: 45, antiguedadBucket: '31-60' },
+    { id: 99, tipo: 'PRESTAMO', nombre: 'Luis Ramírez', deudaTotal: 85000, cantidadRegistros: null, antiguedadDias: 3, antiguedadBucket: '0-30' },
+  ];
+
+  const cuentasPagarMovil = [
+    { empleadaId: 3, nombre: 'María Torres', sueldoFijo: 800000, porcentajeComisionServicio: 30, pendienteActual: 298000, liquidadoAcumulado: 550000, alDia: false },
+    { empleadaId: 4, nombre: 'Sofía Ruiz', sueldoFijo: 0, porcentajeComisionServicio: 40, pendienteActual: 0, liquidadoAcumulado: 200000, alDia: true },
+  ];
+
+  const cuentasResponseMovil = (data: unknown[], total: number) => ({
+    data: {
+      ok: true,
+      data: {
+        data,
+        meta: { page: 1, limit: 12, total, totalPages: Math.max(1, Math.ceil(total / 12)) },
+      },
+    },
+  });
+
   function mobileApiMock(url: string): Promise<unknown> {
     if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
     if (url.includes('/caja/actual')) return Promise.reject(error404);
@@ -1254,6 +1276,12 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
           meta: { page: 1, limit: 12, total: 1, totalPages: 1 },
         },
       });
+    }
+    if (url.includes('/finanzas/cuentas/cobrar')) {
+      return Promise.resolve(cuentasResponseMovil(cuentasCobrarMovil, cuentasCobrarMovil.length));
+    }
+    if (url.includes('/finanzas/cuentas/pagar')) {
+      return Promise.resolve(cuentasResponseMovil(cuentasPagarMovil, cuentasPagarMovil.length));
     }
     if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
     return Promise.resolve({ data: {} });
@@ -1296,6 +1324,38 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
     expect(cells).toHaveLength(GASTOS_LABELS.length);
     cells.forEach((cell, i) => {
       expect(cell).toHaveAttribute('data-label', GASTOS_LABELS[i]);
+    });
+  });
+
+  it('cada celda de Cuentas (Cobrar y Pagar) expone su data-label en orden (contrato de cards móviles)', async () => {
+    renderMobilePage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '💳 Cuentas' }));
+    await screen.findByText('Ana Gómez');
+
+    const ana = screen.getByText('Ana Gómez');
+    const anaRow = ana.closest('tr')!;
+    const anaCells = within(anaRow).getAllByRole('cell');
+    expect(anaCells).toHaveLength(COBRAR_LABELS.length);
+    anaCells.forEach((cell, i) => {
+      expect(cell).toHaveAttribute('data-label', COBRAR_LABELS[i]);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+    const maria = await screen.findByText('María Torres');
+    const mariaRow = maria.closest('tr')!;
+    const mariaCells = within(mariaRow).getAllByRole('cell');
+    expect(mariaCells).toHaveLength(PAGAR_LABELS.length);
+    mariaCells.forEach((cell, i) => {
+      expect(cell).toHaveAttribute('data-label', PAGAR_LABELS[i]);
+    });
+
+    const sofia = screen.getByText('Sofía Ruiz');
+    const sofiaRow = sofia.closest('tr')!;
+    const sofiaCells = within(sofiaRow).getAllByRole('cell');
+    expect(sofiaCells).toHaveLength(PAGAR_LABELS.length);
+    sofiaCells.forEach((cell, i) => {
+      expect(cell).toHaveAttribute('data-label', PAGAR_LABELS[i]);
     });
   });
 
