@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
+import { setMobileMedia } from '../../test/setMobileMedia';
 
 const { mockGet, mockPost, mockPut, mockPatch } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -285,4 +286,52 @@ describe('ClientesPage — listado y CRUD', () => {
 
     expect(await screen.findByText(/No se pudo cambiar el estado del cliente/, {}, WAIT)).toBeInTheDocument();
   }, 20000);
+});
+
+describe('ClientesPage — móvil (cards ≤600px)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockPatch.mockReset();
+    setMobileMedia(true);
+  });
+
+  const ROW_LABELS = ['Nombre', 'Teléfono', 'Cédula', 'Email', 'Visitas', 'Creado', 'Modificado', 'Nacimiento', 'Acciones'];
+
+  it('cada celda de fila expone su data-label en orden (contrato de cards móviles)', async () => {
+    defaultApiMock([
+      { ...cliente, id: 1 },
+      { ...cliente, id: 2, nombre: 'Luis Pérez' },
+    ]);
+
+    renderPage();
+
+    // Esperar a que la tabla renderice las filas de datos (no el skeleton)
+    await screen.findByText('Ana Gómez', {}, WAIT);
+    const rows = await screen.findAllByRole('row', {}, WAIT);
+    // thead + 2 filas de datos
+    expect(rows).toHaveLength(3);
+    rows.slice(1).forEach((row) => {
+      const cells = within(row).getAllByRole('cell');
+      expect(cells).toHaveLength(ROW_LABELS.length);
+      cells.forEach((cell, i) => {
+        expect(cell).toHaveAttribute('data-label', ROW_LABELS[i]);
+      });
+    });
+  });
+
+  it('el modal de crear cliente usa las clases bottom-sheet en móvil (D10)', async () => {
+    defaultApiMock();
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo cliente' }, WAIT));
+
+    const overlay = document.querySelector('.mobileBottomSheet');
+    const panel = document.querySelector('.mobileBottomSheetContent');
+    expect(overlay).not.toBeNull();
+    expect(panel).not.toBeNull();
+    // El panel con la clase bottom-sheet es el modal real, con su título
+    expect(within(panel as HTMLElement).getByText('Nuevo cliente')).toBeInTheDocument();
+  });
 });

@@ -641,15 +641,15 @@ const RenderTable: React.FC<RenderTableProps> = ({
             className={styles.tableRow}
             variants={itemVariants}
           >
-            <td style={{ fontWeight: 500 }}>{cliente.nombre}</td>
-            <td>{formatPhone(cliente.telefono)}</td>
-            <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '0.8125rem' }}>
+            <td style={{ fontWeight: 500 }} data-label="Nombre">{cliente.nombre}</td>
+            <td data-label="Teléfono">{formatPhone(cliente.telefono)}</td>
+            <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '0.8125rem' }} data-label="Cédula">
               {cliente.cedula || '—'}
             </td>
-            <td style={{ color: 'var(--text-secondary)' }}>
+            <td style={{ color: 'var(--text-secondary)' }} data-label="Email">
               {cliente.email || '—'}
             </td>
-            <td>
+            <td data-label="Visitas">
               <span
                 className={`${styles.visitsBadge} ${
                   cliente.visitas === 0 ? styles.visitsBadgeZero : ''
@@ -658,16 +658,16 @@ const RenderTable: React.FC<RenderTableProps> = ({
                 {cliente.visitas}
               </span>
             </td>
-            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Creado">
               {formatDate(cliente.creadoEn)}
             </td>
-            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Modificado">
               {formatDate(cliente.actualizadoEn)}
             </td>
-            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Nacimiento">
               {formatDate(cliente.fechaNacimiento)}
             </td>
-            <td>
+            <td data-label="Acciones">
               <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                 <button
                   className={styles.actionBtn}
@@ -736,7 +736,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
   error,
 }) => (
   <motion.div
-    className={styles.modalOverlay}
+    className={`${styles.modalOverlay} mobileBottomSheet`}
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
@@ -746,7 +746,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
     }}
   >
     <motion.div
-      className={`${styles.modalContent} ${styles.modalContentXl}`}
+      className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
       initial={{ opacity: 0, scale: 0.92, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -922,7 +922,7 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
   onClose,
 }) => (
   <motion.div
-    className={styles.modalOverlay}
+    className={`${styles.modalOverlay} mobileBottomSheet`}
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
@@ -932,7 +932,7 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
     }}
   >
     <motion.div
-      className={`${styles.modalContent} ${styles.modalContentWide}`}
+      className={`${styles.modalContent} ${styles.modalContentWide} mobileBottomSheetContent`}
       initial={{ opacity: 0, scale: 0.92, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 10 }}
