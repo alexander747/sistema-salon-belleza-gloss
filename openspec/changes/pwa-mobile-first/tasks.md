@@ -75,11 +75,11 @@ Chain strategy: stacked-to-main
 
 ## Batch R6 — Verificación (~250 lines)
 
-- [ ] 6.1 Chrome DevTools MCP: every page @390×844 — no `scrollWidth>innerWidth`, cards, bottom-sheet
-- [ ] 6.2 Audit @768×1024 — column-hide, temporary drawer
-- [ ] 6.3 Audit @1440×900 — desktop unchanged
-- [ ] 6.4 Full vitest (api + dashboard) + Playwright E2E Desktop Chrome
-- [ ] 6.5 Fix regressions, re-run; screenshots in batch report
+- [x] 6.1 Chrome DevTools MCP: every page @390×844 — no `scrollWidth>innerWidth`, cards, bottom-sheet
+- [x] 6.2 Audit @768×1024 — column-hide, temporary drawer
+- [x] 6.3 Audit @1440×900 — desktop unchanged
+- [x] 6.4 Full vitest (api + dashboard) + Playwright E2E Desktop Chrome
+- [x] 6.5 Fix regressions, re-run; screenshots in batch report
 
 ## Test Inventory
 
