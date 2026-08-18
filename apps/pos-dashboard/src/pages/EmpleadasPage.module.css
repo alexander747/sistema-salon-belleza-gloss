@@ -401,3 +401,19 @@
   gap: 0.75rem;
 }
 
+
+/* ── Móvil (≤600px): touch targets 44px y formRow a 1 columna ── */
+@media (max-width: 600px) {
+  .formInput,
+  .formSelect {
+    min-height: 44px;
+  }
+
+  .searchInput {
+    min-height: 44px;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+}

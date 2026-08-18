@@ -12,7 +12,8 @@ interface PaginationBarProps {
 
 const btnStyle: React.CSSProperties = {
   fontSize: '0.8125rem',
-  padding: '0.35rem 0.85rem',
+  padding: '0.55rem 1.1rem',
+  minHeight: 40,
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius-sm)',
   background: 'var(--bg-surface)',

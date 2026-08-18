@@ -129,3 +129,10 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── Móvil (≤600px): touch target 44px para los inputs de hora ── */
+@media (max-width: 600px) {
+  .timeInput {
+    min-height: 44px;
+  }
+}
