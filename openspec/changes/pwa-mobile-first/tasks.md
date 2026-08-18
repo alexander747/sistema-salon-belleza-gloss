@@ -41,11 +41,11 @@ Chain strategy: stacked-to-main
 
 ## Batch R2 — Mantenedores tablas (~450 lines)
 
-- [ ] 2.1 EmpleadasPage CSS: card MQ ≤600px — hide `.tableHead`, `.tableRow{display:block}`, `td::before{content:attr(data-label)}`, hide fechas via `nth-child`
-- [ ] 2.2 EmpleadasPage.tsx: `data-label` on 10 `<td>`s; actions → footer row
-- [ ] 2.3 ClientesPage CSS+.tsx: same card MQ + `data-label` (9 cols)
-- [ ] 2.4 PrestamosPage CSS+.tsx: same card MQ + `data-label` (7 cols)
-- [ ] 2.5 Verify Empleadas/Clientes/Prestamos tests green (no DOM change)
+- [x] 2.1 EmpleadasPage CSS: card MQ ≤600px — hide `.tableHead`, `.tableRow{display:block}`, `td::before{content:attr(data-label)}`, hide fechas via `nth-child`
+- [x] 2.2 EmpleadasPage.tsx: `data-label` on 10 `<td>`s; actions → footer row
+- [x] 2.3 ClientesPage CSS+.tsx: same card MQ + `data-label` (9 cols)
+- [x] 2.4 PrestamosPage CSS+.tsx: same card MQ + `data-label` (7 cols)
+- [x] 2.5 Verify Empleadas/Clientes/Prestamos tests green (no DOM change)
 
 ## Batch R3 — Mantenedores grids (~500 lines)
 
