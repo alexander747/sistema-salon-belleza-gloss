@@ -82,16 +82,17 @@ const ghostBtnStyle: React.CSSProperties = {
   transition: 'background 0.2s',
 };
 
-const smallActionBtn: React.CSSProperties = {
+/** Botón de acción compacto (solo icono, con title/aria-label), patrón FinanzasPage. */
+const iconActionBtn: React.CSSProperties = {
   background: 'none',
-  border: '1px solid var(--border)',
-  borderRadius: 'var(--radius-sm)',
-  color: 'var(--text-secondary)',
-  padding: '0.3rem 0.5rem',
-  fontSize: '0.7rem',
+  border: 'none',
   cursor: 'pointer',
+  fontSize: '1rem',
+  padding: '0.25rem 0.3rem',
+  borderRadius: 'var(--radius-sm)',
+  transition: 'background 0.15s, transform 0.15s',
+  color: 'var(--text-secondary)',
   lineHeight: 1,
-  transition: 'color 0.2s, border-color 0.2s',
 };
 
 const modalOverlayStyle: React.CSSProperties = {
@@ -665,7 +666,7 @@ const ProductosPage: React.FC = () => {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 220px',
+                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px',
                     gap: '0.75rem',
                     padding: '0.65rem 1rem',
                     borderBottom: '1px solid var(--border)',
@@ -706,7 +707,7 @@ const ProductosPage: React.FC = () => {
                       variants={itemVariants}
                       style={{
                         display: 'grid',
-                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 220px',
+                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px',
                         gap: '0.75rem',
                         padding: '0.75rem 1rem',
                         borderBottom: isLast ? 'none' : '1px solid var(--border)',
@@ -720,7 +721,7 @@ const ProductosPage: React.FC = () => {
                       whileHover={{ background: isLowStock ? 'rgba(224,85,106,0.08)' : 'var(--bg-hover)' }}
                       transition={{ duration: 0.15 }}
                     >
-                      <span style={{ fontWeight: 500 }}>{prod.nombre}</span>
+                      <span style={{ fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{prod.nombre}</span>
                       <span>
                         <span
                           style={{
@@ -784,66 +785,60 @@ const ProductosPage: React.FC = () => {
                           <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>—</span>
                         )}
                       </span>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                         {prod.marca || '—'}
                       </span>
-                      <span style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <span style={{ display: 'flex', gap: '0.15rem', justifyContent: 'flex-end' }}>
                         <button
                           onClick={() => {
                             setStockModal({ producto: prod, type: 'restock' });
                             setStockCantidad(0);
                             setRestockPrecioCompra(prod.precioCompra ?? 0);
                           }}
-                          style={{
-                            ...smallActionBtn,
-                            borderColor: 'var(--success)',
-                            color: 'var(--success)',
-                          }}
+                          style={iconActionBtn}
                           title="Re-stock inteligente"
                           aria-label="Re-stock inteligente"
                         >
-                          Re-stock
+                          📦
                         </button>
                         <button
                           onClick={() => {
                             setStockModal({ producto: prod, type: 'descontar' });
                             setStockCantidad(0);
                           }}
-                          style={{
-                            ...smallActionBtn,
-                            borderColor: 'var(--danger)',
-                            color: 'var(--danger)',
-                          }}
+                          style={iconActionBtn}
                           title="Descontar stock"
                           aria-label="Descontar stock"
                         >
-                          - Stock
+                          ➖
                         </button>
                         <button
                           onClick={() => openEdit(prod)}
-                          style={smallActionBtn}
-                          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                          style={iconActionBtn}
+                          title="Editar"
+                          aria-label="Editar"
+                          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
                         >
-                          Editar
+                          ✏️
                         </button>
                         <button
                           onClick={() => openHistory(prod)}
-                          style={smallActionBtn}
+                          style={iconActionBtn}
                           title="Historial de precios"
+                          aria-label="Historial"
                         >
-                          Historial
+                          📜
                         </button>
                         <button
                           onClick={() => setDeleting(prod)}
-                          style={{
-                            ...smallActionBtn,
-                            color: 'var(--danger)',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--danger)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                          style={iconActionBtn}
+                          title="Eliminar"
+                          aria-label="Eliminar"
+                          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
                         >
-                          Eliminar
+                          🗑️
                         </button>
                       </span>
                     </motion.div>
