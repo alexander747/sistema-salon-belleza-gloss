@@ -4,7 +4,7 @@ import { RegistroProductoEntity } from '../../../../../infrastructure/persistenc
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IClienteRepository } from '../../../../personas/domain/ports/IClienteRepository';
 import type { IProductoRepository } from '../../../../catalogo/domain/ports/IProductoRepository';
-import { NotFoundError } from '../../../../../shared/errors';
+import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
 
 export interface AnularRegistroInput {
   id: number;
@@ -26,6 +26,13 @@ export class AnularRegistroUseCase {
     const registro = await this.registroRepo.findById(input.id);
     if (!registro) {
       throw new NotFoundError('Registro no encontrado');
+    }
+
+    // Guard: no se anula un registro ya liquidado (estaPagadaEmpleada=true).
+    // Anularlo después de liquidado rompería la consistencia del dinero ya
+    // pagado a la empleada — el frontend lo bloquea, el backend ahora también.
+    if (registro.estaPagadaEmpleada) {
+      throw new UnprocessableEntityError('No se puede anular un registro ya liquidado');
     }
 
     // --- Stock restoration from product lines ---
