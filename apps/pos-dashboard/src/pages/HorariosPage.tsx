@@ -166,10 +166,10 @@ const HorariosPage: React.FC = () => {
           <tbody>
             {horarios.map((h) => (
               <tr key={h.diaSemana} className={styles.tableRow}>
-                <td style={{ fontWeight: 600 }}>
+                <td data-label="Día" style={{ fontWeight: 600 }}>
                   {DIAS.find((d) => d.id === h.diaSemana)?.label}
                 </td>
-                <td>
+                <td data-label="Abierto">
                   <label className={styles.switch}>
                     <input
                       type="checkbox"
@@ -181,7 +181,7 @@ const HorariosPage: React.FC = () => {
                     <span className={styles.slider}></span>
                   </label>
                 </td>
-                <td>
+                <td data-label="Apertura">
                   <input
                     type="time"
                     value={h.horaApertura}
@@ -192,7 +192,7 @@ const HorariosPage: React.FC = () => {
                     className={styles.timeInput}
                   />
                 </td>
-                <td>
+                <td data-label="Cierre">
                   <input
                     type="time"
                     value={h.horaCierre}
