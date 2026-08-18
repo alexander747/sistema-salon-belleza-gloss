@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
+import { setMobileMedia } from '../../test/setMobileMedia';
 
 const { mockGet, mockPost, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -1187,5 +1188,102 @@ describe('FinanzasPage — tabs filtrados por rol', () => {
 
     // Comportamiento defensivo: si entra igual, ve al menos el tab por defecto
     expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+  });
+});
+
+describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+    setMobileMedia(true);
+  });
+
+  const REGISTROS_LABELS = ['#', 'Fecha', 'Hora', 'Cliente', 'Empleada', 'Servicios', 'Productos', 'Dto.%', 'Ajustado', 'Total', 'Método de pago', 'Estado', 'Acciones'];
+
+  const registroFila = {
+    id: 1,
+    salonId: 1,
+    clienteId: 1,
+    usuarioId: 2,
+    totalServicios: 50000,
+    totalProductos: 0,
+    montoTotal: 50000,
+    montoPendiente: 0,
+    propina: 0,
+    comisionCalculada: 0,
+    esRetoque: false,
+    descripcionServicio: null,
+    estaPagadaEmpleada: false,
+    creadoEn: '2026-08-01T12:00:00.000Z',
+    actualizadoEn: '2026-08-01T12:00:00.000Z',
+    pagos: [],
+    divisiones: [],
+    _clienteNombre: 'Ana Gómez',
+    _empleadaNombre: 'Dueña Test',
+  };
+
+  const registroFila2 = {
+    ...registroFila,
+    id: 2,
+    clienteId: 2,
+    _clienteNombre: 'Lina Pérez',
+    totalProductos: 15000,
+    montoTotal: 65000,
+    estado: 'ACTIVO',
+  };
+
+  function mobileApiMock(url: string): Promise<unknown> {
+    if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+    if (url.includes('/caja/actual')) return Promise.reject(error404);
+    if (url.includes('/caja/cierres')) {
+      return Promise.resolve({
+        data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+      });
+    }
+    if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+    if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+    if (url.includes('/registros')) {
+      return Promise.resolve({ data: { data: [registroFila, registroFila2], meta: { page: 1, limit: 12, total: 2, totalPages: 1 } } });
+    }
+    if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+    return Promise.resolve({ data: {} });
+  }
+
+  function renderMobilePage() {
+    mockGet.mockImplementation(mobileApiMock);
+    return render(
+      <MemoryRouter initialEntries={['/finanzas']}>
+        <FinanzasPage />
+      </MemoryRouter>,
+    );
+  }
+
+  it('cada celda de Registros expone su data-label en orden (contrato de cards móviles)', async () => {
+    renderMobilePage();
+
+    await screen.findByText('Ana Gómez');
+    await screen.findByText('Lina Pérez');
+    const rows = await screen.findAllByRole('row');
+    // thead + 2 filas de datos
+    expect(rows).toHaveLength(3);
+    rows.slice(1).forEach((row) => {
+      const cells = within(row).getAllByRole('cell');
+      expect(cells).toHaveLength(REGISTROS_LABELS.length);
+      cells.forEach((cell, i) => {
+        expect(cell).toHaveAttribute('data-label', REGISTROS_LABELS[i]);
+      });
+    });
+  });
+
+  it('el modal de detalle de Registro usa las clases bottom-sheet en móvil (D10)', async () => {
+    renderMobilePage();
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ver detalle' }))[0]);
+
+    const overlay = await waitFor(() => document.querySelector('.mobileBottomSheet'));
+    const panel = document.querySelector('.mobileBottomSheetContent');
+    expect(overlay).not.toBeNull();
+    expect(panel).not.toBeNull();
   });
 });

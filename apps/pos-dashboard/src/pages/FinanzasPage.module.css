@@ -734,3 +734,127 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Registros: marcador de tabla de 13 columnas (column-hide + card, D4/D5) ── */
+.registrosTable {
+  composes: table;
+}
+
+/* ── Móvil (≤1024px): Registros column-hide progresivo (D5) ──
+   Se ocultan columnas de bajo valor; el DOM no cambia (jsdom lo ignora). */
+@media (max-width: 1024px) {
+  .registrosTable thead th:nth-child(1),
+  .registrosTable thead th:nth-child(3),
+  .registrosTable thead th:nth-child(8),
+  .registrosTable thead th:nth-child(9),
+  .registrosTable tbody td:nth-child(1),
+  .registrosTable tbody td:nth-child(3),
+  .registrosTable tbody td:nth-child(8),
+  .registrosTable tbody td:nth-child(9) {
+    display: none;
+  }
+}
+
+/* ── Móvil (≤768px): Registros oculta también Productos y Método de pago ── */
+@media (max-width: 768px) {
+  .registrosTable thead th:nth-child(7),
+  .registrosTable thead th:nth-child(11),
+  .registrosTable tbody td:nth-child(7),
+  .registrosTable tbody td:nth-child(11) {
+    display: none;
+  }
+}
+
+/* ── Móvil (≤600px): tablas como cards ──
+   Mismo patrón R2: la tabla conserva su DOM; el CSS la transforma en
+   tarjetas con td::before = attr(data-label). El footer (td::before
+   oculto, borde superior) solo aplica a celdas .stickyActions (Registros
+   y Gastos) — Devoluciones/Cuentas quedan como filas etiquetadas. */
+@media (max-width: 600px) {
+  .table,
+  .table tbody {
+    display: block;
+    min-width: 0;
+  }
+
+  .tableHead {
+    display: none;
+  }
+
+  .tableRow {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem;
+    background: var(--bg-surface);
+  }
+
+  .tableRow:hover {
+    background: var(--bg-surface);
+  }
+
+  .tableRow td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.875rem;
+    border-bottom: none;
+  }
+
+  .tableRow td::before {
+    content: attr(data-label);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  /* Sticky actions neutralizado: sin overlay sobre la card, como footer */
+  .stickyActions {
+    position: static;
+    box-shadow: none;
+    background: none;
+  }
+
+  .tableRow .stickyActions {
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border-bottom: none;
+    margin-top: 0.35rem;
+    padding-top: 0.65rem;
+  }
+
+  .tableRow .stickyActions::before {
+    content: none;
+  }
+
+  /* Registros: solo campos esenciales en la card (D4) — Hora vuelve a
+     mostrarse (oculta ≤1024) porque la card la necesita */
+  .registrosTable tbody td:nth-child(3),
+  .registrosTable tbody td:nth-child(6),
+  .registrosTable tbody td:nth-child(8),
+  .registrosTable tbody td:nth-child(9) {
+    display: flex;
+  }
+
+  .registrosTable tbody td:nth-child(6),
+  .registrosTable tbody td:nth-child(8),
+  .registrosTable tbody td:nth-child(9) {
+    display: none;
+  }
+
+  /* Fila de estado vacío (colSpan) */
+  .table td[colspan] {
+    display: block;
+  }
+
+  .table td[colspan]::before {
+    content: none;
+  }
+}

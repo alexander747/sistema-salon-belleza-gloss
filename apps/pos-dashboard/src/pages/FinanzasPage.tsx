@@ -1075,7 +1075,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         </div>
       ) : (
         <div className={styles.tableWrapper}>
-          <table className={styles.table}>
+          <table className={`${styles.table} ${styles.registrosTable}`}>
             <thead className={styles.tableHead}>
               <tr>
                 <th>#</th>
@@ -1103,31 +1103,31 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                   animate="show"
                   transition={{ delay: idx * 0.03 }}
                 >
-                  <td style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                  <td data-label="#" style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
                     {reg.id}
                   </td>
                   {/* Fecha */}
-                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                  <td data-label="Fecha" style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
                     {formatShortDate(reg.creadoEn)}
                   </td>
                   {/* Hora */}
-                  <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                  <td data-label="Hora" style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
                     {formatTimeAMPM(reg.creadoEn)}
                   </td>
-                  <td style={{ fontWeight: 500 }}>
+                  <td data-label="Cliente" style={{ fontWeight: 500 }}>
                     {reg._clienteNombre ?? `Cliente #${reg.clienteId}`}
                   </td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                  <td data-label="Empleada" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                     {reg._empleadaNombre ?? `Usuaria #${reg.usuarioId}`}
                   </td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                  <td data-label="Servicios" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                     {reg.totalServicios > 0 ? formatCurrency(reg.totalServicios) : '---'}
                   </td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                  <td data-label="Productos" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                     {reg.totalProductos > 0 ? formatCurrency(reg.totalProductos) : '---'}
                   </td>
                   {/* Descuento */}
-                  <td style={{ textAlign: 'center' }}>
+                  <td data-label="Dto.%" style={{ textAlign: 'center' }}>
                     {reg.porcentajeDescuento != null && reg.porcentajeDescuento > 0 ? (
                       <span style={{ color: 'var(--danger)', fontWeight: 500 }}>{reg.porcentajeDescuento}%</span>
                     ) : (
@@ -1135,22 +1135,22 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                     )}
                   </td>
                   {/* Ajustado */}
-                  <td style={{ textAlign: 'center' }}>
+                  <td data-label="Ajustado" style={{ textAlign: 'center' }}>
                     {reg.precioAjustado ? (
                       <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)', fontSize: '0.65rem', fontWeight: 600 }}>Sí</span>
                     ) : (
                       <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>No</span>
                     )}
                   </td>
-                  <td style={{ fontWeight: 600, color: 'var(--accent)' }}>
+                  <td data-label="Total" style={{ fontWeight: 600, color: 'var(--accent)' }}>
                     {formatCurrency(calcTotal(reg))}
                   </td>
-                  <td>
+                  <td data-label="Método de pago">
                     <span style={{ fontSize: '0.75rem' }}>
                       {METODO_PAGO_LABELS[reg.pagos?.[0]?.metodoPago ?? '---'] ?? '---'}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Estado">
                     {reg.estado === 'ANULADO' ? (
                       <span className={`${styles.badge} ${styles.badgeEliminado}`}>Anulado</span>
                     ) : reg.estaPagadaEmpleada ? (
@@ -1159,7 +1159,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                       <span className={`${styles.badge} ${styles.badgeServicios}`}>Activo</span>
                     )}
                   </td>
-                  <td className={styles.stickyActions}>
+                  <td data-label="Acciones" className={styles.stickyActions}>
                     <div style={{ display: 'flex', gap: '0.15rem' }}>
                       <button
                         className={styles.actionBtn}
@@ -1260,7 +1260,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
 
   return (
     <motion.div
-      className={styles.modalOverlay}
+      className={`${styles.modalOverlay} mobileBottomSheet`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -1268,7 +1268,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
-        className={`${styles.modalContent} ${styles.modalContentXl}`}
+        className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1594,7 +1594,7 @@ interface AnularConfirmProps {
 
 const RenderConfirmAnular: React.FC<AnularConfirmProps> = ({ registro, submitting, onCancel, onConfirm, error }) => (
   <motion.div
-    className={styles.modalOverlay}
+    className={`${styles.modalOverlay} mobileBottomSheet`}
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
@@ -1602,7 +1602,7 @@ const RenderConfirmAnular: React.FC<AnularConfirmProps> = ({ registro, submittin
     onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
           >
             <motion.div
-              className={`${styles.modalContent} ${styles.modalContentXl}`}
+              className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
