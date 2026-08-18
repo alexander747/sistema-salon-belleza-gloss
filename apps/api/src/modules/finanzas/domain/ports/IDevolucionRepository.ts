@@ -1,7 +1,8 @@
+import type { QueryRunner } from 'typeorm';
 import type { DevolucionEntity } from '../../../../infrastructure/persistence/entities/DevolucionEntity';
 
 export interface IDevolucionRepository {
-  create(data: Partial<DevolucionEntity>): Promise<DevolucionEntity>;
+  create(data: Partial<DevolucionEntity>, queryRunner?: QueryRunner): Promise<DevolucionEntity>;
   findBySalon(salonId: number): Promise<DevolucionEntity[]>;
   findByRegistro(registroServicioId: number): Promise<DevolucionEntity[]>;
   search(params: {

@@ -1,17 +1,22 @@
 import { injectable } from 'tsyringe';
+import type { QueryRunner } from 'typeorm';
 import { AppDataSource } from '../../../../shared/database';
 import { DevolucionEntity } from '../../../../infrastructure/persistence/entities/DevolucionEntity';
 import type { IDevolucionRepository } from '../../domain/ports/IDevolucionRepository';
 
 @injectable()
 export class TypeORMDevolucionRepository implements IDevolucionRepository {
-  private getRepo() {
+  private getRepo(queryRunner?: QueryRunner) {
+    if (queryRunner) {
+      return queryRunner.manager.getRepository(DevolucionEntity);
+    }
     return AppDataSource.getRepository(DevolucionEntity);
   }
 
-  async create(data: Partial<DevolucionEntity>): Promise<DevolucionEntity> {
-    const entity = this.getRepo().create(data);
-    return this.getRepo().save(entity);
+  async create(data: Partial<DevolucionEntity>, queryRunner?: QueryRunner): Promise<DevolucionEntity> {
+    const repo = this.getRepo(queryRunner);
+    const entity = repo.create(data);
+    return repo.save(entity);
   }
 
   async findBySalon(salonId: number): Promise<DevolucionEntity[]> {
