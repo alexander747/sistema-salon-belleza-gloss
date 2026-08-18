@@ -3688,17 +3688,14 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                             {p.motivo ?? `Préstamo #${p.id}`}
                           </span>
                           <span style={{ color: 'var(--text-dim)', marginRight: '0.5rem' }}>
-                            Saldo: ${Number(p.saldoPendiente).toLocaleString()}
+                            Saldo: {formatCurrency(Number(p.saldoPendiente))}
                           </span>
-                          <input
-                            type="number"
-                            className={styles.noSpinner}
+                          <MoneyInput
                             value={desc.monto}
-                            onChange={(e) => setDescuentosPrestamos((prev) => ({
+                            onChange={(n) => setDescuentosPrestamos((prev) => ({
                               ...prev,
-                              [p.id]: { ...prev[p.id] ?? { checked: true }, monto: Math.max(0, Number(e.target.value)) },
+                              [p.id]: { ...prev[p.id] ?? { checked: true }, monto: n },
                             }))}
-                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
                             style={{
                               width: '90px',
                               padding: '0.2rem 0.4rem',
@@ -3709,8 +3706,6 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                               fontSize: '0.75rem',
                               textAlign: 'right',
                             }}
-                            min="0"
-                            step="0.01"
                           />
                         </div>
                       );

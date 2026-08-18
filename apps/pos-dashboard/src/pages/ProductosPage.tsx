@@ -1200,13 +1200,9 @@ const ProductosPage: React.FC = () => {
                   <>
                     <div style={{ marginBottom: '1rem' }}>
                       <label style={formLabelStyle}>Nuevo precio de compra unitario</label>
-                      <input
-                        type="number"
-                        className="noSpinner"
-                        min={0.01}
-                        step={0.01}
-                        value={restockPrecioCompra || ''}
-                        onChange={(e) => setRestockPrecioCompra(Number(e.target.value))}
+                      <MoneyInput
+                        value={restockPrecioCompra}
+                        onChange={(n) => setRestockPrecioCompra(n)}
                         style={formFieldStyle}
                         placeholder="0"
                       />

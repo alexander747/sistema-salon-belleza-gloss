@@ -935,6 +935,42 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     expect(within(alerta).getByText(/#5/i)).toBeInTheDocument();
     expect(alerta).toHaveTextContent(/comp fijo podría pagarse nuevamente/i);
   });
+
+  it('liquidación: saldo del préstamo con formatCurrency y descuento con MoneyInput (COP entero)', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: [] });
+      if (url.includes('/finanzas/nomina')) return Promise.resolve({ data: [pendienteSemanal] });
+      if (url.includes('/prestamos')) {
+        return Promise.resolve({
+          data: { data: [{ id: 3, usuarioId: 1, motivo: 'Compra insumos', saldoPendiente: 150000, estado: 'ACTIVO' }] },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({
+          data: { data: [registroDentroSemana], meta: { page: 1, limit: 50, total: 1, totalPages: 1 } },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Auditar y Liquidar' }));
+    await screen.findByText('Auditoría pre-liquidación');
+
+    // Saldo formateado con formatCurrency (COP es-CO, sin decimales)
+    expect(await screen.findByText('Saldo: $ 150.000')).toBeInTheDocument();
+    // El input del descuento es un MoneyInput: precarga 150000 con separador de miles
+    const descuentoInput = screen.getByDisplayValue('150.000');
+    // Editar con dígitos → el monto a descontar cambia
+    fireEvent.change(descuentoInput, { target: { value: '50000' } });
+    expect(screen.getByDisplayValue('50.000')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('150.000')).not.toBeInTheDocument();
+  });
 });
 
 describe('FinanzasPage — errores de mutación visibles en la UI', () => {
