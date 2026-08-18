@@ -67,11 +67,11 @@ Chain strategy: stacked-to-main
 
 ## Batch R5 — Ventas + Horarios + Agenda modals (~400 lines)
 
-- [ ] 5.1 VentasPage: `useMediaQuery` down('md') → layout `'1fr'`; product grid `repeat(auto-fill,minmax(140px,1fr))`; qty buttons 40px
-- [ ] 5.2 HorariosPage CSS: `overflow:hidden`→`auto`; card MQ ≤600px (4 fields)
-- [ ] 5.3 AgendaPage CSS: `.mobileBottomSheet`+`Content` on cita + completar modals
-- [ ] 5.4 AgendaPage: extend ≤600px form stacking (767/600 MQs kept)
-- [ ] 5.5 Verify VentasPage/AgendaPage tests green
+- [x] 5.1 VentasPage: `useMediaQuery` down('md') → layout `'1fr'`; product grid `repeat(auto-fill,minmax(140px,1fr))`; qty buttons 40px
+- [x] 5.2 HorariosPage CSS: `overflow:hidden`→`auto`; card MQ ≤600px (4 fields)
+- [x] 5.3 AgendaPage CSS: `.mobileBottomSheet`+`Content` on cita + completar modals
+- [x] 5.4 AgendaPage: extend ≤600px form stacking (767/600 MQs kept)
+- [x] 5.5 Verify VentasPage/AgendaPage tests green
 
 ## Batch R6 — Verificación (~250 lines)
 
