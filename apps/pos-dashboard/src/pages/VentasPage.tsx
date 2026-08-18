@@ -11,6 +11,7 @@ import tableSkeletonStyles from '../components/TableSkeleton.module.css';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
+import styles from './VentasPage.module.css';
 
 /* ── Types ── */
 
@@ -470,14 +471,7 @@ const VentasPage: React.FC = () => {
           )}
 
           {/* ── Two-column layout ── */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '3fr 2fr',
-              gap: '1rem',
-              alignItems: 'start',
-            }}
-          >
+          <div className={styles.ventasLayout}>
             {/* ============================================================ */}
             {/*  LEFT PANEL — Product Catalog                                 */}
             {/* ============================================================ */}
@@ -525,7 +519,7 @@ const VentasPage: React.FC = () => {
 
               {/* Product grid */}
               {dataLoading ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                <div className={styles.productGrid}>
                   {[1, 2, 3, 4, 5, 6].map((i) => (
                     <div
                       key={i}
@@ -564,13 +558,7 @@ const VentasPage: React.FC = () => {
                   </p>
                 </motion.div>
               ) : (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: '0.75rem',
-                  }}
-                >
+                <div className={styles.productGrid}>
                   {filteredProductos.map((prod) => {
                     const outOfStock = prod.cantidadStock <= 0;
                     return (
@@ -842,8 +830,8 @@ const VentasPage: React.FC = () => {
                             border: '1px solid var(--border)',
                             borderRadius: 'var(--radius-sm)',
                             color: 'var(--text-primary)',
-                            width: '26px',
-                            height: '26px',
+                            minWidth: '40px',
+                            minHeight: '40px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -874,8 +862,8 @@ const VentasPage: React.FC = () => {
                             border: '1px solid var(--border)',
                             borderRadius: 'var(--radius-sm)',
                             color: 'var(--text-primary)',
-                            width: '26px',
-                            height: '26px',
+                            minWidth: '40px',
+                            minHeight: '40px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',

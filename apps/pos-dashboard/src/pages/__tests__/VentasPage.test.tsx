@@ -13,6 +13,7 @@ vi.mock('../../services/api.js', () => ({
 }));
 
 import VentasPage from '../VentasPage';
+import styles from '../VentasPage.module.css';
 
 const duena: IUser = {
   id: 2,
@@ -195,4 +196,56 @@ describe('VentasPage — carrito y cobro (happy path)', () => {
       ).toBeInTheDocument();
     });
   }, 20000);
+});
+
+describe('VentasPage — contratos responsive (R5)', () => {
+  const producto = { id: 1, nombre: 'Shampoo', marca: null, precioVenta: 20000, cantidadStock: 10, categoriaId: 1 };
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/productos')) return Promise.resolve({ data: [producto] });
+      if (url.includes('/categorias')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', activo: true }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'María', activo: true }] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it('el layout usa la clase .ventasLayout y envuelve catálogo + carrito', async () => {
+    const { container } = renderPage();
+
+    await screen.findByText('Shampoo');
+    const layout = container.querySelector(`.${styles.ventasLayout}`);
+    expect(layout).not.toBeNull();
+    // El contenedor responsive contiene ambos paneles (stack ≤900px preserva el orden del DOM)
+    expect(within(layout as HTMLElement).getByPlaceholderText(/buscar producto/i)).toBeInTheDocument();
+    expect(within(layout as HTMLElement).getByText(/carrito de venta/i)).toBeInTheDocument();
+  });
+
+  it('el grid de productos usa la clase .productGrid (auto-fill ≤900px)', async () => {
+    const { container } = renderPage();
+
+    await screen.findByText('Shampoo');
+    const grid = container.querySelector(`.${styles.productGrid}`);
+    expect(grid).not.toBeNull();
+    expect(within(grid as HTMLElement).getByText('Shampoo')).toBeInTheDocument();
+  });
+
+  it('los botones de cantidad del carrito tienen target táctil ≥40px', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Shampoo'));
+
+    const minus = screen.getByRole('button', { name: '−' });
+    const plus = screen.getByRole('button', { name: '+' });
+    expect(minus).toHaveStyle({ minWidth: '40px', minHeight: '40px' });
+    expect(plus).toHaveStyle({ minWidth: '40px', minHeight: '40px' });
+  });
 });
