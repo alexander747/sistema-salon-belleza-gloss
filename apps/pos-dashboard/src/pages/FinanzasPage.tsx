@@ -1848,15 +1848,15 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   animate="show"
                   transition={{ delay: idx * 0.03 }}
                 >
-                  <td style={{ fontWeight: 500 }}>{g.descripcion}</td>
-                  <td>
+                  <td data-label="Descripción" style={{ fontWeight: 500 }}>{g.descripcion}</td>
+                  <td data-label="Categoría">
                     <span className={`${styles.badge} ${getCategoryBadge(g.categoria)}`}>
                       {GASTO_CATEGORIAS.find((c) => c.value === g.categoria)?.label ?? g.categoria}
                     </span>
                   </td>
-                  <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(Number(g.monto ?? 0))}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(g.fecha)}</td>
-                  <td className={styles.stickyActions}>
+                  <td data-label="Monto" style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(Number(g.monto ?? 0))}</td>
+                  <td data-label="Fecha" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(g.fecha)}</td>
+                  <td data-label="Acciones" className={styles.stickyActions}>
                     <button
                       className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
                       onClick={() => openDelete(g)}
@@ -1887,7 +1887,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       <AnimatePresence>
         {formOpen && (
           <motion.div
-            className={styles.modalOverlay}
+            className={`${styles.modalOverlay} mobileBottomSheet`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1895,7 +1895,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             onClick={(e) => { if (e.target === e.currentTarget) setFormOpen(false); }}
           >
             <motion.div
-              className={styles.modalContent}
+              className={`${styles.modalContent} mobileBottomSheetContent`}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1985,7 +1985,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       <AnimatePresence>
         {deleteOpen && selectedGasto && (
           <motion.div
-            className={styles.modalOverlay}
+            className={`${styles.modalOverlay} mobileBottomSheet`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1993,7 +1993,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             onClick={(e) => { if (e.target === e.currentTarget) { setDeleteOpen(false); setSelectedGasto(null); } }}
           >
             <motion.div
-              className={styles.modalContent}
+              className={`${styles.modalContent} mobileBottomSheetContent`}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -2231,16 +2231,16 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                   animate="show"
                   transition={{ delay: idx * 0.03 }}
                 >
-                  <td>
+                  <td data-label="Tipo">
                     <span className={`${styles.badge} ${d.productoId != null ? styles.badgeProductos : styles.badgeServicios}`}>
                       {d.productoId != null ? 'Producto' : 'Servicio'}
                     </span>
                   </td>
-                  <td style={{ fontWeight: 500 }}>{d.producto?.nombre ?? '—'}</td>
-                  <td>{d.cantidad}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.motivo}</td>
-                  <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(d.montoDevolucion)}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(d.creadoEn || d.fecha)}</td>
+                  <td data-label="Producto" style={{ fontWeight: 500 }}>{d.producto?.nombre ?? '—'}</td>
+                  <td data-label="Cantidad">{d.cantidad}</td>
+                  <td data-label="Motivo" className={styles.motivoCell} style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{d.motivo}</td>
+                  <td data-label="Monto dev." style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(d.montoDevolucion)}</td>
+                  <td data-label="Fecha" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(d.creadoEn || d.fecha)}</td>
                 </motion.tr>
               ))}
             </tbody>
@@ -2262,7 +2262,7 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       <AnimatePresence>
         {formOpen && (
           <motion.div
-            className={styles.modalOverlay}
+            className={`${styles.modalOverlay} mobileBottomSheet`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -2270,7 +2270,7 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             onClick={(e) => { if (e.target === e.currentTarget) setFormOpen(false); }}
           >
             <motion.div
-              className={styles.modalContent}
+              className={`${styles.modalContent} mobileBottomSheetContent`}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}

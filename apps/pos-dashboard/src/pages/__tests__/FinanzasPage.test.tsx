@@ -1200,6 +1200,7 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
   });
 
   const REGISTROS_LABELS = ['#', 'Fecha', 'Hora', 'Cliente', 'Empleada', 'Servicios', 'Productos', 'Dto.%', 'Ajustado', 'Total', 'Método de pago', 'Estado', 'Acciones'];
+  const GASTOS_LABELS = ['Descripción', 'Categoría', 'Monto', 'Fecha', 'Acciones'];
 
   const registroFila = {
     id: 1,
@@ -1246,6 +1247,14 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
     if (url.includes('/registros')) {
       return Promise.resolve({ data: { data: [registroFila, registroFila2], meta: { page: 1, limit: 12, total: 2, totalPages: 1 } } });
     }
+    if (url.includes('/gastos')) {
+      return Promise.resolve({
+        data: {
+          data: [{ id: 7, descripcion: 'Arriendo local', monto: 200000, categoria: 'ARRIENDO', fecha: '2026-08-05T12:00:00.000Z', metodoPago: 'TRANSFERENCIA', esGastoFijo: true }],
+          meta: { page: 1, limit: 12, total: 1, totalPages: 1 },
+        },
+      });
+    }
     if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
     return Promise.resolve({ data: {} });
   }
@@ -1273,6 +1282,20 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
       cells.forEach((cell, i) => {
         expect(cell).toHaveAttribute('data-label', REGISTROS_LABELS[i]);
       });
+    });
+  });
+
+  it('cada celda de Gastos expone su data-label en orden (contrato de cards móviles)', async () => {
+    renderMobilePage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '💸 Gastos' }));
+    await screen.findByText('Arriendo local');
+
+    const fila = screen.getByText('Arriendo local').closest('tr')!;
+    const cells = within(fila).getAllByRole('cell');
+    expect(cells).toHaveLength(GASTOS_LABELS.length);
+    cells.forEach((cell, i) => {
+      expect(cell).toHaveAttribute('data-label', GASTOS_LABELS[i]);
     });
   });
 
