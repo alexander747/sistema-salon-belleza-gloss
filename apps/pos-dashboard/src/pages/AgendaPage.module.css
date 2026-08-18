@@ -979,6 +979,17 @@
     height: 40px;
   }
 
+  /* Grid de productos del modal de completar: con repeat(2, 1fr) los nombres
+     nowrap fuerzan el min-content de la pista y desbordan el body en móvil.
+     minmax(0, 1fr) permite que la pista encoja dentro del modal. */
+  .productGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .serviceName {
+    min-width: 0;
+  }
+
   .slotButton {
     min-height: 40px;
   }
