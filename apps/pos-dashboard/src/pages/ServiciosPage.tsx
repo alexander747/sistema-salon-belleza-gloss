@@ -542,16 +542,17 @@ const ServiciosPage: React.FC = () => {
               )}
             </motion.div>
           ) : (
-            <div
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-surface)',
-                overflowX: 'auto',
-                opacity: 1,
-                visibility: 'visible' as const,
-              }}
-            >
+            <>
+              <div
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--bg-surface)',
+                  overflowX: 'auto',
+                  opacity: 1,
+                  visibility: 'visible' as const,
+                }}
+              >
               {/* Table header */}
               <div style={tableHeaderStyle}>
                 <span>Nombre</span>
@@ -647,6 +648,7 @@ const ServiciosPage: React.FC = () => {
                   </span>
                 </motion.div>
               ))}
+              </div>
 
               {/* ── Pagination ── */}
               <PaginationBar
@@ -657,7 +659,7 @@ const ServiciosPage: React.FC = () => {
                 onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 onNext={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
               />
-            </div>
+            </>
           )}
 
       {/* ── Create / Edit Modal ── */}
