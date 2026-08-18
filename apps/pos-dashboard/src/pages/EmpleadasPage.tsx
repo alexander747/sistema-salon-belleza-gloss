@@ -330,6 +330,9 @@ const EmpleadasPage: React.FC = () => {
   /* ── Toggle activo ── */
   const handleToggleActivo = async (empleada: Empleada) => {
     if (!salonId || togglingId !== null) return;
+    // Desactivar bloquea el acceso de la empleada: pedir confirmación.
+    // Activar es reversible e inofensivo: no molestar con un confirm.
+    if (empleada.activo && !window.confirm(`¿Desactivar a ${empleada.nombre}? No podrá acceder al sistema hasta que la actives de nuevo.`)) return;
     setTogglingId(empleada.id);
     setToggleError(null);
     try {

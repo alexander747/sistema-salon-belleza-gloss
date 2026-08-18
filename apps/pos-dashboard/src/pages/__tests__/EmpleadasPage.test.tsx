@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 
@@ -230,12 +230,95 @@ describe('EmpleadasPage — errores de mutación visibles en la UI', () => {
     mockPatch.mockRejectedValue({
       response: { data: { message: 'No se pudo cambiar el estado de la empleada' } },
     });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     renderPage();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Desactivar empleado' }));
 
     expect(await screen.findByText(/No se pudo cambiar el estado de la empleada/)).toBeInTheDocument();
+  }, 20000);
+
+  it('toggle activo: pedir confirmación antes de desactivar (cancelar → sin PATCH)', async () => {
+    defaultApiMock([
+      {
+        id: 1,
+        nombre: 'Ana',
+        email: 'ana@test.com',
+        numeroWhatsApp: '3000000000',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: true,
+      },
+    ]);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Desactivar empleado' }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockPatch).not.toHaveBeenCalled();
+    // La empleada sigue activa (toggle sigue diciendo "Desactivar")
+    expect(screen.getByRole('button', { name: 'Desactivar empleado' })).toBeInTheDocument();
+  }, 20000);
+
+  it('toggle activo: desactiva solo tras confirmar (confirm=true → PATCH /desactivar)', async () => {
+    defaultApiMock([
+      {
+        id: 1,
+        nombre: 'Ana',
+        email: 'ana@test.com',
+        numeroWhatsApp: '3000000000',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: true,
+      },
+    ]);
+    mockPatch.mockResolvedValue({ data: {} });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Desactivar empleado' }));
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(mockPatch).toHaveBeenCalledWith('/salones/1/empleadas/1/desactivar');
+    });
+    // El toggle refleja el nuevo estado (inactiva → "Activar")
+    expect(await screen.findByRole('button', { name: 'Activar empleado' })).toBeInTheDocument();
+  }, 20000);
+
+  it('toggle activo: activar NO pide confirmación (es reversible y no bloquea acceso)', async () => {
+    defaultApiMock([
+      {
+        id: 2,
+        nombre: 'Rosa',
+        email: 'rosa@test.com',
+        numeroWhatsApp: '3000000001',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: false,
+      },
+    ]);
+    mockPatch.mockResolvedValue({ data: {} });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Activar empleado' }));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith('/salones/1/empleadas/2/activar');
+    });
+    expect(confirmSpy).not.toHaveBeenCalled();
   }, 20000);
 });
 
