@@ -315,4 +315,16 @@ describe('PrestamosPage — móvil (cards ≤600px)', () => {
     // El panel con la clase bottom-sheet es el modal real, con su título
     expect(within(panel as HTMLElement).getByText('Nuevo préstamo')).toBeInTheDocument();
   });
+
+  it('la fila del toolbar (SalonSwitcher + botón) permite wrap en móvil (sin overflow)', async () => {
+    defaultApiMock();
+
+    renderPage();
+
+    // El contenedor flex que agrupa SalonSwitcher y "+ Nuevo préstamo" debe envolver
+    // en pantallas angostas (fix overflow 390px: ancho mínimo 200px + botón > content).
+    const accionesRow = (await screen.findByRole('button', { name: '+ Nuevo préstamo' }, WAIT)).parentElement;
+    expect(accionesRow).not.toBeNull();
+    expect(accionesRow).toHaveStyle({ flexWrap: 'wrap' });
+  });
 });

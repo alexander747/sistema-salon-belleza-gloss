@@ -296,7 +296,7 @@ const PrestamosPage: React.FC = () => {
             Gestiona los préstamos a empleadas y terceros
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', justifyContent: 'flex-end' }}>
           <SalonSwitcher userSalonId={salonId ?? 0} />
           <button
             style={primaryBtnStyle}
