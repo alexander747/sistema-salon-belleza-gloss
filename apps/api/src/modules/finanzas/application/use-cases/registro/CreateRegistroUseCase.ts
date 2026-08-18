@@ -17,7 +17,7 @@ import { verificarCajaAbierta } from '../../services/verificarCajaAbierta';
 import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { RegistroServicioDTO } from '../../dtos/RegistroServicioDTO';
 import { registroServicioToDTO } from '../../dtos/RegistroServicioDTO';
-import { NotFoundError } from '../../../../../shared/errors';
+import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
 
 /**
  * Input extendido: además del payload validado por HTTP, permite fijar
@@ -208,12 +208,20 @@ export class CreateRegistroUseCase {
             .getRepository(RegistroProductoEntity)
             .save(registroProducto);
 
-          // Decrement stock within the same transaction
-          await this.productoRepo.decrementStock(
+          // Decrement stock within the same transaction.
+          // decrementStock devuelve null si el stock es insuficiente → la
+          // venta se rechaza con 422 y el error dentro de la transacción
+          // hace rollback (no queda nada persistido a medias).
+          const stockActualizado = await this.productoRepo.decrementStock(
             pv.productoId,
             pv.cantidad,
             qr,
           );
+          if (!stockActualizado) {
+            throw new UnprocessableEntityError(
+              `Stock insuficiente para el producto ${producto.nombre}`,
+            );
+          }
         }
       }
 

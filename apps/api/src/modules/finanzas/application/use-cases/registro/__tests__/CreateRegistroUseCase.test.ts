@@ -28,27 +28,32 @@ vi.mock('../../../../../../infrastructure/persistence/entities/RegistroServicioI
 const mockRepoCreate = vi.fn();
 const mockRepoSave = vi.fn();
 const mockRepoUpdate = vi.fn();
+const { mockQrRefs } = vi.hoisted(() => ({ mockQrRefs: [] as Array<Record<string, unknown>> }));
 vi.mock('../../../../../../shared/database.js', () => ({
   AppDataSource: {
-    createQueryRunner: vi.fn(() => ({
-      connect: vi.fn(),
-      startTransaction: vi.fn(),
-      commitTransaction: vi.fn(),
-      rollbackTransaction: vi.fn(),
-      release: vi.fn(),
-      manager: {
-        getRepository: vi.fn(() => ({
-          update: mockRepoUpdate,
-          create: mockRepoCreate,
-          save: mockRepoSave,
-        })),
-      },
-    })),
+    createQueryRunner: vi.fn(() => {
+      const qr = {
+        connect: vi.fn(),
+        startTransaction: vi.fn(),
+        commitTransaction: vi.fn(),
+        rollbackTransaction: vi.fn(),
+        release: vi.fn(),
+        manager: {
+          getRepository: vi.fn(() => ({
+            update: mockRepoUpdate,
+            create: mockRepoCreate,
+            save: mockRepoSave,
+          })),
+        },
+      };
+      mockQrRefs.push(qr);
+      return qr;
+    }),
   },
 }));
 
 import { CreateRegistroUseCase } from '../CreateRegistroUseCase';
-import { NotFoundError, CajaCerradaError } from '../../../../../../shared/errors';
+import { NotFoundError, CajaCerradaError, UnprocessableEntityError } from '../../../../../../shared/errors';
 import { AppDataSource } from '../../../../../../shared/database';
 import type { CreateRegistroInput } from '@pos-final/validation';
 
@@ -78,6 +83,7 @@ const mockComisionService = {
   calcularMontoPendiente: vi.fn(),
 };
 const mockProductoRepo = {
+  findBySalonAndId: vi.fn(),
   decrementStock: vi.fn(),
 };
 
@@ -529,6 +535,90 @@ describe('CreateRegistroUseCase', () => {
         expect.objectContaining({ montoPendiente: 40000 }),
         expect.anything(),
       );
+    });
+  });
+
+  describe('stock insuficiente (no sobreventa silenciosa)', () => {
+    const mockSavedConProducto = {
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      usuarioId: 2,
+      totalServicios: 100000,
+      totalProductos: 50000,
+      montoTotal: 160000,
+      propina: 10000,
+      comisionCalculada: 60000,
+      esRetoque: false,
+      montoPendiente: 50000,
+      estaPagadaEmpleada: false,
+      notas: null,
+      descripcionServicio: null,
+      pagos: [],
+      divisiones: [],
+      creadoEn: new Date(),
+      actualizadoEn: new Date(),
+    };
+
+    const inputConProducto = (cantidad: number) => ({
+      ...validInput,
+      productosVendidos: [{ productoId: 99, cantidad }],
+    });
+
+    const setupConProducto = (stockDisponible: number) => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 5, deudaTotal: 50000 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '60' });
+      mockComisionService.calcularComision.mockReturnValue(60000);
+      mockComisionService.calcularMontoTotal.mockReturnValue(160000);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(50000);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockProductoRepo.findBySalonAndId.mockResolvedValue({
+        id: 99,
+        nombre: 'Shampoo Premium',
+        precioVenta: 10000,
+        cantidadStock: stockDisponible,
+      });
+    };
+
+    it('should throw UnprocessableEntityError and ROLLBACK (venta NO creada) when decrementStock returns null (stock insuficiente)', async () => {
+      setupConProducto(2); // stock disponible: 2
+      mockProductoRepo.decrementStock.mockResolvedValue(null); // repo marca stock insuficiente
+
+      const qrIndex = mockQrRefs.length;
+      await expect(useCase.execute(inputConProducto(3))).rejects.toThrow(UnprocessableEntityError);
+
+      // El error se lanza DENTRO de la transacción → rollback, nunca commit:
+      // la venta no queda persistida a medias (ni stock, ni pagos, ni registro).
+      const qr = mockQrRefs[qrIndex] as {
+        rollbackTransaction: ReturnType<typeof vi.fn>;
+        commitTransaction: ReturnType<typeof vi.fn>;
+      };
+      expect(qr.rollbackTransaction).toHaveBeenCalled();
+      expect(qr.commitTransaction).not.toHaveBeenCalled();
+      expect(mockProductoRepo.decrementStock).toHaveBeenCalledWith(99, 3, expect.anything());
+    });
+
+    it('should proceed with the sale (commit) when there is enough stock', async () => {
+      setupConProducto(10); // stock disponible: 10
+      mockProductoRepo.decrementStock.mockResolvedValue({
+        id: 99,
+        nombre: 'Shampoo Premium',
+        precioVenta: 10000,
+        cantidadStock: 7,
+      });
+      mockRegistroRepo.findById.mockResolvedValue(mockSavedConProducto);
+
+      const qrIndex = mockQrRefs.length;
+      const result = await useCase.execute(inputConProducto(3));
+
+      const qr = mockQrRefs[qrIndex] as {
+        rollbackTransaction: ReturnType<typeof vi.fn>;
+        commitTransaction: ReturnType<typeof vi.fn>;
+      };
+      expect(qr.commitTransaction).toHaveBeenCalled();
+      expect(qr.rollbackTransaction).not.toHaveBeenCalled();
+      expect(mockProductoRepo.decrementStock).toHaveBeenCalledWith(99, 3, expect.anything());
+      expect(result.id).toBe(1);
     });
   });
 
