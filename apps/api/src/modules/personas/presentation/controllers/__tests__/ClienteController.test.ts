@@ -9,6 +9,8 @@ describe('ClienteController', () => {
   let mockGetUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockCreateUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockUpdateUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockActivateUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockDeactivateUseCase: { execute: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -16,12 +18,16 @@ describe('ClienteController', () => {
     mockGetUseCase = { execute: vi.fn() };
     mockCreateUseCase = { execute: vi.fn() };
     mockUpdateUseCase = { execute: vi.fn() };
+    mockActivateUseCase = { execute: vi.fn() };
+    mockDeactivateUseCase = { execute: vi.fn() };
     next = vi.fn();
     controller = new ClienteController(
       mockListUseCase as never,
       mockGetUseCase as never,
       mockCreateUseCase as never,
       mockUpdateUseCase as never,
+      mockActivateUseCase as never,
+      mockDeactivateUseCase as never,
     );
   });
 
@@ -110,6 +116,56 @@ describe('ClienteController', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(existingCliente);
+    });
+  });
+
+  describe('activate / deactivate (soft-delete)', () => {
+    it('activate should call ActivateClienteUseCase with salonId + id from params', async () => {
+      mockActivateUseCase.execute.mockResolvedValue({ activo: true });
+
+      const req = {
+        salonId: 1,
+        params: { id: '7' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.activate(req, res, next);
+
+      expect(mockActivateUseCase.execute).toHaveBeenCalledWith({ salonId: 1, id: 7 });
+      expect(res.json).toHaveBeenCalledWith({ activo: true });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('deactivate should call DeactivateClienteUseCase with salonId + id from params', async () => {
+      mockDeactivateUseCase.execute.mockResolvedValue({ activo: false });
+
+      const req = {
+        salonId: 1,
+        params: { id: '7' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.deactivate(req, res, next);
+
+      expect(mockDeactivateUseCase.execute).toHaveBeenCalledWith({ salonId: 1, id: 7 });
+      expect(res.json).toHaveBeenCalledWith({ activo: false });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should forward errors to next', async () => {
+      const error = new Error('boom');
+      mockActivateUseCase.execute.mockRejectedValue(error);
+
+      const req = {
+        salonId: 1,
+        params: { id: '7' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.activate(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 });

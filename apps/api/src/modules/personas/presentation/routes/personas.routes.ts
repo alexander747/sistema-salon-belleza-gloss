@@ -60,5 +60,16 @@ router.put(
   validate(updateClienteSchema),
   clienteController.update,
 );
+// Soft-delete: los clientes con historial no se eliminan, se desactivan (activo=false)
+router.patch(
+  '/clientes/:id/activar',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
+  clienteController.activate,
+);
+router.patch(
+  '/clientes/:id/desactivar',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
+  clienteController.deactivate,
+);
 
 export { router as personasRouter };

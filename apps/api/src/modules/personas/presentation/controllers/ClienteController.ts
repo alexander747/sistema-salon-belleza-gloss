@@ -4,6 +4,8 @@ import { ListClientesUseCase } from '../../application/use-cases/cliente/ListCli
 import { GetClienteUseCase } from '../../application/use-cases/cliente/GetClienteUseCase';
 import { CreateClienteUseCase } from '../../application/use-cases/cliente/CreateClienteUseCase';
 import { UpdateClienteUseCase } from '../../application/use-cases/cliente/UpdateClienteUseCase';
+import { ActivateClienteUseCase } from '../../application/use-cases/cliente/ActivateClienteUseCase';
+import { DeactivateClienteUseCase } from '../../application/use-cases/cliente/DeactivateClienteUseCase';
 import { paginationSchema } from '@pos-final/validation';
 
 @injectable()
@@ -13,6 +15,8 @@ export class ClienteController {
     @inject('GetClienteUseCase') private readonly getUseCase: GetClienteUseCase,
     @inject('CreateClienteUseCase') private readonly createUseCase: CreateClienteUseCase,
     @inject('UpdateClienteUseCase') private readonly updateUseCase: UpdateClienteUseCase,
+    @inject('ActivateClienteUseCase') private readonly activateUseCase: ActivateClienteUseCase,
+    @inject('DeactivateClienteUseCase') private readonly deactivateUseCase: DeactivateClienteUseCase,
   ) {}
 
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -63,6 +67,30 @@ export class ClienteController {
         salonId: req.salonId!,
         id: Number(req.params.id),
         ...req.body,
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  activate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.activateUseCase.execute({
+        salonId: req.salonId!,
+        id: Number(req.params.id),
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deactivate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.deactivateUseCase.execute({
+        salonId: req.salonId!,
+        id: Number(req.params.id),
       });
       res.json(result);
     } catch (error) {

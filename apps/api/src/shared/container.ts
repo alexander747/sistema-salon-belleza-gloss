@@ -65,6 +65,8 @@ import { ListClientesUseCase } from '../modules/personas/application/use-cases/c
 import { GetClienteUseCase } from '../modules/personas/application/use-cases/cliente/GetClienteUseCase';
 import { CreateClienteUseCase } from '../modules/personas/application/use-cases/cliente/CreateClienteUseCase';
 import { UpdateClienteUseCase } from '../modules/personas/application/use-cases/cliente/UpdateClienteUseCase';
+import { ActivateClienteUseCase } from '../modules/personas/application/use-cases/cliente/ActivateClienteUseCase';
+import { DeactivateClienteUseCase } from '../modules/personas/application/use-cases/cliente/DeactivateClienteUseCase';
 
 // Personas Module — Controllers
 import { EmpleadaController } from '../modules/personas/presentation/controllers/EmpleadaController';
@@ -176,6 +178,8 @@ container.register('ListClientesUseCase', { useClass: ListClientesUseCase });
 container.register('GetClienteUseCase', { useClass: GetClienteUseCase });
 container.register('CreateClienteUseCase', { useClass: CreateClienteUseCase });
 container.register('UpdateClienteUseCase', { useClass: UpdateClienteUseCase });
+container.register('ActivateClienteUseCase', { useClass: ActivateClienteUseCase });
+container.register('DeactivateClienteUseCase', { useClass: DeactivateClienteUseCase });
 
 // ---- Personas Module — Controllers ----
 container.register(EmpleadaController, { useClass: EmpleadaController });
