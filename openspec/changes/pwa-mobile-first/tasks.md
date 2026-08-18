@@ -57,13 +57,13 @@ Chain strategy: stacked-to-main
 
 ## Batch R4 — Finanzas (~650 lines)
 
-- [ ] 4.1 FinanzasPage CSS: Registros column-hide ≤1024px (#,Hora,Dto%,Ajustado) and ≤768px (+Productos,Método)
-- [ ] 4.2 Registros card MQ ≤600px; `.stickyActions{position:static;box-shadow:none}`
-- [ ] 4.3 FinanzasPage.tsx: `data-label` on Registros `<td>`s
-- [ ] 4.4 Gastos/Devoluciones/Nómina: card MQ + `data-label`
-- [ ] 4.5 Cuentas subtabs (Cobrar/Pagar): card MQ ≤600px, keep `<tr>` DOM (`closest('tr')` constraint)
-- [ ] 4.6 CajaTab: un-clip scroll containers (L165 `overflow:hidden`); historial/audit keep scroll
-- [ ] 4.7 Verify FinanzasPage.test + CajaBannerPages.test green
+- [x] 4.1 FinanzasPage CSS: Registros column-hide ≤1024px (#,Hora,Dto%,Ajustado) and ≤768px (+Productos,Método)
+- [x] 4.2 Registros card MQ ≤600px; `.stickyActions{position:static;box-shadow:none}`
+- [x] 4.3 FinanzasPage.tsx: `data-label` on Registros `<td>`s
+- [x] 4.4 Gastos/Devoluciones/Nómina: card MQ + `data-label`
+- [x] 4.5 Cuentas subtabs (Cobrar/Pagar): card MQ ≤600px, keep `<tr>` DOM (`closest('tr')` constraint)
+- [x] 4.6 CajaTab: un-clip scroll containers (L165 `overflow:hidden`); historial/audit keep scroll
+- [x] 4.7 Verify FinanzasPage.test + CajaBannerPages.test green
 
 ## Batch R5 — Ventas + Horarios + Agenda modals (~400 lines)
 
