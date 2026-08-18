@@ -1679,6 +1679,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [error, setError] = useState<string | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedGasto, setSelectedGasto] = useState<Gasto | null>(null);
@@ -1718,6 +1719,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const openForm = () => {
     setForm({ descripcion: '', monto: '', categoria: 'OTROS', metodoPago: 'EFECTIVO', esGastoFijo: false });
+    setCreateError(null);
     setFormOpen(true);
   };
 
@@ -1730,6 +1732,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const handleCreate = async () => {
     if (!salonId) return;
     setSubmitting(true);
+    setCreateError(null);
     try {
       await api.post(`/salones/${salonId}/gastos`, {
         descripcion: form.descripcion.trim(),
@@ -1740,8 +1743,8 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       });
       setFormOpen(false);
       fetchGastos();
-    } catch {
-      console.error('Error al crear gasto:', error);
+    } catch (err) {
+      setCreateError(extractApiErrorMessage(err, 'Error al crear el gasto. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -1963,6 +1966,11 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               </div>
 
               <div className={styles.modalFooter}>
+                {createError && (
+                  <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--danger)', margin: 0, alignSelf: 'center' }}>
+                    {createError}
+                  </p>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => setFormOpen(false)}>Cancelar</Button>
                 <Button variant="primary" size="sm" disabled={!isValid} loading={submitting} onClick={handleCreate}>
                   Registrar gasto

@@ -230,7 +230,6 @@ const ServiciosPage: React.FC = () => {
   /* ── Fetch data ── */
   const fetchData = useCallback(async () => {
     if (salonId == null) return;
-    console.log('[DEBUG ServiciosPage] fetchData START, salonId:', salonId);
     setDataLoading(true);
     setDataError(null);
     try {
@@ -243,29 +242,23 @@ const ServiciosPage: React.FC = () => {
         api.get(`/salones/${salonId}/categorias`),
       ]);
       const catData = Array.isArray(catRes.data) ? catRes.data : catRes.data?.data ?? [];
-      console.log('[DEBUG ServiciosPage] svcResult:', svcResult);
-      console.log('[DEBUG ServiciosPage] catData.length:', catData.length);
       setServicios(svcResult.data);
       setTotalCount(svcResult.meta.total);
       setPageCount(svcResult.meta.totalPages);
       setCategorias(catData);
-    } catch (err) {
-      console.error('[DEBUG ServiciosPage] fetchData ERROR:', err);
+    } catch {
       setDataError('Error al cargar servicios');
       setServicios([]);
       setTotalCount(0);
       setPageCount(0);
       setCategorias([]);
     } finally {
-      console.log('[DEBUG ServiciosPage] fetchData DONE, dataLoading -> false');
       setDataLoading(false);
     }
   }, [salonId, currentPage, debouncedSearch]);
 
   useEffect(() => {
-    console.log('[DEBUG ServiciosPage EFFECT] authLoading:', authLoading, 'salonId:', salonId, 'user:', user?.email);
     if (!authLoading && salonId != null) {
-      console.log('[DEBUG ServiciosPage] Calling fetchData');
       fetchData();
     }
   }, [authLoading, salonId, fetchData]);
@@ -456,7 +449,6 @@ const ServiciosPage: React.FC = () => {
           </motion.div>
 
           {/* ── Content area ── */}
-          {(() => { console.log('[DEBUG ServiciosPage RENDER] dataLoading:', dataLoading, 'dataError:', dataError, 'hasData:', hasData, 'servicios.length:', servicios.length, 'categorias.length:', categorias.length); return null; })()}
           {dataLoading ? (
             <TableSkeleton
               columns={['Nombre', 'Duración', 'Precio', 'Costo base insumos', 'Categoría', 'Estado', 'Creado', 'Modificado', 'Acción']}

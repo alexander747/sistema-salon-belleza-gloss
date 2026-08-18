@@ -1040,6 +1040,52 @@ describe('FinanzasPage — errores de mutación visibles en la UI', () => {
 
     expect(await screen.findByText(/El gasto ya fue conciliado y no se puede eliminar/)).toBeInTheDocument();
   }, 20000);
+
+  it('crear gasto: muestra el error inline cuando la API rechaza', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/gastos')) {
+        return Promise.resolve({
+          data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } },
+        });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    });
+    mockPost.mockRejectedValue({
+      response: { data: { message: 'No se puede crear el gasto en una caja cerrada' } },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '💸 Gastos' }));
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo gasto' }));
+
+    fireEvent.change(screen.getByPlaceholderText('Ej: Compra de tintes'), {
+      target: { value: 'Tintes nuevos' },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText('0')[0], {
+      target: { value: '50000' },
+    });
+
+    // Hay dos "Registrar gasto" (estado vacío + modal): usar el del modal
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Registrar gasto' }))[1]);
+
+    expect(await screen.findByText(/No se puede crear el gasto en una caja cerrada/)).toBeInTheDocument();
+    // El modal permanece abierto para corregir
+    expect(screen.getByText('Nuevo gasto')).toBeInTheDocument();
+  }, 20000);
 });
 
 describe('FinanzasPage — tabs filtrados por rol', () => {
