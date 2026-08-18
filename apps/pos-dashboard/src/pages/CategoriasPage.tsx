@@ -7,6 +7,7 @@ import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
+import styles from './CategoriasPage.module.css';
 
 /* ── Types ── */
 
@@ -86,33 +87,6 @@ const formLabelStyle: React.CSSProperties = {
   color: 'var(--text-secondary)',
   marginBottom: '0.3rem',
   letterSpacing: '0.02em',
-};
-
-const tableHeaderStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'minmax(150px, 1.2fr) 1fr 60px 60px 100px 100px 120px',
-  gap: '0.75rem',
-  padding: '0.65rem 1rem',
-  borderBottom: '1px solid var(--border)',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.6875rem',
-  fontWeight: 600,
-  color: 'var(--text-dim)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-};
-
-const tableRowStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'minmax(150px, 1.2fr) 1fr 60px 60px 100px 100px 120px',
-  gap: '0.75rem',
-  padding: '0.75rem 1rem',
-  borderBottom: '1px solid var(--border)',
-  alignItems: 'center',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.8125rem',
-  color: 'var(--text-primary)',
-  transition: 'background 0.15s',
 };
 
 const modalOverlayStyle: React.CSSProperties = {
@@ -442,7 +416,7 @@ const CategoriasPage: React.FC = () => {
               }}
             >
               {/* Table header */}
-              <div style={tableHeaderStyle}>
+              <div className={styles.gridHeader}>
                 <span>Nombre</span>
                 <span>Descripción</span>
                 <span>💅</span>
@@ -458,32 +432,29 @@ const CategoriasPage: React.FC = () => {
                   <motion.div
                     key={cat.id}
                     variants={itemVariants}
-                    style={{
-                      ...tableRowStyle,
-                      borderBottom: '1px solid var(--border)',
-                    }}
+                    className={styles.gridRow}
                     whileHover={{ background: 'var(--bg-hover)' }}
                     transition={{ duration: 0.15 }}
                   >
-                    <span style={{ fontWeight: 500 }}>{cat.nombre}</span>
+                    <span style={{ fontWeight: 500 }} data-label="Nombre">{cat.nombre}</span>
 
-                    <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-label="Descripción">
                       {cat.descripcion || '—'}
                     </span>
 
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center' }} data-label="Servicios">
                       {servicioCounts[cat.id] ?? 0}
                     </span>
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center' }} data-label="Productos">
                       {productoCounts[cat.id] ?? 0}
                     </span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Creado">
                       {cat.creadoEn ? new Date(cat.creadoEn).toLocaleDateString('es-CL') : '—'}
                     </span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Modificado">
                       {cat.actualizadoEn ? new Date(cat.actualizadoEn).toLocaleDateString('es-CL') : '—'}
                     </span>
-                    <span style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                    <span style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }} data-label="Acciones">
                       <button
                         onClick={() => openEdit(cat)}
                         style={{
@@ -540,6 +511,7 @@ const CategoriasPage: React.FC = () => {
         {showModal && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -553,6 +525,7 @@ const CategoriasPage: React.FC = () => {
           >
             <motion.div
               style={{ ...modalContentStyle, maxWidth: '480px' }}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -674,6 +647,7 @@ const CategoriasPage: React.FC = () => {
         {deleting && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -684,6 +658,7 @@ const CategoriasPage: React.FC = () => {
           >
             <motion.div
               style={modalContentStyle}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
+import { setMobileMedia } from '../../test/setMobileMedia';
 
 const { mockGet, mockPost, mockPut } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -117,4 +118,53 @@ describe('CategoriasPage — create/edit con modal (estandarizado)', () => {
     expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument();
   }, 20000);
+});
+
+describe('CategoriasPage — móvil (grid apilado ≤640px)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    setMobileMedia(true);
+  });
+
+  const ROW_LABELS = ['Nombre', 'Descripción', 'Servicios', 'Productos', 'Creado', 'Modificado', 'Acciones'];
+
+  it('cada celda de fila expone su data-label en orden (contrato de grids apilados)', async () => {
+    defaultApiMock([
+      { id: 1, nombre: 'Cortes', descripcion: 'Servicios de corte', creadoEn: '2026-01-01', actualizadoEn: '2026-01-01' },
+      { id: 2, nombre: 'Manicure', descripcion: '', creadoEn: '2026-01-02', actualizadoEn: '2026-01-02' },
+    ]);
+
+    renderPage();
+
+    // Esperar a que las filas de datos rendericen (no el skeleton)
+    await screen.findByText('Cortes', {}, WAIT);
+    await screen.findByText('Manicure', {}, WAIT);
+    const rows = [screen.getByText('Cortes'), screen.getByText('Manicure')].map(
+      (cell) => cell.parentElement as HTMLElement,
+    );
+    expect(rows).toHaveLength(2);
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll('[data-label]');
+      expect(cells).toHaveLength(ROW_LABELS.length);
+      cells.forEach((cell, i) => {
+        expect(cell).toHaveAttribute('data-label', ROW_LABELS[i]);
+      });
+    });
+  });
+
+  it('el modal de crear categoría usa las clases bottom-sheet en móvil (D10)', async () => {
+    defaultApiMock();
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nueva Categoría' }));
+
+    const overlay = document.querySelector('.mobileBottomSheet');
+    const panel = document.querySelector('.mobileBottomSheetContent');
+    expect(overlay).not.toBeNull();
+    expect(panel).not.toBeNull();
+    // El panel con la clase bottom-sheet es el modal real, con su título
+    expect(within(panel as HTMLElement).getByText('Nueva Categoría')).toBeInTheDocument();
+  });
 });
