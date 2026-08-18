@@ -27,9 +27,7 @@ import {
   ShoppingCart,
   AttachMoney,
   AddCircle,
-  Settings,
   Logout,
-  Notifications,
   DarkMode,
   LightMode,
   Category,
@@ -39,7 +37,6 @@ import {
   AccessTime,
 } from '@mui/icons-material';
 import { useThemeMode } from '../context/ThemeContext';
-import { Rol } from '@pos-final/types';
 import { canAccessPage, rolLabel } from '../utils/roles';
 
 const DRAWER_WIDTH_EXPANDED = 260;
@@ -305,34 +302,6 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
 
         {/* Bottom actions */}
         <List sx={{ px: collapsed ? 0.5 : 1.5 }}>
-          {user?.rol === Rol.SUPERADMIN && (
-            <ListItem disablePadding>
-              <Tooltip title="Configuración" placement="right" arrow disableHoverListener={!collapsed}>
-                <ListItemButton
-                  onClick={() => {}}
-                  sx={{
-                    borderRadius: 3,
-                    mb: 0.5,
-                    justifyContent: collapsed ? 'center' : 'flex-start',
-                    px: collapsed ? 1 : 2,
-                    minHeight: 44,
-                    color: 'text.secondary',
-                  }}
-                >
-                  <ListItemIcon
-                    sx={{
-                      minWidth: collapsed ? 0 : 40,
-                      justifyContent: 'center',
-                      color: 'text.secondary',
-                    }}
-                  >
-                    <Settings />
-                  </ListItemIcon>
-                  {!collapsed && <ListItemText primary="Configuración" />}
-                </ListItemButton>
-              </Tooltip>
-            </ListItem>
-          )}
           <ListItem disablePadding>
             <Tooltip title="Cerrar sesión" placement="right" arrow disableHoverListener={!collapsed}>
               <ListItemButton
@@ -397,9 +366,6 @@ const LuxeLayout: React.FC<LuxeLayoutProps> = ({ user, onLogout, loading }) => {
               </Typography>
             )}
 
-            <IconButton>
-              <Notifications />
-            </IconButton>
             <IconButton onClick={toggleColorMode}>
               {mode === 'dark' ? <LightMode /> : <DarkMode />}
             </IconButton>

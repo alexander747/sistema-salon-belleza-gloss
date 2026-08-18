@@ -75,13 +75,14 @@ describe('LuxeLayout — navegación filtrada por rol', () => {
     expect(screen.queryAllByText('Configuración')).toHaveLength(0);
   });
 
-  it('SUPERADMIN: ve todas las páginas + Configuración', () => {
+  it('SUPERADMIN: ve todas las páginas, sin Configuración (UI muerta eliminada)', () => {
     renderLayout(Rol.SUPERADMIN);
 
     for (const label of ['Dashboard', 'Citas', 'Clientes', 'Servicios', 'Empleados', 'Productos', 'Categorías', 'Ventas', 'Finanzas', 'Préstamos', 'Horarios']) {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
-    expect(screen.getByText('Configuración')).toBeInTheDocument();
+    // El botón "Configuración" no-op fue eliminado del sidebar
+    expect(screen.queryAllByText('Configuración')).toHaveLength(0);
   });
 });
 
