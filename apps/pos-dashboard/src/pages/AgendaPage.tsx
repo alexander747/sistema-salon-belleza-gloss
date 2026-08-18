@@ -407,6 +407,25 @@ const AgendaPage: React.FC = () => {
       .finally(() => setRefDataLoading(false));
   }, [salonId]);
 
+  /* ── Refetch clientes (quick-add desde el modal de nueva cita) ── */
+  // El modal de nueva cita permite crear un cliente al vuelo; tras crearlo el
+  // PADRE (dueño de setClientes) hace refetch para que el dropdown lo muestre.
+  const refetchClientes = useCallback(async () => {
+    if (salonId == null) return;
+    try {
+      const { data } = await api.get(`/salones/${salonId}/clientes`, { params: { limit: 0 } });
+      const paginatedData = data?.data ?? data;
+      const list = Array.isArray(paginatedData) ? paginatedData : [];
+      setClientes(list.map((c: Record<string, unknown>) => ({
+        id: c.id as number,
+        nombre: c.nombre as string,
+        telefono: c.telefono as string,
+      })));
+    } catch {
+      // Silently fail - clientes will refresh on next page load
+    }
+  }, [salonId]);
+
   /* ── Fetch disponibility slots ── */
   useEffect(() => {
     if (
@@ -992,6 +1011,7 @@ const AgendaPage: React.FC = () => {
             createError={createError}
             servicioSearch={servicioSearch}
             setServicioSearch={setServicioSearch}
+            onClienteCreado={refetchClientes}
           />
         )}
       </AnimatePresence>
@@ -1392,6 +1412,8 @@ interface CreateModalProps {
   onCreate: () => void;
   servicioSearch: string;
   setServicioSearch: (v: string) => void;
+  /** Callback del padre (dueño de setClientes) para refetch tras crear un cliente al vuelo. */
+  onClienteCreado: () => void;
 }
 
 /* ── Mini-modal inline state ── */
@@ -1419,6 +1441,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
   onCreate,
   servicioSearch,
   setServicioSearch,
+  onClienteCreado,
 }) => {
   const [showCreateCliente, setShowCreateCliente] = useState(false);
   const [newClienteForm, setNewClienteForm] = useState<NewClienteForm>({
@@ -1430,22 +1453,6 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
   const [creatingCliente, setCreatingCliente] = useState(false);
   const [createClienteError, setCreateClienteError] = useState('');
   const [selectedClienteName, setSelectedClienteName] = useState('');
-
-  const refreshClientes = async () => {
-    if (salonId == null) return;
-    try {
-      const { data } = await api.get(`/salones/${salonId}/clientes`, { params: { limit: 0 } });
-      const paginatedData = data?.data ?? data;
-      const list = Array.isArray(paginatedData) ? paginatedData : [];
-      setClientes(list.map((c: Record<string, unknown>) => ({
-        id: c.id as number,
-        nombre: c.nombre as string,
-        telefono: c.telefono as string,
-      })));
-    } catch {
-      // Silently fail - clientes will refresh on next page load
-    }
-  };
 
   const handleCreateCliente = async () => {
     if (!newClienteForm.nombre.trim() || !newClienteForm.telefono.trim()) {
@@ -1465,8 +1472,9 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
       if (newCliente?.id) {
         setSelectedClienteName(newCliente.nombre);
         onChange({ clienteId: newCliente.id });
-        // Refresh client list so new client appears in search
-        await refreshClientes();
+        // Refetch de clientes: el padre (dueño de setClientes) refresca la lista
+        // para que el cliente nuevo aparezca en el buscador del dropdown.
+        await onClienteCreado();
         setShowCreateCliente(false);
         setNewClienteForm({ nombre: '', telefono: '', cedula: '', email: '' });
       } else {

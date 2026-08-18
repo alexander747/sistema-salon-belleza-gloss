@@ -318,6 +318,70 @@ describe('AgendaPage — gating de botones por estado (B6)', () => {
   }, 20000);
 });
 
+describe('AgendaPage — quick-add cliente en el modal de nueva cita (C3)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('crear cliente desde el modal: POST al endpoint y refetch de clientes (sin ReferenceError de setClientes)', async () => {
+    defaultApiMock();
+    mockPost.mockImplementation((url: string) => {
+      if (String(url).includes('/clientes')) {
+        return Promise.resolve({ data: { id: 99, nombre: 'Nuevo Cliente', telefono: '3001112233' } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    renderAgenda();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nueva Cita' }, WAIT));
+
+    // Abrir el dropdown del buscador de clientes para ver "+ Crear nuevo cliente"
+    const clienteInput = await screen.findByPlaceholderText(/buscar cliente/i, {}, WAIT);
+    fireEvent.focus(clienteInput);
+    fireEvent.keyDown(clienteInput, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByRole('button', { name: '+ Crear nuevo cliente' }, WAIT));
+
+    // Llenar el mini-modal
+    fireEvent.change(await screen.findByPlaceholderText('Nombre del cliente', {}, WAIT), {
+      target: { value: 'Nuevo Cliente' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Número de teléfono'), {
+      target: { value: '3001112233' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear y seleccionar' }));
+
+    // El POST de creación viaja con nombre y teléfono
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/clientes',
+        expect.objectContaining({ nombre: 'Nuevo Cliente', telefono: '3001112233' }),
+      );
+    }, WAIT);
+
+    // REGRESIÓN C3: tras crear el cliente el padre hace REFETCH de clientes
+    // (antes, refreshClientes usaba setClientes indefinido → ReferenceError y
+    // el dropdown nunca se refrescaba). El refetch dispara un NUEVO GET /clientes.
+    const clientesGets = () =>
+      mockGet.mock.calls.filter(([url]) => String(url).includes('/clientes'));
+    const antes = clientesGets().length;
+    await waitFor(() => {
+      expect(clientesGets().length).toBeGreaterThan(antes);
+    }, WAIT);
+
+    // El mini-modal se cierra (no queda abierto con error)
+    expect(screen.queryByText('Crear nuevo cliente')).not.toBeInTheDocument();
+  }, 20000);
+});
+
 describe('AgendaPage — happy paths de cita (D6)', () => {
   beforeEach(() => {
     mockGet.mockReset();
