@@ -1517,7 +1517,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
 
   return (
     <motion.div
-      className={styles.modalOverlay}
+      className={`${styles.modalOverlay} mobileBottomSheet`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -1527,7 +1527,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
       }}
     >
       <motion.div
-        className={styles.modalContent}
+        className={`${styles.modalContent} mobileBottomSheetContent`}
         style={{ maxWidth: 1100 }}
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -2084,7 +2084,7 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
 
   return (
     <motion.div
-      className={styles.modalOverlay}
+      className={`${styles.modalOverlay} mobileBottomSheet`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -2094,7 +2094,7 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
       }}
     >
       <motion.div
-        className={styles.modalContent}
+        className={`${styles.modalContent} mobileBottomSheetContent`}
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -2469,7 +2469,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
 
   return (
     <motion.div
-      className={styles.modalOverlay}
+      className={`${styles.modalOverlay} mobileBottomSheet`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -2477,7 +2477,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
-        className={styles.modalContent}
+        className={`${styles.modalContent} mobileBottomSheetContent`}
         style={{ maxWidth: 1100 }}
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

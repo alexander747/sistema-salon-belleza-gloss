@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const { mockGet, mockPost, mockPatch } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -582,4 +584,76 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
       expect(getDesde()).toBe(semanaOriginal);
     }, WAIT);
   }, 20000);
+});
+
+describe('AgendaPage — modales bottom-sheet en móvil (R5/D10)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('el modal de nueva cita: overlay y panel con las clases bottom-sheet', async () => {
+    defaultApiMock();
+    renderAgenda();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nueva Cita' }, WAIT));
+
+    // Anclarse al título (solo existe en este modal) y subir por ancestros:
+    // evita races con modales en exit de AnimatePresence.
+    const titulo = await screen.findByText('Nueva Cita', {}, WAIT);
+    expect(titulo.closest('.mobileBottomSheet')).not.toBeNull();
+    expect(titulo.closest('.mobileBottomSheetContent')).not.toBeNull();
+  }, 20000);
+
+  it('el modal de detalle: overlay y panel con las clases bottom-sheet', async () => {
+    defaultApiMock('CONFIRMADA');
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+
+    const titulo = await screen.findByText(/Cita #1/, {}, WAIT);
+    expect(titulo.closest('.mobileBottomSheet')).not.toBeNull();
+    expect(titulo.closest('.mobileBottomSheetContent')).not.toBeNull();
+  }, 20000);
+
+  it('el modal de completar: overlay y panel con las clases bottom-sheet', async () => {
+    defaultApiMock('CONFIRMADA');
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    const titulo = await screen.findByText(/Completar Cita #1/, {}, WAIT);
+    expect(titulo.closest('.mobileBottomSheet')).not.toBeNull();
+    expect(titulo.closest('.mobileBottomSheetContent')).not.toBeNull();
+  }, 20000);
+});
+
+describe('AgendaPage — MQ móvil del module.css (R5/D9)', () => {
+  const agendaCss = readFileSync(
+    join(process.cwd(), 'src/pages/AgendaPage.module.css'),
+    'utf-8',
+  );
+
+  it('≤600px: los controles del modal de completar suben a touch targets (44px / qty 40px)', () => {
+    const mqIndex = agendaCss.indexOf('@media (max-width: 600px)');
+    expect(mqIndex).toBeGreaterThan(-1);
+    const nextMq = agendaCss.indexOf('@media', mqIndex + 1);
+    const mobileBlock =
+      nextMq === -1 ? agendaCss.slice(mqIndex) : agendaCss.slice(mqIndex, nextMq);
+
+    // Controles bespoke del modal de completar (no cubiertos por la regla
+    // global de .formInput/.formSelect/.formTextarea) suben a 44px.
+    expect(mobileBlock).toContain('.servicePriceInput');
+    expect(mobileBlock).toContain('.paymentBtn');
+    expect(mobileBlock).toContain('min-height: 44px');
+    // Los steppers de cantidad del carrito de productos ≥40px
+    expect(mobileBlock).toMatch(/\.qtyBtn\s*\{[^}]*40px/s);
+  });
 });

@@ -954,9 +954,42 @@
   gap: 0.75rem;
 }
 
+/* ── Móvil (≤600px): apilado de formRow + touch targets ──
+   Los controles bespoke del modal de completar (servicePriceInput,
+   propinaInput, amountInput, productSearchInput, addServiceSelect,
+   paymentBtn, qtyBtn, slotButton) no los cubre la regla global de
+   .formInput/.formSelect/.formTextarea: suben acá a 44px/40px.
+   min-height vence al height inline (p. ej. los botones del footer). */
 @media (max-width: 600px) {
   .formRow {
     grid-template-columns: 1fr;
+  }
+
+  .servicePriceInput,
+  .propinaInput,
+  .amountInput,
+  .productSearchInput,
+  .addServiceSelect,
+  .paymentBtn {
+    min-height: 44px;
+  }
+
+  .qtyBtn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .slotButton {
+    min-height: 40px;
+  }
+
+  .modalFooter button {
+    min-height: 44px;
+  }
+
+  .headerMeta {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
   }
 }
 
