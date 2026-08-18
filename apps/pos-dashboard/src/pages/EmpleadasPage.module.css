@@ -417,3 +417,79 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Móvil (≤600px): tabla como cards ──
+   La tabla conserva su DOM desktop; el CSS la transforma en tarjetas.
+   td::before usa data-label (agregado en el JSX) para rotular cada campo. */
+@media (max-width: 600px) {
+  .table,
+  .table tbody {
+    display: block;
+    min-width: 0;
+  }
+
+  .tableHead {
+    display: none;
+  }
+
+  .tableRow {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem;
+    background: var(--bg-surface);
+  }
+
+  .tableRow:hover {
+    background: var(--bg-surface);
+  }
+
+  .tableRow td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.875rem;
+    border-bottom: none;
+  }
+
+  .tableRow td::before {
+    content: attr(data-label);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  /* Columnas de bajo valor ocultas (fechas) */
+  .tableRow td:nth-child(7),
+  .tableRow td:nth-child(8),
+  .tableRow td:nth-child(9) {
+    display: none;
+  }
+
+  /* Acciones como footer de la card */
+  .tableRow td:last-child {
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border-bottom: none;
+  }
+
+  .tableRow td:last-child::before {
+    content: none;
+  }
+
+  /* Fila de estado vacío (colSpan) */
+  .table td[colspan] {
+    display: block;
+  }
+
+  .table td[colspan]::before {
+    content: none;
+  }
+}

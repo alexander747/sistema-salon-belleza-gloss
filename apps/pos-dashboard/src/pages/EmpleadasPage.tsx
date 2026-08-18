@@ -665,26 +665,26 @@ const RenderTable: React.FC<RenderTableProps> = ({
             className={styles.tableRow}
             variants={itemVariants}
           >
-            <td style={{ fontWeight: 500 }}>
+            <td style={{ fontWeight: 500 }} data-label="Nombre">
               {empleada.avatar && (
                 <span style={{ marginRight: '0.35rem' }}>{empleada.avatar}</span>
               )}
               {empleada.nombre}
             </td>
-            <td style={{ color: 'var(--text-secondary)' }}>
+            <td style={{ color: 'var(--text-secondary)' }} data-label="Email">
               {empleada.email || '—'}
             </td>
-            <td>
+            <td data-label="Rol">
               <span
                 className={`${styles.rolBadge} ${ROL_STYLES[empleada.rol] || styles.rolBlue}`}
               >
                 {ROL_LABELS[empleada.rol] || 'Desconocido'}
               </span>
             </td>
-            <td style={{ color: 'var(--text-secondary)' }}>
+            <td style={{ color: 'var(--text-secondary)' }} data-label="WhatsApp">
               {empleada.numeroWhatsApp ? formatPhone(empleada.numeroWhatsApp) : '—'}
             </td>
-            <td>
+            <td data-label="Pago">
               {empleada.sueldoFijo > 0 && empleada.porcentajeComisionServicio > 0
                 ? `${formatCurrency(empleada.sueldoFijo)} + ${empleada.porcentajeComisionServicio}%`
                 : empleada.sueldoFijo > 0
@@ -696,7 +696,7 @@ const RenderTable: React.FC<RenderTableProps> = ({
                 <span className={styles.frecuenciaBadge}>{empleada.frecuenciaPago}</span>
               ) : null}
             </td>
-            <td>
+            <td data-label="Activo">
               <div className={styles.toggleWrapper}>
                 <button
                   className={`${styles.toggle} ${empleada.activo ? styles.toggleActive : ''}`}
@@ -709,16 +709,16 @@ const RenderTable: React.FC<RenderTableProps> = ({
                 </button>
               </div>
             </td>
-            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Creado">
               {empleada.creadoEn ? new Date(empleada.creadoEn).toLocaleDateString('es-CL') : '—'}
             </td>
-            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Modificado">
               {empleada.actualizadoEn ? new Date(empleada.actualizadoEn).toLocaleDateString('es-CL') : '—'}
             </td>
-            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Nacimiento">
               {empleada.fechaNacimiento ? new Date(empleada.fechaNacimiento).toLocaleDateString('es-CL') : '—'}
             </td>
-            <td>
+            <td data-label="Acciones">
               <div style={{ display: 'flex', gap: '0.15rem' }}>
                 <button
                   className={styles.actionBtn}
@@ -768,7 +768,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
   error,
 }) => (
   <motion.div
-    className={styles.modalOverlay}
+    className={`${styles.modalOverlay} mobileBottomSheet`}
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
@@ -778,7 +778,7 @@ const RenderFormModal: React.FC<FormModalProps> = ({
     }}
   >
     <motion.div
-      className={`${styles.modalContent} ${styles.modalContentXl}`}
+      className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
       initial={{ opacity: 0, scale: 0.92, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 10 }}

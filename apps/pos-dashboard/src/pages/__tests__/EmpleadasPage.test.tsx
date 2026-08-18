@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
+import { setMobileMedia } from '../../test/setMobileMedia';
 
 const { mockGet, mockPost, mockPut, mockPatch } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -526,5 +527,73 @@ describe('EmpleadasPage — paginación (client-side)', () => {
     expect(screen.queryByText('Empleado 6')).not.toBeInTheDocument();
     // Con un solo resultado la barra de paginación desaparece (totalPages = 1)
     expect(screen.queryByText(/Página \d de \d \(\d+ empleados\)/)).not.toBeInTheDocument();
+  });
+});
+
+describe('EmpleadasPage — móvil (cards ≤600px)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockPatch.mockReset();
+    setMobileMedia(true);
+  });
+
+  const ROW_LABELS = ['Nombre', 'Email', 'Rol', 'WhatsApp', 'Pago', 'Activo', 'Creado', 'Modificado', 'Nacimiento', 'Acciones'];
+
+  it('cada celda de fila expone su data-label en orden (contrato de cards móviles)', async () => {
+    defaultApiMock([
+      {
+        id: 1,
+        nombre: 'Ana',
+        email: 'ana@test.com',
+        numeroWhatsApp: '3000000000',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: true,
+      },
+      {
+        id: 2,
+        nombre: 'Rosa',
+        email: 'rosa@test.com',
+        numeroWhatsApp: '3000000001',
+        rol: Rol.DUEÑA,
+        porcentajeComisionServicio: 0,
+        sueldoFijo: 1200000,
+        bonoHorario: 0,
+        activo: true,
+      },
+    ]);
+
+    renderPage();
+
+    // Esperar a que la tabla renderice las filas de datos (no el skeleton)
+    await screen.findByText('Ana');
+    const rows = await screen.findAllByRole('row');
+    // thead + 2 filas de datos
+    expect(rows).toHaveLength(3);
+    rows.slice(1).forEach((row) => {
+      const cells = within(row).getAllByRole('cell');
+      expect(cells).toHaveLength(ROW_LABELS.length);
+      cells.forEach((cell, i) => {
+        expect(cell).toHaveAttribute('data-label', ROW_LABELS[i]);
+      });
+    });
+  });
+
+  it('el modal de crear empleado usa las clases bottom-sheet en móvil (D10)', async () => {
+    defaultApiMock();
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo empleado' }));
+
+    const overlay = document.querySelector('.mobileBottomSheet');
+    const panel = document.querySelector('.mobileBottomSheetContent');
+    expect(overlay).not.toBeNull();
+    expect(panel).not.toBeNull();
+    // El panel con la clase bottom-sheet es el modal real, con su título
+    expect(within(panel as HTMLElement).getByText('Nuevo empleado')).toBeInTheDocument();
   });
 });
