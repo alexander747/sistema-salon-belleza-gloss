@@ -147,3 +147,20 @@ a:hover {
 .noSpinner {
   -moz-appearance: textfield;
 }
+
+/* ── Mobile: modales como bottom-sheet (≤600px) ─────────────────────
+   Clases globales (no-hasheadas) que los batches R2–R5 agregarán a los
+   modales de formulario: overlay + content. `!important` vence a las
+   reglas hasheadas de los módulos CSS (p. ej. .modalContentXl 1100px). */
+@media (max-width: 600px) {
+  .mobileBottomSheet {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+
+  .mobileBottomSheetContent {
+    max-width: 100% !important;
+    max-height: 92vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+}
