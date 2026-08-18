@@ -469,14 +469,7 @@ const ProductosPage: React.FC = () => {
 
   return (
     <>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="productos-content"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          {/* SalonSwitcher */}
+      {/* SalonSwitcher */}
           {user?.rol === Rol.SUPERADMIN && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
@@ -857,8 +850,6 @@ const ProductosPage: React.FC = () => {
               />
             </>
           )}
-        </motion.div>
-      </AnimatePresence>
 
       {/* ── Create / Edit Modal ── */}
       <AnimatePresence>

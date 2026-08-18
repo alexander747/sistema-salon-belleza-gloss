@@ -351,14 +351,7 @@ const ClientesPage: React.FC = () => {
 
   return (
     <>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="clientes-content"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          {/* SalonSwitcher for superadmin */}
+      {/* SalonSwitcher for superadmin */}
           {user?.rol === Rol.SUPERADMIN && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
@@ -434,8 +427,6 @@ const ClientesPage: React.FC = () => {
               />
             </>
           )}
-        </motion.div>
-      </AnimatePresence>
 
       {/* ── Create Modal ── */}
       <AnimatePresence>
