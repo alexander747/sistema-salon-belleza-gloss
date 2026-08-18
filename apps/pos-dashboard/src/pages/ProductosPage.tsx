@@ -9,6 +9,7 @@ import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
+import styles from './ProductosPage.module.css';
 import {
   fetchProductos,
   createProducto,
@@ -656,21 +657,7 @@ const ProductosPage: React.FC = () => {
                 }}
               >
                 {/* Table header */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px',
-                    gap: '0.75rem',
-                    padding: '0.65rem 1rem',
-                    borderBottom: '1px solid var(--border)',
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.6875rem',
-                    fontWeight: 600,
-                    color: 'var(--text-dim)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                  }}
-                >
+                <div className={styles.gridHeader}>
                   <span>Nombre</span>
                   <span>Stock</span>
                   <span>P. Compra</span>
@@ -698,24 +685,16 @@ const ProductosPage: React.FC = () => {
                     <motion.div
                       key={prod.id}
                       variants={itemVariants}
+                      className={styles.gridRow}
                       style={{
-                        display: 'grid',
-                    gridTemplateColumns: 'minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px',
-                        gap: '0.75rem',
-                        padding: '0.75rem 1rem',
                         borderBottom: isLast ? 'none' : '1px solid var(--border)',
-                        alignItems: 'center',
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.8125rem',
-                        color: 'var(--text-primary)',
-                        transition: 'background 0.15s',
                         background: isLowStock ? 'rgba(224,85,106,0.04)' : 'transparent',
                       }}
                       whileHover={{ background: isLowStock ? 'rgba(224,85,106,0.08)' : 'var(--bg-hover)' }}
                       transition={{ duration: 0.15 }}
                     >
-                      <span style={{ fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{prod.nombre}</span>
-                      <span>
+                      <span style={{ fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} data-label="Nombre">{prod.nombre}</span>
+                      <span data-label="Stock">
                         <span
                           style={{
                             color: isLowStock ? 'var(--danger)' : 'var(--text-primary)',
@@ -742,22 +721,22 @@ const ProductosPage: React.FC = () => {
                           </span>
                         )}
                       </span>
-                      <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }} data-label="P. Compra">
                         {canViewCost && prod.precioCompra ? formatCurrency(prod.precioCompra) : '—'}
                       </span>
-                      <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                      <span style={{ color: 'var(--accent)', fontWeight: 500 }} data-label="P. Venta">
                         {formatCurrency(prod.precioVenta)}
                       </span>
-                      <span style={{ color: getMargenColor(margen), fontWeight: 600, fontSize: '0.75rem' }}>
+                      <span style={{ color: getMargenColor(margen), fontWeight: 600, fontSize: '0.75rem' }} data-label="Margen">
                         {margen}%
                       </span>
                       <span style={{
                         fontSize: '0.65rem', fontWeight: 600, whiteSpace: 'nowrap',
                         color: isMargin ? 'var(--accent)' : 'var(--text-dim)',
-                      }}>
+                      }} data-label="Precio">
                         {isMargin ? '📐 %' : '🎯 Fijo'}
                       </span>
-                      <span>
+                      <span data-label="Tipo">
                         {prod.tipoInventario ? (
                           <span
                             style={{
@@ -778,10 +757,10 @@ const ProductosPage: React.FC = () => {
                           <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>—</span>
                         )}
                       </span>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} data-label="Marca">
                         {prod.marca || '—'}
                       </span>
-                      <span style={{ display: 'flex', gap: '0.15rem', justifyContent: 'flex-end' }}>
+                      <span style={{ display: 'flex', gap: '0.15rem', justifyContent: 'flex-end' }} data-label="Acciones">
                         <button
                           onClick={() => {
                             setStockModal({ producto: prod, type: 'restock' });
@@ -856,6 +835,7 @@ const ProductosPage: React.FC = () => {
         {showModal && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -869,6 +849,7 @@ const ProductosPage: React.FC = () => {
           >
             <motion.div
               style={modalContentStyle}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1136,6 +1117,7 @@ const ProductosPage: React.FC = () => {
         {stockModal && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1150,6 +1132,7 @@ const ProductosPage: React.FC = () => {
           >
             <motion.div
               style={{ ...modalContentStyle, maxWidth: '400px' }}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1291,6 +1274,7 @@ const ProductosPage: React.FC = () => {
         {historyModal && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1301,6 +1285,7 @@ const ProductosPage: React.FC = () => {
           >
             <motion.div
               style={{ ...modalContentStyle, maxWidth: '600px' }}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1420,6 +1405,7 @@ const ProductosPage: React.FC = () => {
         {deleting && (
           <motion.div
             style={modalOverlayStyle}
+            className="mobileBottomSheet"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1430,6 +1416,7 @@ const ProductosPage: React.FC = () => {
           >
             <motion.div
               style={{ ...modalContentStyle, maxWidth: '380px' }}
+              className="mobileBottomSheetContent"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}

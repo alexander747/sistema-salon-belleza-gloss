@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
+import { setMobileMedia } from '../../test/setMobileMedia';
 
 const { mockGet, mockPost, mockPut, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -268,4 +269,54 @@ describe('ProductosPage — listado y operaciones', () => {
       expect(mockDelete).toHaveBeenCalledWith('/salones/1/productos/1');
     });
   }, 20000);
+});
+
+describe('ProductosPage — móvil (grid apilado ≤640px)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockDelete.mockReset();
+    setMobileMedia(true);
+  });
+
+  const ROW_LABELS = ['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Margen', 'Precio', 'Tipo', 'Marca', 'Acciones'];
+
+  it('cada celda de fila expone su data-label en orden (contrato de grids apilados)', async () => {
+    defaultApiMock([
+      producto,
+      { ...producto, id: 2, nombre: 'Cera Modeladora', marca: 'Wella', precioVenta: 18000, margenGanancia: 20, cantidadStock: 3, stockMinimo: 5 },
+    ]);
+
+    renderPage();
+
+    // Esperar a que las filas de datos rendericen (no el skeleton)
+    await screen.findByText('Shampoo Profesional', {}, WAIT);
+    await screen.findByText('Cera Modeladora', {}, WAIT);
+    const rows = [screen.getByText('Shampoo Profesional'), screen.getByText('Cera Modeladora')].map(
+      (cell) => cell.parentElement as HTMLElement,
+    );
+    expect(rows).toHaveLength(2);
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll('[data-label]');
+      expect(cells).toHaveLength(ROW_LABELS.length);
+      cells.forEach((cell, i) => {
+        expect(cell).toHaveAttribute('data-label', ROW_LABELS[i]);
+      });
+    });
+  });
+
+  it('el modal de crear producto usa las clases bottom-sheet en móvil (D10)', async () => {
+    defaultApiMock();
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo Producto' }, WAIT));
+
+    const overlay = document.querySelector('.mobileBottomSheet');
+    const panel = document.querySelector('.mobileBottomSheetContent');
+    expect(overlay).not.toBeNull();
+    expect(panel).not.toBeNull();
+    // El panel con la clase bottom-sheet es el modal real, con su título
+    expect(within(panel as HTMLElement).getByText('Nuevo Producto')).toBeInTheDocument();
+  });
 });

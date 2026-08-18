@@ -1,0 +1,87 @@
+/* ── Productos Page ──────────────────────────────────── */
+
+/* ── Grid (desktop) ──
+   Migrado desde los inline styles del grid (misma template desktop,
+   byte-idéntico). El MQ ≤640px apila el grid como cards. */
+.gridHeader {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gridRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+/* ── Móvil (≤640px): grid apilado como cards ──
+   Cada celda se vuelve label+valor (label vía data-label del JSX),
+   se ocultan columnas de bajo valor (margen + modo de precio) y las
+   acciones quedan como footer de la card. */
+@media (max-width: 640px) {
+  .gridHeader {
+    display: none;
+  }
+
+  .gridRow {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem;
+  }
+
+  .gridRow > span {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .gridRow > span::before {
+    content: attr(data-label);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  /* Columnas de bajo valor ocultas (Margen y modo de precio) */
+  .gridRow > span:nth-child(5),
+  .gridRow > span:nth-child(6) {
+    display: none;
+  }
+
+  /* Acciones como footer de la card */
+  .gridRow > span:last-child {
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    margin-top: 0.25rem;
+    padding-top: 0.5rem;
+  }
+
+  .gridRow > span:last-child::before {
+    content: none;
+  }
+}
