@@ -49,11 +49,11 @@ Chain strategy: stacked-to-main
 
 ## Batch R3 — Mantenedores grids (~500 lines)
 
-- [ ] 3.1 ServiciosPage: `tableHeaderStyle`/`tableRowStyle` inline → `.gridHeader`/`.gridRow` classes (same template)
-- [ ] 3.2 ServiciosPage: stacked MQ ≤640px (1fr rows, `nth-child` hide dates) + span `data-label`
-- [ ] 3.3 ProductosPage: same migration (9 cols incl. stock/margen)
-- [ ] 3.4 CategoriasPage: same migration (7 cols)
-- [ ] 3.5 Verify Servicios/Productos/Categorias tests green
+- [x] 3.1 ServiciosPage: `tableHeaderStyle`/`tableRowStyle` inline → `.gridHeader`/`.gridRow` classes (same template)
+- [x] 3.2 ServiciosPage: stacked MQ ≤640px (1fr rows, `nth-child` hide dates) + span `data-label`
+- [x] 3.3 ProductosPage: same migration (9 cols incl. stock/margen)
+- [x] 3.4 CategoriasPage: same migration (7 cols)
+- [x] 3.5 Verify Servicios/Productos/Categorias tests green
 
 ## Batch R4 — Finanzas (~650 lines)
 
