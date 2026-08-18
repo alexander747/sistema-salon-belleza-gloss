@@ -12,6 +12,7 @@ import CajaBanner from '../components/caja/CajaBanner.js';
 import CajaTab from '../components/caja/CajaTab.js';
 import MoneyInput from '../components/MoneyInput.js';
 import PaginationBar from '../components/PaginationBar.js';
+import TableSkeleton from '../components/TableSkeleton.js';
 import { formatCurrency } from '../utils/format.js';
 import styles from './FinanzasPage.module.css';
 
@@ -748,7 +749,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
             <Skeleton key={i} height="80px" variant="rect" />
           ))}
         </div>
-        <Skeleton height="240px" variant="rect" />
+        <TableSkeleton
+          rows={5}
+          columns={['#', 'Fecha', 'Hora', 'Cliente', 'Empleada', 'Servicios', 'Productos', 'Dto.%', 'Ajustado', 'Total', 'Método de pago', 'Estado']}
+        />
       </motion.div>
     );
   }
@@ -1709,7 +1713,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     return (
       <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <Skeleton height="60px" width="200px" variant="rect" style={{ marginBottom: '1rem' }} />
-        <Skeleton height="240px" variant="rect" />
+        <TableSkeleton rows={5} columns={['Descripción', 'Categoría', 'Monto', 'Fecha', 'Acciones']} />
       </motion.div>
     );
   }
@@ -2055,7 +2059,7 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   if (loading) {
     return (
       <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <Skeleton height="240px" variant="rect" />
+        <TableSkeleton rows={5} columns={['Tipo', 'Producto', 'Cantidad', 'Motivo', 'Monto dev.', 'Fecha']} />
       </motion.div>
     );
   }
@@ -2631,7 +2635,10 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         {[1, 2, 3].map((i) => (
           <Skeleton key={i} height="72px" variant="rect" style={{ marginBottom: '0.75rem' }} />
         ))}
-        <Skeleton height="160px" variant="rect" style={{ marginTop: '1.5rem' }} />
+        <TableSkeleton
+          rows={3}
+          columns={['Empleada', 'Período', 'Comisiones', 'Propinas', 'Bono horario', 'Sueldo fijo', 'Total Pagado', 'Fecha']}
+        />
       </motion.div>
     );
   }
@@ -4467,7 +4474,7 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     return (
       <motion.div key="cuentas-loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <Skeleton height="36px" width="220px" variant="rect" style={{ marginBottom: '1rem' }} />
-        <Skeleton height="260px" variant="rect" />
+        <TableSkeleton rows={5} columns={['Cliente / Préstamo', 'Tipo', 'Deuda total', 'Registros', 'Antigüedad', 'Acciones']} />
       </motion.div>
     );
   }
