@@ -161,6 +161,53 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     ]);
   });
 
+  it('should devolver caja ABIERTA sin arqueo falso: montoReal null y diferencia null (no fabricar 0)', async () => {
+    mockCajaRepo.findById.mockResolvedValue({
+      id: 9,
+      salonId: 1,
+      fechaCaja: '2026-08-16',
+      montoInicial: 50000,
+      montoEsperado: null,
+      montoRealEfectivo: null,
+      diferencia: null,
+      estado: 'ABIERTA',
+      aperturaPorId: 2,
+      aperturaEn: new Date('2026-08-16T13:00:00.000Z'),
+      cierrePorId: null,
+      cierreEn: null,
+      creadoEn: new Date('2026-08-16T13:00:00.000Z'),
+    });
+    mockRegistroRepo.search.mockResolvedValue([
+      {
+        id: 1,
+        estado: 'ACTIVO',
+        totalServicios: 100000,
+        totalProductos: 0,
+        comisionCalculada: 0,
+        precioAjustado: false,
+        valorOriginal: 0,
+        valorFinal: 0,
+        montoTotal: 100000,
+        serviciosItems: [{ nombreServicio: 'Manicure' }],
+        pagos: [{ monto: 100000, metodoPago: 'EFECTIVO' }],
+        creadoEn: new Date('2026-08-16T14:00:00.000Z'),
+      },
+    ]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1, cajaId: 9 });
+
+    // El esperado se calcula (fondo 50000 + EFECTIVO 100000), pero al no haber
+    // arqueo físico el montoReal y la diferencia deben ser null — NO 0/−esperado.
+    expect(result.caja).toEqual(expect.objectContaining({ id: 9, estado: 'ABIERTA' }));
+    expect(result.reporte.montoEsperado).toBe(150000);
+    expect(result.reporte.montoReal).toBeNull();
+    expect(result.reporte.diferencia).toBeNull();
+    // La lista de movimientos sigue presente aunque la caja esté abierta
+    expect(result.movimientos).toHaveLength(1);
+    expect(result.movimientos[0].tipo).toBe('SERVICIO');
+  });
+
   it('should lanzar NotFoundError cuando la caja no existe', async () => {
     mockCajaRepo.findById.mockResolvedValue(null);
 

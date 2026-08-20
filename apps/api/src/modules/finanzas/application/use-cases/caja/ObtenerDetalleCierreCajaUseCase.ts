@@ -55,10 +55,14 @@ export class ObtenerDetalleCierreCajaUseCase {
       this.gastoRepo.findByCajaId(caja.id),
     ]);
 
+    // Caja ABIERTA → montoRealEfectivo null (aún no hay arqueo): pasar null en vez
+    // de Number(null)=0 para no fabricar un arqueo falso (mismo patrón que el preview).
+    const montoRealEfectivo = caja.montoRealEfectivo === null ? null : Number(caja.montoRealEfectivo);
+
     const reporte = calcularReporteCierre(
       registros,
       gastos,
-      Number(caja.montoRealEfectivo),
+      montoRealEfectivo,
       Number(caja.montoInicial),
     );
 
