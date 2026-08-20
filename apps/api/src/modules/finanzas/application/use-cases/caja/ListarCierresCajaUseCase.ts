@@ -19,7 +19,9 @@ export class ListarCierresCajaUseCase {
   ) {}
 
   async execute(input: ListarCierresCajaInput): Promise<PaginatedResult<CajaDTO>> {
-    const estado = input.estado ?? 'CERRADA';
+    // Sin estado → TODAS las cajas (ABIERTA + CERRADA). El repo aplica el filtro
+    // solo si `estado` es truthy; el controller mapea TODAS/ausente → undefined.
+    const estado = input.estado;
     const { data, total } = await this.cajaRepo.listBySalonPaginated(
       input.salonId,
       input.page,
