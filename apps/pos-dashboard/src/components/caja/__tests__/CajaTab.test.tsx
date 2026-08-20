@@ -82,13 +82,21 @@ const error404 = {
   },
 };
 
-/** Mock por defecto: sin caja abierta y sin cierres. */
+/** Mock por defecto: sin caja abierta, sin cierres y sin abiertas. */
 function defaultApiMock() {
   mockGet.mockImplementation((url: string) => {
     if (url.includes('/caja/actual/esperado')) {
       return Promise.resolve({ data: { ok: true, data: reporteEsperado } });
     }
     if (url.includes('/caja/actual')) return Promise.reject(error404);
+    if (url.includes('estado=ABIERTA')) {
+      return Promise.resolve({
+        data: {
+          ok: true,
+          data: { data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 1 } },
+        },
+      });
+    }
     if (url.includes('/caja/cierres')) {
       return Promise.resolve({
         data: {
@@ -603,6 +611,214 @@ describe('CajaTab', () => {
 
     const modal = await screen.findByTestId('detalle-cierre-modal');
     expect(await within(modal).findByText(/no se pudo cargar/i)).toBeInTheDocument();
+  });
+});
+
+describe('CajaTab — historial completo (ABIERTA + CERRADA)', () => {
+  const cajaAbiertaHoy = { ...cajaAbierta, id: 7, fechaCaja: getColombiaDateString() };
+
+  const emptyAbiertas = {
+    data: { ok: true, data: { data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 1 } } },
+  };
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  it('renderiza lista mixta: badges ABIERTA y CERRADA, y "—" en la fila ABIERTA (sin arqueo falso)', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('estado=ABIERTA')) return Promise.resolve(emptyAbiertas);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: {
+              data: [cajaAbierta, cierre],
+              meta: { page: 1, limit: 12, total: 2, totalPages: 1 },
+            },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    expect(await screen.findByText('ABIERTA')).toBeInTheDocument();
+    expect(screen.getByText('CERRADA')).toBeInTheDocument();
+    // Fila ABIERTA: cerrada por, esperado, real y diferencia → "—" (no $0 fabricado)
+    expect(screen.getAllByText('—')).toHaveLength(4);
+    // La fila CERRADA conserva sus montos del arqueo
+    expect(screen.getAllByText(/170\.000/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('muestra aviso "caja pendiente de cierre" con count cuando hay una ABIERTA de un día anterior', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/5/cierre')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { caja: cajaAbierta, reporte: reporteEsperado, movimientos: [] },
+          },
+        });
+      }
+      if (url.includes('estado=ABIERTA')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbierta], meta: { page: 1, limit: 0, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    // El aviso usa el fetch dedicado (count exacto aunque el historial esté paginado)
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/cierres?estado=ABIERTA&limit=0');
+    });
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent(/Hay 1 caja/);
+    expect(banner).toHaveTextContent(/pendientes de cierre/i);
+    // Historial vacío → empty state nuevo
+    expect(screen.getByText('Sin cajas registradas.')).toBeInTheDocument();
+
+    // El botón Ver del aviso abre el detalle de la caja pendiente más reciente
+    fireEvent.click(within(banner).getByRole('button', { name: 'Ver' }));
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/5/cierre');
+    });
+  });
+
+  it('NO muestra aviso de pendientes cuando la única ABIERTA es de hoy', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('estado=ABIERTA')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbiertaHoy], meta: { page: 1, limit: 0, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbiertaHoy], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/cierres?estado=ABIERTA&limit=0');
+    });
+    expect(await screen.findByText('ABIERTA')).toBeInTheDocument();
+    expect(screen.queryByText(/pendientes de cierre/i)).not.toBeInTheDocument();
+  });
+
+  it('ofrece "Reabrir caja" con caja de hoy CERRADA + huérfana ABIERTA en el historial (lista mixta)', async () => {
+    const cierreHoy = { ...cierre, id: 9, fechaCaja: getColombiaDateString() };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('estado=ABIERTA')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbierta], meta: { page: 1, limit: 0, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: {
+              data: [cierreHoy, cajaAbierta],
+              meta: { page: 1, limit: 12, total: 2, totalPages: 1 },
+            },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    expect(await screen.findByRole('button', { name: 'Reabrir caja' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abrir' })).not.toBeInTheDocument();
+  });
+
+  it('abre el detalle de una caja ABIERTA: badge ABIERTA y arqueo con "—" (null-safe)', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('estado=ABIERTA')) return Promise.resolve(emptyAbiertas);
+      if (url.includes('/caja/5/cierre')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: {
+              caja: cajaAbierta,
+              reporte: { ...reporteEsperado, montoReal: null, diferencia: null },
+              movimientos: [
+                {
+                  id: 1,
+                  tipo: 'SERVICIO',
+                  fecha: '2026-08-16T14:00:00.000Z',
+                  descripcion: 'Manicure',
+                  monto: 120000,
+                  metodoPago: 'EFECTIVO',
+                },
+              ],
+            },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbierta], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver' }));
+
+    const modal = await screen.findByTestId('detalle-cierre-modal');
+    // Badge dinámico: la caja abierta se muestra como ABIERTA, no CERRADA hardcodeado
+    expect(within(modal).getByText('ABIERTA')).toBeInTheDocument();
+    // Arqueo sin fabricar: montoReal y diferencia → "—" (no $0)
+    expect(within(modal).getAllByText('—').length).toBeGreaterThanOrEqual(2);
+    // Los movimientos de la caja abierta siguen presentes
+    expect(within(modal).getByText('Manicure')).toBeInTheDocument();
   });
 });
 

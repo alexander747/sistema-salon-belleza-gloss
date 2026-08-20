@@ -71,6 +71,18 @@ function formatFechaCaja(fechaCaja?: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Monto de arqueo: null (caja ABIERTA) → '—' (no fabricar $0 ni un arqueo falso). */
+function formatMonto(n: number | null | undefined): string {
+  return n == null ? '—' : formatCurrency(n);
+}
+
+/** Badge de estado: ABIERTA verde, CERRADA ámbar (filas y modales). */
+function estadoBadgeStyle(estado: 'ABIERTA' | 'CERRADA'): React.CSSProperties {
+  return estado === 'ABIERTA'
+    ? { background: 'rgba(92,186,123,0.12)', color: 'var(--success)' }
+    : { background: 'rgba(251,191,36,0.12)', color: '#fbbf24' };
+}
+
 /** Fecha de movimiento: 'YYYY-MM-DD' (gasto) → 'DD/MM/YYYY'; ISO datetime (registro) → fecha+hora local. */
 function formatFechaMovimiento(fecha: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return formatFechaCaja(fecha);
@@ -214,6 +226,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   const [cierresMeta, setCierresMeta] = useState({ page: 1, limit: 12, total: 0, totalPages: 0 });
   const [empleadasMap, setEmpleadasMap] = useState<Map<number, string>>(new Map());
 
+  /* ── Cajas ABIERTA de cualquier día (aviso "pendiente de cierre") ── */
+  const [abiertas, setAbiertas] = useState<CajaDTO[]>([]);
+
   /* ── Modal Detalle de Cierre ── */
   const [detalleOpen, setDetalleOpen] = useState(false);
   const [detalleCierre, setDetalleCierre] = useState<CajaDTO | null>(null);
@@ -253,6 +268,18 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
     },
     [salonId],
   );
+
+  /* Cajas ABIERTA de cualquier día: fetch dedicado estado=ABIERTA&limit=0 para que
+     el aviso de pendientes tenga un count exacto aunque el historial esté paginado. */
+  const fetchCajasAbiertas = useCallback(async () => {
+    if (!salonId) return;
+    try {
+      const { data } = await api.get(`/salones/${salonId}/caja/cierres?estado=ABIERTA&limit=0`);
+      setAbiertas(data?.data?.data ?? []);
+    } catch {
+      setAbiertas([]);
+    }
+  }, [salonId]);
 
   const fetchEmpleadas = useCallback(async () => {
     if (!salonId) return;
@@ -308,16 +335,18 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   const refreshAll = useCallback(() => {
     fetchCaja();
     fetchCierres(cierresPage);
-  }, [fetchCaja, fetchCierres, cierresPage]);
+    fetchCajasAbiertas();
+  }, [fetchCaja, fetchCierres, fetchCajasAbiertas, cierresPage]);
 
   /* ── Mount + listener caja-refresh ── */
   useEffect(() => {
     fetchCaja();
     fetchCierres(1);
+    fetchCajasAbiertas();
     fetchEmpleadas();
     window.addEventListener(CAJA_REFRESH_EVENT, refreshAll);
     return () => window.removeEventListener(CAJA_REFRESH_EVENT, refreshAll);
-  }, [fetchCaja, fetchCierres, fetchEmpleadas, refreshAll]);
+  }, [fetchCaja, fetchCierres, fetchCajasAbiertas, fetchEmpleadas, refreshAll]);
 
   /* ── Handlers ── */
   const handleAbrir = async () => {
@@ -409,13 +438,18 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   /* ================================================================ */
 
   const abierta = !!caja && caja.estado === 'ABIERTA';
+  // Cajas ABIERTA de un día anterior (huérfanas): aviso "pendiente de cierre".
+  // El count sale del fetch dedicado estado=ABIERTA (exacto aunque el historial esté paginado).
+  const pendientes = abiertas.filter(
+    (c) => c.estado === 'ABIERTA' && c.fechaCaja < getColombiaDateString(),
+  );
+
   // La caja de HOY ya fue cerrada (p. ej. para almorzar) → se puede reabrir.
-  // El historial trae las CERRADA más recientes primero; si la primera es de hoy, es esta caja.
+  // Buscamos la CERRADA de hoy en el historial (todas las cajas, fechaCaja DESC);
+  // `.find` es inmune a futuros filtros por estado que reordenen la lista.
   const hoyCerrada =
     !abierta &&
-    cierres.length > 0 &&
-    cierres[0].estado === 'CERRADA' &&
-    cierres[0].fechaCaja === getColombiaDateString();
+    !!cierres.find((c) => c.estado === 'CERRADA' && c.fechaCaja === getColombiaDateString());
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -494,15 +528,60 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
         )}
       </div>
 
+      {/* ── Aviso: caja(s) abierta(s) de un día anterior pendientes de cierre ── */}
+      {pendientes.length > 0 && (
+        <div
+          role="alert"
+          style={{
+            background: 'rgba(224,85,106,0.1)',
+            border: '1px solid rgba(224,85,106,0.35)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', fontWeight: 700, color: 'var(--danger)' }}>
+              ⚠️ Hay {pendientes.length} caja(s) abierta(s) de un día anterior pendientes de cierre
+            </div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+              Se cuentan todas las cajas abiertas del salón, aunque el historial esté paginado.
+            </div>
+          </div>
+          <button
+            onClick={() => handleVerDetalle(pendientes[0])}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--accent)',
+              padding: '0.25rem 0.6rem',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Ver
+          </button>
+        </div>
+      )}
+
       {/* ── Historial ── */}
       <div style={cardStyle}>
         <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.75rem' }}>
-          Historial de cierres
+          Historial de cajas
         </h3>
 
         {cierres.length === 0 ? (
           <div style={{ color: 'var(--text-dim)', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', padding: '0.5rem 0' }}>
-            Sin cierres registrados todavía.
+            Sin cajas registradas.
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -544,11 +623,11 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{nombreAuditor(c.aperturaPorId)}</td>
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{nombreAuditor(c.cierrePorId)}</td>
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{formatCurrency(c.montoInicial)}</td>
-                      <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{formatCurrency(c.montoEsperado)}</td>
-                      <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{formatCurrency(c.montoRealEfectivo)}</td>
-                      <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', fontWeight: 700, color: diffColor }}>{formatCurrency(diff)}</td>
+                      <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{formatMonto(c.montoEsperado)}</td>
+                      <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-primary)' }}>{formatMonto(c.montoRealEfectivo)}</td>
+                      <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.8rem', fontWeight: 700, color: diffColor }}>{formatMonto(diff)}</td>
                       <td style={{ padding: '0.55rem 0.6rem', fontSize: '0.75rem' }}>
-                        <span style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>{c.estado}</span>
+                        <span style={{ ...estadoBadgeStyle(c.estado), padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>{c.estado}</span>
                       </td>
                       <td style={{ padding: '0.55rem 0.6rem', whiteSpace: 'nowrap' }}>
                         <button
@@ -585,7 +664,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
           page={cierresPage}
           totalPages={cierresMeta.totalPages}
           total={cierresMeta.total}
-          label="cierres"
+          label="cajas"
           onPrev={() => {
             const next = cierresPage - 1;
             setCierresPage(next);
@@ -744,7 +823,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
               </div>
               <div style={{ padding: '1.25rem', overflowY: 'auto' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-                  <span style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>CERRADA</span>
+                  <span style={{ ...estadoBadgeStyle(reporte.caja.estado), padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>{reporte.caja.estado}</span>
                   <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                     {formatFechaCaja(reporte.caja.fechaCaja)} · {nombreAuditor(reporte.caja.aperturaPorId)} → {nombreAuditor(reporte.caja.cierrePorId)}
                   </span>
@@ -783,7 +862,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Monto real</span>
-                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(reporte.reporte.montoReal)}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatMonto(reporte.reporte.montoReal)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Diferencia</span>
@@ -793,7 +872,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                         color: (reporte.reporte.diferencia ?? 0) < 0 ? 'var(--danger)' : (reporte.reporte.diferencia ?? 0) > 0 ? '#fbbf24' : 'var(--success)',
                       }}
                     >
-                      {formatCurrency(reporte.reporte.diferencia)}
+                      {formatMonto(reporte.reporte.diferencia)}
                     </span>
                   </div>
                 </div>
@@ -831,7 +910,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                 ) : detalleCierre && detalleReporte ? (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-                      <span style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>CERRADA</span>
+                      <span style={{ ...estadoBadgeStyle(detalleCierre.estado), padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>{detalleCierre.estado}</span>
                       <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                         {formatFechaCaja(detalleCierre.fechaCaja)} · {nombreAuditor(detalleCierre.aperturaPorId)} → {nombreAuditor(detalleCierre.cierrePorId)}
                       </span>
@@ -871,7 +950,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Monto real</span>
-                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(detalleReporte.montoReal)}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatMonto(detalleReporte.montoReal)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem' }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Diferencia</span>
@@ -881,7 +960,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                             color: (detalleReporte.diferencia ?? 0) < 0 ? 'var(--danger)' : (detalleReporte.diferencia ?? 0) > 0 ? '#fbbf24' : 'var(--success)',
                           }}
                         >
-                          {formatCurrency(detalleReporte.diferencia)}
+                          {formatMonto(detalleReporte.diferencia)}
                         </span>
                       </div>
                     </div>
