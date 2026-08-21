@@ -83,7 +83,9 @@ export class CajaCerradaError extends AppError {
 }
 
 /**
- * 409 — Ya existe una caja ABIERTA para el salón el día comercial actual.
+ * 409 — Ya existe una caja ABIERTA para el salón.
+ * Abrir: cualquier ABIERTA (cualquier fecha, incluidas huérfanas) bloquea.
+ * Reabrir: la caja de hoy ya está abierta.
  */
 export class CajaYaAbiertaError extends AppError {
   constructor(message = 'Ya existe una caja abierta para hoy', details?: unknown) {
