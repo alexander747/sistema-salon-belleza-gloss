@@ -842,3 +842,197 @@ describe('CajaTab — móvil (modales bottom-sheet, D10)', () => {
     expect(panel).not.toBeNull();
   });
 });
+
+describe('CajaTab — cerrar por id y gate de Abrir (huérfanas)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  it('muestra "Cerrar" SOLO en filas ABIERTA del historial (la CERRADA solo "Ver")', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('estado=ABIERTA')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: {
+              data: [cajaAbierta, cierre],
+              meta: { page: 1, limit: 12, total: 2, totalPages: 1 },
+            },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    expect(await screen.findByText('ABIERTA')).toBeInTheDocument();
+    // 2 filas: ABIERTA (Ver+Cerrar) y CERRADA (solo Ver)
+    expect(screen.getAllByRole('button', { name: 'Ver' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Cerrar' })).toHaveLength(1);
+  });
+
+  it('cierra una huérfana desde el historial: click "Cerrar" → modal con esperado de ESA caja → POST {cajaId, montoRealEfectivo}', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('estado=ABIERTA')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/caja/5/cierre')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { caja: cajaAbierta, reporte: reporteEsperado, movimientos: [] },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbierta], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+    mockPost.mockImplementation((url: string) => {
+      if (url.includes('/caja/cerrar')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: {
+              caja: {
+                ...cajaAbierta,
+                estado: 'CERRADA',
+                montoEsperado: 140000,
+                montoRealEfectivo: 135000,
+                diferencia: -5000,
+                cierrePorId: 2,
+                cierreEn: '2026-08-16T22:00:00.000Z',
+              },
+              reporte: { ...reporteEsperado, montoReal: 135000, diferencia: -5000 },
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: { ok: true, data: {} } });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    // El historial trae la huérfana ABIERTA → botón Cerrar de la fila (único: sin aviso)
+    fireEvent.click(await screen.findByRole('button', { name: 'Cerrar' }));
+
+    // Prefill: esperado de ESA caja vía GET /caja/:id/cierre
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/5/cierre');
+    });
+    expect(await screen.findByText(/efectivo esperado/i)).toBeInTheDocument();
+    expect(screen.getByText(/140\.000/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/monto real/i), { target: { value: '135000' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirmar cierre/i }));
+
+    // POST con cajaId de ESA caja
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/caja/cerrar', {
+        montoRealEfectivo: 135000,
+        cajaId: 5,
+      });
+    });
+    // Reporte de cierre visible
+    expect(await screen.findByTestId('reporte-cierre-modal')).toBeInTheDocument();
+  });
+
+  it('oculta "Abrir" y muestra el mensaje pendiente cuando existe una huérfana ABIERTA', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('estado=ABIERTA')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbierta], meta: { page: 1, limit: 0, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abrir' })).not.toBeInTheDocument();
+    expect(screen.getByText(/No se puede abrir: hay una caja abierta pendiente de cierre/)).toBeInTheDocument();
+  });
+
+  it('el aviso de pendientes ofrece "Cerrar" junto a "Ver" para la huérfana más reciente', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/5/cierre')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { caja: cajaAbierta, reporte: reporteEsperado, movimientos: [] },
+          },
+        });
+      }
+      if (url.includes('estado=ABIERTA')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cajaAbierta], meta: { page: 1, limit: 0, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    const banner = await screen.findByRole('alert');
+    // El aviso lista la huérfana: "Ver" (detalle) + "Cerrar" (arqueo por id)
+    expect(within(banner).getByRole('button', { name: 'Ver' })).toBeInTheDocument();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Cerrar' }));
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/5/cierre');
+    });
+    expect(await screen.findByText(/efectivo esperado/i)).toBeInTheDocument();
+  });
+});

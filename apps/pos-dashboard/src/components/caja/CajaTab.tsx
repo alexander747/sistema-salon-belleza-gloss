@@ -210,6 +210,8 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
 
   /* ── Modal Cerrar (arqueo) ── */
   const [cerrarOpen, setCerrarOpen] = useState(false);
+  /** Caja objetivo del arqueo: null = la de hoy (card principal); id = ESA caja (historial/aviso). */
+  const [cerrarCajaId, setCerrarCajaId] = useState<number | null>(null);
   const [esperado, setEsperado] = useState<ReporteCierre | null>(null);
   const [esperadoLoading, setEsperadoLoading] = useState(false);
   const [montoRealEfectivo, setMontoRealEfectivo] = useState('');
@@ -372,13 +374,17 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
     try {
       const { data } = await api.post(`/salones/${salonId}/caja/cerrar`, {
         montoRealEfectivo: Number(montoRealEfectivo),
+        // Con cajaId → cierra ESA caja (huérfana del historial); sin él → la de hoy
+        ...(cerrarCajaId ? { cajaId: cerrarCajaId } : {}),
       });
       setReporte(data?.data ?? null);
       setCerrarOpen(false);
       setCaja(null);
       setMontoRealEfectivo('');
+      setCerrarCajaId(null);
       dispatchCajaRefresh();
       fetchCierres(1);
+      fetchCajasAbiertas();
     } finally {
       setCerrarSubmitting(false);
     }
@@ -419,9 +425,32 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   const cerrarModal = () => {
     setMontoRealEfectivo('');
     setEsperado(null);
+    setCerrarCajaId(null);
     setCerrarOpen(true);
     fetchEsperado();
   };
+
+  /** Arqueo por id (huérfana del historial o aviso): prefill con el reporte de ESA caja. */
+  const cerrarModalPorId = useCallback(
+    async (c: CajaDTO) => {
+      if (!salonId) return;
+      setMontoRealEfectivo('');
+      setEsperado(null);
+      setCerrarCajaId(c.id);
+      setCerrarOpen(true);
+      setEsperadoLoading(true);
+      try {
+        const { data } = await api.get(`/salones/${salonId}/caja/${c.id}/cierre`);
+        // Reporte de ESA caja (null-safe: ABIERTA trae montos null que el modal ya maneja)
+        setEsperado(data?.data?.reporte ?? null);
+      } catch {
+        setEsperado(null);
+      } finally {
+        setEsperadoLoading(false);
+      }
+    },
+    [salonId],
+  );
 
   /* Diferencia en vivo: real − esperado (solo si hay esperado cargado) */
   const montoRealNum = montoRealEfectivo === '' ? null : Number(montoRealEfectivo);
@@ -443,6 +472,8 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   const pendientes = abiertas.filter(
     (c) => c.estado === 'ABIERTA' && c.fechaCaja < getColombiaDateString(),
   );
+  // Cualquier ABIERTA (cualquier fecha) bloquea "Abrir": primero hay que cerrar la pendiente.
+  const hayAbierta = abiertas.some((c) => c.estado === 'ABIERTA');
 
   // La caja de HOY ya fue cerrada (p. ej. para almorzar) → se puede reabrir.
   // Buscamos la CERRADA de hoy en el historial (todas las cajas, fechaCaja DESC);
@@ -506,7 +537,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
               <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)', margin: '0.5rem 0 0' }}>
                 {hoyCerrada
                   ? 'La caja de hoy está cerrada. Reabrí para seguir registrando ventas.'
-                  : 'No hay caja abierta hoy. Abrí la caja para registrar ventas.'}
+                  : hayAbierta
+                    ? 'No se puede abrir: hay una caja abierta pendiente de cierre.'
+                    : 'No hay caja abierta hoy. Abrí la caja para registrar ventas.'}
               </p>
               {reabrirError && (
                 <p role="alert" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--danger)', margin: '0.5rem 0 0' }}>
@@ -519,11 +552,11 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                 <button onClick={handleReabrir} disabled={reabrirSubmitting} style={{ ...primaryBtnStyle, opacity: reabrirSubmitting ? 0.6 : 1 }}>
                   {reabrirSubmitting ? 'Reabriendo…' : 'Reabrir caja'}
                 </button>
-              ) : (
+              ) : !hayAbierta ? (
                 <button onClick={abrirModal} style={primaryBtnStyle}>
                   Abrir
                 </button>
-              ))}
+              ) : null)}
           </div>
         )}
       </div>
@@ -553,23 +586,44 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
               Se cuentan todas las cajas abiertas del salón, aunque el historial esté paginado.
             </div>
           </div>
-          <button
-            onClick={() => handleVerDetalle(pendientes[0])}
-            style={{
-              background: 'none',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--accent)',
-              padding: '0.25rem 0.6rem',
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Ver
-          </button>
+          <div style={{ display: 'flex', gap: '0.35rem' }}>
+            <button
+              onClick={() => handleVerDetalle(pendientes[0])}
+              style={{
+                background: 'none',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--accent)',
+                padding: '0.25rem 0.6rem',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Ver
+            </button>
+            {canManage && (
+              <button
+                onClick={() => cerrarModalPorId(pendientes[0])}
+                style={{
+                  background: 'none',
+                  border: '1px solid rgba(224,85,106,0.4)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--danger)',
+                  padding: '0.25rem 0.6rem',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Cerrar
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -630,26 +684,50 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                         <span style={{ ...estadoBadgeStyle(c.estado), padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>{c.estado}</span>
                       </td>
                       <td style={{ padding: '0.55rem 0.6rem', whiteSpace: 'nowrap' }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleVerDetalle(c);
-                          }}
-                          style={{
-                            background: 'none',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--accent)',
-                            padding: '0.25rem 0.6rem',
-                            fontFamily: "'DM Sans', sans-serif",
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          Ver
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleVerDetalle(c);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--accent)',
+                              padding: '0.25rem 0.6rem',
+                              fontFamily: "'DM Sans', sans-serif",
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Ver
+                          </button>
+                          {c.estado === 'ABIERTA' && canManage && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cerrarModalPorId(c);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: '1px solid rgba(224,85,106,0.4)',
+                                borderRadius: 'var(--radius-sm)',
+                                color: 'var(--danger)',
+                                padding: '0.25rem 0.6rem',
+                                fontFamily: "'DM Sans', sans-serif",
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Cerrar
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </motion.tr>
                   );
