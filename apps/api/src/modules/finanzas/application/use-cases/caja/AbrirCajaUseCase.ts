@@ -20,11 +20,17 @@ export class AbrirCajaUseCase {
 
   async execute(input: AbrirCajaInput): Promise<CajaDTO> {
     const fechaCaja = getColombiaDateString();
-    const existente = await this.cajaRepo.findBySalonYFecha(input.salonId, fechaCaja);
 
-    if (existente?.estado === 'ABIERTA') {
-      throw new CajaYaAbiertaError('Ya existe una caja abierta para hoy');
+    // Cualquier caja ABIERTA del salón (cualquier fecha, incluidas huérfanas de días
+    // anteriores) bloquea la apertura: el negocio debe cerrar la pendiente primero.
+    const abierta = await this.cajaRepo.findAbiertaBySalon(input.salonId);
+    if (abierta) {
+      throw new CajaYaAbiertaError(
+        'Ya existe una caja abierta — cerrá la caja pendiente antes de abrir una nueva',
+      );
     }
+
+    const existente = await this.cajaRepo.findBySalonYFecha(input.salonId, fechaCaja);
     if (existente) {
       // Una caja por día comercial; no se reabre
       throw new CajaYaCerradaError('La caja de hoy ya está cerrada');

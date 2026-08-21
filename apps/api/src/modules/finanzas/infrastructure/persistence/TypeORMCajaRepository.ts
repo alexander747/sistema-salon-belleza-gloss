@@ -22,6 +22,10 @@ export class TypeORMCajaRepository implements ICajaRepository {
     return this.getRepo().findOne({ where: { salonId, fechaCaja, estado: 'ABIERTA' } });
   }
 
+  async findAbiertaBySalon(salonId: number): Promise<CajaEntity | null> {
+    return this.getRepo().findOne({ where: { salonId, estado: 'ABIERTA' } });
+  }
+
   async create(data: Partial<CajaEntity>): Promise<CajaEntity> {
     const entity = this.getRepo().create(data);
     return this.getRepo().save(entity);

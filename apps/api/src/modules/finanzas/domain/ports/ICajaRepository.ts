@@ -14,6 +14,8 @@ export interface ICajaRepository {
   findBySalonYFecha(salonId: number, fechaCaja: string): Promise<CajaEntity | null>;
   /** Solo caja ABIERTA para salon+fecha. */
   findAbiertaBySalonYFecha(salonId: number, fechaCaja: string): Promise<CajaEntity | null>;
+  /** Cualquier caja ABIERTA del salón (cualquier fecha — incluye huérfanas de días anteriores). */
+  findAbiertaBySalon(salonId: number): Promise<CajaEntity | null>;
   create(data: Partial<CajaEntity>): Promise<CajaEntity>;
   /**
    * UPDATE condicional — cierra SOLO si estado === 'ABIERTA'.

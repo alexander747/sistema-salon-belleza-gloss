@@ -19,7 +19,11 @@ vi.mock('../../../../../../infrastructure/persistence/entities/PagoTransaccionEn
 import { AbrirCajaUseCase } from '../AbrirCajaUseCase';
 import { CajaYaAbiertaError, CajaYaCerradaError } from '../../../../../../shared/errors';
 
+const MSG_ABIERTA_PENDIENTE =
+  'Ya existe una caja abierta — cerrá la caja pendiente antes de abrir una nueva';
+
 const mockCajaRepo = {
+  findAbiertaBySalon: vi.fn(),
   findBySalonYFecha: vi.fn(),
   create: vi.fn(),
 };
@@ -32,7 +36,8 @@ describe('AbrirCajaUseCase', () => {
     useCase = new AbrirCajaUseCase(mockCajaRepo as never);
   });
 
-  it('should create caja ABIERTA with fechaCaja de hoy y aperturaPorId', async () => {
+  it('should create caja ABIERTA con fechaCaja de hoy y aperturaPorId (sin abiertas de ningún día)', async () => {
+    mockCajaRepo.findAbiertaBySalon.mockResolvedValue(null);
     mockCajaRepo.findBySalonYFecha.mockResolvedValue(null);
     mockCajaRepo.create.mockResolvedValue({
       id: 7,
@@ -51,6 +56,7 @@ describe('AbrirCajaUseCase', () => {
 
     const result = await useCase.execute({ salonId: 3, montoInicial: 50000, aperturaPorId: 9 });
 
+    expect(mockCajaRepo.findAbiertaBySalon).toHaveBeenCalledWith(3);
     expect(mockCajaRepo.findBySalonYFecha).toHaveBeenCalledWith(3, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     expect(mockCajaRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -69,8 +75,28 @@ describe('AbrirCajaUseCase', () => {
     });
   });
 
-  it('should throw CajaYaAbiertaError cuando ya existe una caja ABIERTA', async () => {
-    mockCajaRepo.findBySalonYFecha.mockResolvedValue({ id: 1, estado: 'ABIERTA' });
+  it('should throw CajaYaAbiertaError con mensaje nuevo cuando existe una huérfana ABIERTA de un día anterior', async () => {
+    mockCajaRepo.findAbiertaBySalon.mockResolvedValue({
+      id: 9,
+      salonId: 3,
+      fechaCaja: '2026-08-16',
+      estado: 'ABIERTA',
+    });
+
+    await expect(useCase.execute({ salonId: 3, montoInicial: 50000 }))
+      .rejects.toThrow(MSG_ABIERTA_PENDIENTE);
+    expect(mockCajaRepo.create).not.toHaveBeenCalled();
+    // No llega al chequeo de día: la huérfana ya bloquea
+    expect(mockCajaRepo.findBySalonYFecha).not.toHaveBeenCalled();
+  });
+
+  it('should throw CajaYaAbiertaError cuando la caja ABIERTA es de hoy', async () => {
+    mockCajaRepo.findAbiertaBySalon.mockResolvedValue({
+      id: 1,
+      salonId: 3,
+      fechaCaja: '2026-08-20',
+      estado: 'ABIERTA',
+    });
 
     await expect(useCase.execute({ salonId: 3, montoInicial: 50000 }))
       .rejects.toThrow(CajaYaAbiertaError);
@@ -78,6 +104,7 @@ describe('AbrirCajaUseCase', () => {
   });
 
   it('should throw CajaYaCerradaError cuando ya existe una caja CERRADA (no reapertura)', async () => {
+    mockCajaRepo.findAbiertaBySalon.mockResolvedValue(null);
     mockCajaRepo.findBySalonYFecha.mockResolvedValue({ id: 1, estado: 'CERRADA' });
 
     await expect(useCase.execute({ salonId: 3, montoInicial: 50000 }))
@@ -86,6 +113,7 @@ describe('AbrirCajaUseCase', () => {
   });
 
   it('should re-query y lanzar 409 correcto cuando create falla con ER_DUP_ENTRY (race apertura)', async () => {
+    mockCajaRepo.findAbiertaBySalon.mockResolvedValue(null);
     mockCajaRepo.findBySalonYFecha.mockResolvedValueOnce(null);
     const dupError = new Error('Duplicate entry');
     (dupError as { code?: string }).code = 'ER_DUP_ENTRY';
@@ -99,6 +127,7 @@ describe('AbrirCajaUseCase', () => {
   });
 
   it('should re-query y lanzar CajaYaCerradaError cuando el duplicado es CERRADA', async () => {
+    mockCajaRepo.findAbiertaBySalon.mockResolvedValue(null);
     mockCajaRepo.findBySalonYFecha.mockResolvedValueOnce(null);
     const dupError = new Error('Duplicate entry');
     (dupError as { code?: string }).code = 'ER_DUP_ENTRY';
