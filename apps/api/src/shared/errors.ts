@@ -101,6 +101,15 @@ export class CajaYaCerradaError extends AppError {
 }
 
 /**
+ * 404 — No existe caja con ese id para el salón (cerrar/detalle por id).
+ */
+export class CajaNoEncontradaError extends AppError {
+  constructor(message = 'Caja no encontrada', details?: unknown) {
+    super(message, 404, 'CAJA_NO_ENCONTRADA', details);
+  }
+}
+
+/**
  * 404 — No hay caja ABIERTA para el salón (GET caja actual).
  */
 export class CajaNoAbiertaError extends AppError {

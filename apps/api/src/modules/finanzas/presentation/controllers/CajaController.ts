@@ -39,10 +39,15 @@ export class CajaController {
   /** POST /salones/:salonId/caja/cerrar — auditor = req.user?.id (null en n8n). */
   cerrar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // cajaId opcional: body (validado por cerrarCajaSchema) con fallback a query.
+      const cajaIdRaw = req.body.cajaId ?? req.query?.cajaId;
+      const cajaId = cajaIdRaw != null ? Number(cajaIdRaw) : undefined;
+
       const result = await this.cerrarUseCase.execute({
         salonId: req.salonId!,
         montoRealEfectivo: req.body.montoRealEfectivo,
         cierrePorId: req.user?.id ?? null,
+        ...(cajaId !== undefined ? { cajaId } : {}),
       });
       res.status(200).json({ ok: true, data: result });
     } catch (error) {

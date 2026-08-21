@@ -3,15 +3,18 @@ import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
-import { CajaNoAbiertaError, CajaYaCerradaError } from '../../../../../shared/errors';
+import { CajaNoAbiertaError, CajaNoEncontradaError, CajaYaCerradaError } from '../../../../../shared/errors';
 import { calcularReporteCierre } from './calcularReporteCierre';
 import type { CajaDTO } from '../../dtos/CajaDTO';
 import { cajaToDTO } from '../../dtos/CajaDTO';
 import type { ReporteCierreDTO } from '../../dtos/ReporteCierreDTO';
+import type { CajaEntity } from '../../../../../infrastructure/persistence/entities/CajaEntity';
 
 export interface CerrarCajaInput {
   salonId: number;
   montoRealEfectivo: number;
+  /** Opcional: cierra ESA caja (huérfana de otro día). Sin él → cierra la de hoy. */
+  cajaId?: number;
   cierrePorId?: number | null;
 }
 
@@ -27,15 +30,9 @@ export class CerrarCajaUseCase {
   ) {}
 
   async execute(input: CerrarCajaInput): Promise<ReporteCierreDTO> {
-    const fechaCaja = getColombiaDateString();
-    const caja = await this.cajaRepo.findBySalonYFecha(input.salonId, fechaCaja);
-
-    if (!caja) {
-      throw new CajaNoAbiertaError();
-    }
-    if (caja.estado !== 'ABIERTA') {
-      throw new CajaYaCerradaError();
-    }
+    const caja = input.cajaId
+      ? await this.cajaPorId(input.salonId, input.cajaId)
+      : await this.cajaDeHoy(input.salonId);
 
     const [registros, gastos] = await Promise.all([
       this.registroRepo.search({ salonId: input.salonId, cajaId: caja.id }),
@@ -68,5 +65,32 @@ export class CerrarCajaUseCase {
     };
 
     return { caja: cajaCerrada, reporte };
+  }
+
+  /** Cierra ESA caja por id: debe existir, ser del salón y estar ABIERTA. */
+  private async cajaPorId(salonId: number, cajaId: number): Promise<CajaEntity> {
+    const caja = await this.cajaRepo.findById(cajaId);
+
+    if (!caja || caja.salonId !== salonId) {
+      throw new CajaNoEncontradaError();
+    }
+    if (caja.estado !== 'ABIERTA') {
+      throw new CajaYaCerradaError();
+    }
+    return caja;
+  }
+
+  /** Fallback sin cajaId: la caja ABIERTA del día comercial actual. */
+  private async cajaDeHoy(salonId: number): Promise<CajaEntity> {
+    const fechaCaja = getColombiaDateString();
+    const caja = await this.cajaRepo.findBySalonYFecha(salonId, fechaCaja);
+
+    if (!caja) {
+      throw new CajaNoAbiertaError();
+    }
+    if (caja.estado !== 'ABIERTA') {
+      throw new CajaYaCerradaError();
+    }
+    return caja;
   }
 }

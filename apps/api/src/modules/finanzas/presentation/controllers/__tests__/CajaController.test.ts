@@ -97,6 +97,59 @@ describe('CajaController', () => {
 
       expect(mockCerrar.execute).toHaveBeenCalledWith({ salonId: 3, montoRealEfectivo: 160000, cierrePorId: null });
     });
+
+    it('should pasar cajaId numérico del body al use case (cerrar huérfana por id)', async () => {
+      mockCerrar.execute.mockResolvedValue({ caja: { id: 9 }, reporte: {} });
+
+      const req = {
+        salonId: 3,
+        user: { id: 9 },
+        body: { montoRealEfectivo: 175000, cajaId: 9 },
+      } as unknown as Request;
+      const res = makeRes();
+
+      await controller.cerrar(req, res, next);
+
+      expect(mockCerrar.execute).toHaveBeenCalledWith({
+        salonId: 3,
+        montoRealEfectivo: 175000,
+        cierrePorId: 9,
+        cajaId: 9,
+      });
+    });
+
+    it('should usar cajaId del query como fallback cuando el body no lo trae', async () => {
+      mockCerrar.execute.mockResolvedValue({ caja: { id: 9 }, reporte: {} });
+
+      const req = {
+        salonId: 3,
+        body: { montoRealEfectivo: 175000 },
+        query: { cajaId: '9' },
+      } as unknown as Request;
+      const res = makeRes();
+
+      await controller.cerrar(req, res, next);
+
+      expect(mockCerrar.execute).toHaveBeenCalledWith({
+        salonId: 3,
+        montoRealEfectivo: 175000,
+        cierrePorId: null,
+        cajaId: 9,
+      });
+    });
+
+    it('should NO incluir cajaId cuando no viene en body ni query (fallback a hoy)', async () => {
+      mockCerrar.execute.mockResolvedValue({ caja: { id: 5 }, reporte: {} });
+
+      const req = { salonId: 3, body: { montoRealEfectivo: 160000 }, query: {} } as unknown as Request;
+      const res = makeRes();
+
+      await controller.cerrar(req, res, next);
+
+      expect(mockCerrar.execute).toHaveBeenCalledWith(
+        expect.not.objectContaining({ cajaId: expect.anything() }),
+      );
+    });
   });
 
   describe('reabrir', () => {
