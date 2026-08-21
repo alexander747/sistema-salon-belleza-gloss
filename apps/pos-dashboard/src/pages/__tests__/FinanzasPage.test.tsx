@@ -738,6 +738,7 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
             totalPropinas: 0,
             bonoHorario: 25000,
             sueldoFijo: 100000,
+            sueldoFijoMensual: 200000,
             porcentajeComisionServicio: 0,
             totalAPagar: 125000,
             cantidadRegistros: 0,
@@ -782,6 +783,7 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     totalPropinas: 5000,
     bonoHorario: 12500,
     sueldoFijo: 50000,
+    sueldoFijoMensual: 200000,
     porcentajeComisionServicio: 0,
     totalAPagar: 97500,
     cantidadRegistros: 1,
@@ -864,6 +866,9 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
 
     expect(screen.getByLabelText('Período desde')).toHaveValue('2026-08-10');
     expect(screen.getByLabelText('Período hasta')).toHaveValue('2026-08-16');
+
+    // El sueldo fijo mensual se muestra como aclaración (prorrateado por frecuencia SEMANAL)
+    expect(screen.getByText(/sueldo fijo se guarda como valor mensual/i)).toBeInTheDocument();
   });
 
   it('muestra solo los registros del período por defecto y re-filtra al editar Hasta', async () => {

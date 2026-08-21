@@ -127,6 +127,7 @@ interface NominaEmpleado {
   totalPropinas: number;
   bonoHorario: number;
   sueldoFijo: number;
+  sueldoFijoMensual?: number;
   porcentajeComisionServicio: number;
   totalAPagar: number;
   cantidadRegistros: number;
@@ -3275,6 +3276,24 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                         </span>
                       )}
                     </div>
+                    {selectedEmpleada.frecuenciaPago &&
+                      selectedEmpleada.sueldoFijo > 0 &&
+                      selectedEmpleada.sueldoFijoMensual != null &&
+                      selectedEmpleada.sueldoFijoMensual !== selectedEmpleada.sueldoFijo && (
+                        <span
+                          style={{
+                            display: 'block',
+                            marginTop: '0.3rem',
+                            fontSize: '0.6875rem',
+                            color: 'var(--text-secondary)',
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          💡 El sueldo fijo se guarda como valor MENSUAL y se prorratea según la frecuencia de pago:{' '}
+                          {selectedEmpleada.frecuenciaPago} → {formatCurrency(selectedEmpleada.sueldoFijo)} de{' '}
+                          {formatCurrency(selectedEmpleada.sueldoFijoMensual)} mensuales.
+                        </span>
+                      )}
                   </div>
                   <div style={{
                     background: 'var(--accent-subtle)', color: 'var(--accent)',

@@ -87,6 +87,7 @@ describe('NominaPendienteUseCase', () => {
         totalPropinas: 5000,
         bonoHorario: 0,
         sueldoFijo: 0,
+        sueldoFijoMensual: 0,
         totalAPagar: 35000,
         cantidadRegistros: 1,
       }),
@@ -111,6 +112,7 @@ describe('NominaPendienteUseCase', () => {
         totalPropinas: 0,
         bonoHorario: 50000,
         sueldoFijo: 200000,
+        sueldoFijoMensual: 200000,
         totalAPagar: 250000,
         cantidadRegistros: 0,
       }),
@@ -142,8 +144,8 @@ describe('NominaPendienteUseCase', () => {
     const result = await useCase.execute({ salonId: 1 });
 
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual(expect.objectContaining({ nombre: 'Rosa', totalAPagar: 400000 }));
-    expect(result[1]).toEqual(expect.objectContaining({ nombre: 'Gloria', totalAPagar: 800000 }));
+    expect(result[0]).toEqual(expect.objectContaining({ nombre: 'Rosa', totalAPagar: 400000, sueldoFijoMensual: 400000 }));
+    expect(result[1]).toEqual(expect.objectContaining({ nombre: 'Gloria', totalAPagar: 800000, sueldoFijoMensual: 800000 }));
   });
 
   it('incluye a la DUEÑA cuando tiene configuración de pago', async () => {
@@ -157,7 +159,7 @@ describe('NominaPendienteUseCase', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(
-      expect.objectContaining({ nombre: 'Mar', sueldoFijo: 2500000, totalAPagar: 2500000 }),
+      expect.objectContaining({ nombre: 'Mar', sueldoFijo: 2500000, sueldoFijoMensual: 2500000, totalAPagar: 2500000 }),
     );
   });
 
@@ -205,7 +207,7 @@ describe('NominaPendienteUseCase', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(
-      expect.objectContaining({ nombre: 'Nueva', totalComisionesPendientes: 30000, cantidadRegistros: 1 }),
+      expect.objectContaining({ nombre: 'Nueva', totalComisionesPendientes: 30000, cantidadRegistros: 1, sueldoFijoMensual: 200000 }),
     );
   });
 });
@@ -252,6 +254,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         totalComisionesPendientes: 10000, // el registro del 20/08 queda fuera de la quincena 1-15
         totalPropinas: 2000,
         sueldoFijo: 100000, // 50% de 200000
+        sueldoFijoMensual: 200000,
         bonoHorario: 25000, // 50% de 50000
         totalAPagar: 137000, // 10000 + 2000 + 100000 + 25000
         cantidadRegistros: 1,
@@ -292,6 +295,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         totalComisionesPendientes: 0,
         totalPropinas: 0,
         sueldoFijo: 100000, // 50% de 200000
+        sueldoFijoMensual: 200000,
         bonoHorario: 25000, // 50% de 50000
         totalAPagar: 125000,
         cantidadRegistros: 0,
@@ -323,6 +327,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         nombre: 'Q2',
         totalComisionesPendientes: 40000,
         sueldoFijo: 100000, // 50% de 200000
+        sueldoFijoMensual: 200000,
         totalAPagar: 140000,
         periodoInicio: colombiaDayStartUTC('2026-08-16'),
         periodoFin: colombiaDayEndUTC('2026-08-31'),
@@ -362,6 +367,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         nombre: 'M1',
         totalComisionesPendientes: 15000,
         sueldoFijo: 200000, // 100% — sin cambios
+        sueldoFijoMensual: 200000,
         bonoHorario: 50000,
         totalAPagar: 265000, // 15000 + 200000 + 50000
         cantidadRegistros: 1, // el registro viejo NO se filtra
@@ -413,6 +419,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
         totalComisionesPendientes: 0,
         totalPropinas: 0,
         sueldoFijo: 50000, // 25% de 200000
+        sueldoFijoMensual: 200000,
         bonoHorario: 12500, // 25% de 50000
         totalAPagar: 62500,
         cantidadRegistros: 0,
@@ -447,6 +454,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       expect.objectContaining({
         totalComisionesPendientes: 30000, // el registro del 19/08 queda fuera de la semana
         totalPropinas: 5000,
+        sueldoFijoMensual: 200000,
         cantidadRegistros: 1,
         totalAPagar: 97500, // 30000 + 5000 + 50000 + 12500
       }),
@@ -479,6 +487,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       expect.objectContaining({
         nombre: 'S2',
         sueldoFijo: 50000, // 25% de 200000
+        sueldoFijoMensual: 200000,
         totalAPagar: 50000,
         periodoInicio: colombiaDayStartUTC('2026-08-17'),
         periodoFin: colombiaDayEndUTC('2026-08-23'),
