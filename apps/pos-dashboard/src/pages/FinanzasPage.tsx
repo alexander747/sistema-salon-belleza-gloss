@@ -4254,14 +4254,6 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
             </span>
           )}
           <motion.button
-            style={primaryBtnStyle}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={generarReportes}
-          >
-            Generar reporte
-          </motion.button>
-          <motion.button
             style={{ ...primaryBtnStyle, background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' }}
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}

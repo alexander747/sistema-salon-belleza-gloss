@@ -298,7 +298,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(screen.queryByText('👤 Solo mis registros')).toBeNull();
   });
 
-  it('Generar reporte envía las fechas elegidas al P&L', async () => {
+  it('cambiar las fechas refetchea el P&L automáticamente (auto-refresh, sin botón)', async () => {
     await openReportesTab((url) => {
       if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
       if (url.includes('/caja/actual')) return Promise.reject(error404);
@@ -316,7 +316,6 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     const dateInputs = await screen.findAllByDisplayValue(todayStr);
     fireEvent.change(dateInputs[0], { target: { value: '2026-05-01' } });
     fireEvent.change(dateInputs[1], { target: { value: '2026-05-31' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generar reporte' }));
 
     await waitFor(() => {
       const calls = mockGet.mock.calls.filter(([url]) =>
