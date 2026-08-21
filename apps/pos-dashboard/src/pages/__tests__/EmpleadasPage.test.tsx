@@ -437,6 +437,56 @@ describe('EmpleadasPage — frecuencia de pago', () => {
     );
   });
 
+  it('muestra vista previa del pago por frecuencia (semanal) en el formulario', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+    await openCreateModal();
+
+    // Sin sueldo: no hay vista previa
+    expect(screen.queryByText(/mensuales → se paga/)).not.toBeInTheDocument();
+
+    // FIJO + sueldo 1200000 + SEMANAL → 25% = 300.000
+    fireEvent.click(screen.getByRole('button', { name: 'Sueldo Fijo $' }));
+    fireEvent.change(screen.getByPlaceholderText('Ej: 1200000'), {
+      target: { value: '1200000' },
+    });
+    fireEvent.change(screen.getByLabelText('Frecuencia de pago'), {
+      target: { value: 'SEMANAL' },
+    });
+
+    expect(screen.getByText('$ 300.000')).toBeInTheDocument();
+    expect(screen.getByText(/por semana/)).toBeInTheDocument();
+    expect(screen.getByText(/25%/)).toBeInTheDocument();
+  });
+
+  it('muestra vista previa quincenal (50%) y la oculta en MENSUAL', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+    await openCreateModal();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sueldo Fijo $' }));
+    fireEvent.change(screen.getByPlaceholderText('Ej: 1200000'), {
+      target: { value: '1000000' },
+    });
+    fireEvent.change(screen.getByLabelText('Frecuencia de pago'), {
+      target: { value: 'QUINCENAL' },
+    });
+
+    expect(screen.getByText('$ 500.000')).toBeInTheDocument();
+    expect(screen.getByText(/por quincena/)).toBeInTheDocument();
+    expect(screen.getByText(/50%/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Frecuencia de pago'), {
+      target: { value: 'MENSUAL' },
+    });
+
+    expect(screen.queryByText(/mensuales → se paga/)).not.toBeInTheDocument();
+  });
+
   it('openEdit NO resetea SEMANAL a MENSUAL (passthrough de los 3 valores)', async () => {
     defaultApiMock([
       {

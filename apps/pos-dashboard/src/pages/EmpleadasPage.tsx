@@ -957,6 +957,28 @@ const RenderFormModal: React.FC<FormModalProps> = ({
               placeholder="Ej: 1200000"
               className={styles.formInput}
             />
+            {Number(form.sueldoFijo) > 0 && form.frecuenciaPago !== 'MENSUAL' && (
+              <p
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.6875rem',
+                  color: 'var(--text-secondary)',
+                  marginTop: '0.35rem',
+                  marginBottom: 0,
+                }}
+              >
+                💡 {formatCurrency(Number(form.sueldoFijo))} mensuales → se paga{' '}
+                <strong>
+                  {formatCurrency(
+                    Number(form.sueldoFijo) *
+                      (form.frecuenciaPago === 'SEMANAL' ? 0.25 : form.frecuenciaPago === 'QUINCENAL' ? 0.5 : 1),
+                  )}
+                </strong>{' '}
+                por {form.frecuenciaPago === 'SEMANAL' ? 'semana' : form.frecuenciaPago === 'QUINCENAL' ? 'quincena' : 'mes'}
+                {' '}({form.frecuenciaPago === 'SEMANAL' ? '25%' : form.frecuenciaPago === 'QUINCENAL' ? '50%' : '100%'}
+                del mensual).
+              </p>
+            )}
           </div>
         ) : null}
 
