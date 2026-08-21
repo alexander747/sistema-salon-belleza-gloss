@@ -75,6 +75,8 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
   const [loading, setLoading] = useState(true);
   // La caja de HOY ya fue cerrada (p. ej. para almorzar) → el banner ofrece "Reabrir" en vez de "Abrir"
   const [hoyCerrada, setHoyCerrada] = useState(false);
+  // Cajas ABIERTA de cualquier día (huérfanas): con alguna, "Abrir" no se ofrece → "Ver caja"
+  const [pendientes, setPendientes] = useState(0);
 
   const fetchCaja = useCallback(async () => {
     if (!salonId) return;
@@ -83,9 +85,23 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
       setCaja(data?.data ?? null);
       setHoyCerrada(false);
     } catch {
-      // 404 CAJA_NO_ABIERTA → sin caja abierta: ver si la de HOY ya se cerró (para ofrecer "Reabrir")
+      // 404 CAJA_NO_ABIERTA → sin caja abierta: si hay huérfanas ABIERTA (cualquier día),
+      // "Abrir" queda bloqueado y se ofrece "Ver caja". Si no, se decide entre "Reabrir"/"Abrir".
       setCaja(null);
       try {
+        const { data: abiertas } = await api.get(
+          `/salones/${salonId}/caja/cierres?estado=ABIERTA&limit=0`,
+        );
+        const lista: Array<{ estado?: string }> = Array.isArray(abiertas?.data?.data)
+          ? abiertas.data.data
+          : [];
+        const count = lista.filter((c) => c.estado === 'ABIERTA').length;
+        if (count > 0) {
+          setPendientes(count);
+          setHoyCerrada(false);
+          return;
+        }
+        setPendientes(0);
         const { data: hist } = await api.get(`/salones/${salonId}/caja/cierres?page=1&limit=1`);
         const cierres = Array.isArray(hist?.data?.data) ? hist.data.data : [];
         setHoyCerrada(
@@ -95,6 +111,7 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
         );
       } catch {
         setHoyCerrada(false);
+        setPendientes(0);
       }
     } finally {
       setLoading(false);
@@ -155,7 +172,9 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
           ? `💰 Caja abierta — fondo ${formatCurrency(caja?.montoInicial)}`
           : hoyCerrada
             ? '💰 Caja cerrada hoy — Reabrir para vender'
-            : 'Caja cerrada — Abrir para vender'}
+            : pendientes > 0
+              ? `💰 Hay ${pendientes} caja${pendientes === 1 ? '' : 's'} abierta${pendientes === 1 ? '' : 's'} pendiente${pendientes === 1 ? '' : 's'} de cierre — gestioná en Caja`
+              : 'Caja cerrada — Abrir para vender'}
       </span>
 
       {canManage && (
@@ -174,7 +193,7 @@ const CajaBanner: React.FC<CajaBannerProps> = ({ salonId, user, onNavigateToCaja
             whiteSpace: 'nowrap',
           }}
         >
-          {abierta ? 'Cerrar' : hoyCerrada ? 'Reabrir' : 'Abrir'}
+          {abierta ? 'Cerrar' : hoyCerrada ? 'Reabrir' : pendientes > 0 ? 'Ver caja' : 'Abrir'}
         </button>
       )}
     </motion.div>

@@ -92,10 +92,16 @@ describe('CajaBanner', () => {
   });
 
   it('muestra "Reabrir para vender" y botón "Reabrir" cuando la caja de HOY está cerrada (historial trae CERRADA de hoy)', async () => {
-    // GET /caja/actual → 404; GET /caja/cierres → caja de HOY (fecha Colombia dinámica) CERRADA
+    // GET /caja/actual → 404; GET cajas ABIERTA → sin huérfanas; GET /caja/cierres → caja de HOY CERRADA
     const hoy = getColombiaDateString();
     mockGet
       .mockRejectedValueOnce(error404)
+      .mockResolvedValueOnce({
+        data: {
+          ok: true,
+          data: { data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 1 } },
+        },
+      })
       .mockResolvedValueOnce({
         data: {
           ok: true,
@@ -126,7 +132,8 @@ describe('CajaBanner', () => {
 
     expect(await screen.findByText(/Reabrir para vender/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reabrir' })).toBeInTheDocument();
-    // El caso "hoy cerrada" consulta el historial de cierres
+    // Sin huérfanas → consulta el historial de cierres para decidir "Reabrir"
+    expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/cierres?estado=ABIERTA&limit=0');
     expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/cierres?page=1&limit=1');
   });
 
@@ -165,6 +172,42 @@ describe('CajaBanner', () => {
     renderBanner(duena, onNav);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Abrir' }));
+    expect(onNav).toHaveBeenCalled();
+  });
+
+  it('muestra "Ver caja" (no "Abrir") con el count de pendientes cuando hay una huérfana ABIERTA', async () => {
+    mockGet
+      .mockRejectedValueOnce(error404)
+      .mockResolvedValueOnce({
+        data: {
+          ok: true,
+          data: { data: [cajaAbierta], meta: { page: 1, limit: 0, total: 1, totalPages: 1 } },
+        },
+      });
+
+    renderBanner(duena);
+
+    expect(await screen.findByText(/pendiente[s]? de cierre/i)).toBeInTheDocument();
+    expect(screen.getByText(/hay 1/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver caja' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abrir' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reabrir' })).not.toBeInTheDocument();
+  });
+
+  it('navega al tab Caja al hacer clic en "Ver caja" con huérfanas', async () => {
+    mockGet
+      .mockRejectedValueOnce(error404)
+      .mockResolvedValueOnce({
+        data: {
+          ok: true,
+          data: { data: [cajaAbierta], meta: { page: 1, limit: 0, total: 1, totalPages: 1 } },
+        },
+      });
+    const onNav = vi.fn();
+
+    renderBanner(duena, onNav);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver caja' }));
     expect(onNav).toHaveBeenCalled();
   });
 });
