@@ -141,6 +141,7 @@ describe('FinanzasPage — tab Caja', () => {
 
 describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
   const todayStr = new Date().toISOString().slice(0, 10);
+  const firstOfMonthStr = todayStr.slice(0, 8) + '01';
 
   const pylData = {
     desde: '2026-05-01',
@@ -207,7 +208,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     });
 
     const pylCall = getPylCall()!;
-    expect(pylCall[1].params).toEqual({ desde: todayStr, hasta: todayStr });
+    expect(pylCall[1].params).toEqual({ desde: firstOfMonthStr, hasta: todayStr });
   });
 
   it('renderiza las tarjetas del P&L con los valores de la API', async () => {
@@ -257,7 +258,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     );
     expect(resumenCalls.length).toBeGreaterThan(0);
     const resumenCall = resumenCalls[resumenCalls.length - 1];
-    expect(resumenCall[1].params).toMatchObject({ desde: todayStr, hasta: todayStr });
+    expect(resumenCall[1].params).toMatchObject({ desde: firstOfMonthStr, hasta: todayStr });
   });
 
   it('rol restringido es forzado a su propio usuarioId y no muestra el filtro de empleada', async () => {
@@ -275,7 +276,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     });
 
     const pylCall = getPylCall()!;
-    expect(pylCall[1].params).toMatchObject({ desde: todayStr, hasta: todayStr, usuarioId: '4' });
+    expect(pylCall[1].params).toMatchObject({ desde: firstOfMonthStr, hasta: todayStr, usuarioId: '4' });
     expect(await screen.findByText('👤 Solo mis registros')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('🔍 Buscar empleada...')).toBeNull();
   });
@@ -312,10 +313,11 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
       return Promise.resolve({ data: {} });
     });
 
-    // Ambos date inputs arrancan en hoy
-    const dateInputs = await screen.findAllByDisplayValue(todayStr);
+    // Desde arranca en el 1° del mes actual y Hasta en hoy
+    const dateInputs = await screen.findAllByDisplayValue(firstOfMonthStr);
+    const hastaInput = await screen.findByDisplayValue(todayStr);
     fireEvent.change(dateInputs[0], { target: { value: '2026-05-01' } });
-    fireEvent.change(dateInputs[1], { target: { value: '2026-05-31' } });
+    fireEvent.change(hastaInput, { target: { value: '2026-05-31' } });
 
     await waitFor(() => {
       const calls = mockGet.mock.calls.filter(([url]) =>
@@ -330,6 +332,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
 
 describe('FinanzasPage — Exportar Excel', () => {
   const todayStr = new Date().toISOString().slice(0, 10);
+  const firstOfMonthStr = todayStr.slice(0, 8) + '01';
 
   const pylData = {
     desde: '2026-05-01',
@@ -393,7 +396,7 @@ describe('FinanzasPage — Exportar Excel', () => {
       );
       expect(exportCall).toBeTruthy();
       expect(exportCall![1]).toMatchObject({
-        params: { desde: todayStr, hasta: todayStr },
+        params: { desde: firstOfMonthStr, hasta: todayStr },
         responseType: 'blob',
       });
     });

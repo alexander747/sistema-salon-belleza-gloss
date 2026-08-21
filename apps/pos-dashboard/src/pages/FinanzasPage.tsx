@@ -355,6 +355,13 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Primer día del mes de una fecha, como 'YYYY-MM-DD'. */
+function firstOfMonthISO(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+}
+
 /** Suma/resta días a una fecha 'YYYY-MM-DD' (maneja cruce de mes/año). */
 function addDaysInput(fecha: string, delta: number): string {
   const [year, month, day] = fecha.split('-').map(Number);
@@ -4016,7 +4023,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
   user,
 }) => {
   const today = useMemo(() => new Date(), []);
-  const [reporteDesde, setReporteDesde] = useState(toISODate(today));
+  const [reporteDesde, setReporteDesde] = useState(firstOfMonthISO(today));
   const [reporteHasta, setReporteHasta] = useState(toISODate(today));
   const [mes, setMes] = useState(getMonthISO(today));
 
