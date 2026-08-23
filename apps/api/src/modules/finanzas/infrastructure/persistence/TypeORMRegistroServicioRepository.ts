@@ -160,4 +160,64 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     }
     return this.findById(id);
   }
+
+  /**
+   * Cobrado cash del período: Σ pagos por fecha de RECEPCIÓN del dinero
+   * (pago.creadoEn — para pagos de venta ≈ fechaHora; para abonos es el momento
+   * del abono), unido a registros NO ANULADO del salón. `usuarioId` filtra la
+   * suma a los pagos de una empleada (consistente con el filtro del P&L).
+   */
+  async sumPagosPorPeriodo(
+    salonId: number,
+    fechaInicio: Date,
+    fechaFin: Date,
+    usuarioId?: number,
+  ): Promise<number> {
+    const query = this.getRepo()
+      .createQueryBuilder('r')
+      .select('COALESCE(SUM(p.monto), 0)', 'total')
+      .innerJoin('r.pagos', 'p')
+      .where('r.salonId = :salonId', { salonId })
+      .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
+      .andWhere('p.creadoEn >= :fechaInicio', { fechaInicio })
+      .andWhere('p.creadoEn < :fechaFin', { fechaFin });
+
+    if (usuarioId !== undefined) {
+      query.andWhere('r.usuarioId = :usuarioId', { usuarioId });
+    }
+
+    const result = await query.getRawOne();
+    return Number(result?.total ?? 0);
+  }
+
+  /** Fiado originado en el período: Σ montoPendiente de registros NO ANULADO del
+   *  salón cuya fecha de negocio (COALESCE(fechaHora, creadoEn)) cae en el rango. */
+  async sumMontoPendientePorPeriodo(
+    salonId: number,
+    fechaInicio: Date,
+    fechaFin: Date,
+  ): Promise<number> {
+    const result = await this.getRepo()
+      .createQueryBuilder('r')
+      .select('COALESCE(SUM(r.montoPendiente), 0)', 'total')
+      .where('r.salonId = :salonId', { salonId })
+      .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
+      .andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :fechaInicio', { fechaInicio })
+      .andWhere('COALESCE(r.fechaHora, r.creadoEn) < :fechaFin', { fechaFin })
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
+
+  /** Deudas por cobrar acumuladas (snapshot): Σ montoPendiente de registros
+   *  NO ANULADO con fecha de negocio (COALESCE(fechaHora, creadoEn)) ≤ hasta. */
+  async sumMontoPendienteHasta(salonId: number, hasta: Date): Promise<number> {
+    const result = await this.getRepo()
+      .createQueryBuilder('r')
+      .select('COALESCE(SUM(r.montoPendiente), 0)', 'total')
+      .where('r.salonId = :salonId', { salonId })
+      .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
+      .andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta })
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
 }
