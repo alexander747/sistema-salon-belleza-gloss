@@ -48,11 +48,11 @@ Chain strategy: stacked-to-main
 
 ## PR3 — Frontend formularios (TDD, base main)
 
-- [ ] 3.1 RED→GREEN: `AgendaPage.test.tsx` + `AgendaPage.tsx` — quitar `min` (L1677), default `fecha: todayStr` (L250/499)
-- [ ] 3.2 RED→GREEN: `WalkInModal.test.tsx` + `WalkInModal.tsx` — state `fecha` default hoy + `fechaHora` en payload (L441-474)
-- [ ] 3.3 RED→GREEN: `VentasPage.test.tsx` + `VentasPage.tsx` — date input + `fechaHora` en payload (L315-382)
-- [ ] 3.4 `FinanzasPage.tsx` — mostrar `fechaHora` (L3547); fixture si asserta `creadoEn`
-- [ ] 3.5 vitest dashboard + tsc
+- [x] 3.1 RED→GREEN: `AgendaPage.test.tsx` + `AgendaPage.tsx` — quitar `min` (L1677), default `fecha: todayStr` (L250/499)
+- [x] 3.2 RED→GREEN: `WalkInModal.test.tsx` + `WalkInModal.tsx` — state `fecha` default hoy + `fechaHora` en payload (L441-474)
+- [x] 3.3 RED→GREEN: `VentasPage.test.tsx` + `VentasPage.tsx` — date input + `fechaHora` en payload (L315-382)
+- [x] 3.4 `FinanzasPage.tsx` — mostrar `fechaHora` (L3547); fixture si asserta `creadoEn`
+- [x] 3.5 vitest dashboard + tsc
 
 ## Phase 4 — Verification / Smoke E2E
 
