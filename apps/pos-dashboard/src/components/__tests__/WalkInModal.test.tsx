@@ -270,3 +270,141 @@ describe('WalkInModal — empleadas inactivas filtradas', () => {
     expect(within(empleadaSelect).queryByText('Inactiva')).not.toBeInTheDocument();
   });
 });
+
+describe('WalkInModal — fiado y pago parcial (PR3)', () => {
+  /** Mock con un servicio de precio configurable (default: 30.000). */
+  function apiMockServicio(precio: number, nombre: string) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre, descripcion: null, precioFinal: precio, duracionMinutos: 60, categoriaId: 1 }],
+        });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María' }] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  /** Cliente + empleada (sin tocar método de pago: EFECTIVO default). */
+  function llenarClienteYEmpleada() {
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
+    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+    defaultApiMock();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('fiado total: toggle ON → pago 0, muestra "Queda pendiente" y envía pagos [{monto:0}]', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    const onSuccess = vi.fn();
+    renderModal({ onSuccess });
+
+    fireEvent.click(await screen.findByText('Corte'));
+    llenarClienteYEmpleada();
+
+    fireEvent.click(screen.getByLabelText(/fiado/i));
+
+    // Total 30.000 − propina 0 − pago 0 → queda pendiente 30.000
+    expect(await screen.findByText(/Queda pendiente: \$\s*30\.000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          pagos: [{ monto: 0, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+    expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it('pago parcial: monto 60.000 de un total 100.000 → pagos [{monto:60000}] y pendiente 40.000', async () => {
+    apiMockServicio(100000, 'Corte Premium');
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte Premium'));
+    llenarClienteYEmpleada();
+
+    fireEvent.click(screen.getByLabelText(/fiado/i));
+    // El monto a cobrar es editable (default 0)
+    fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: '60000' } });
+
+    // Pendiente = 100.000 − 0 − 60.000
+    expect(await screen.findByText(/Queda pendiente: \$\s*40\.000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          pagos: [{ monto: 60000, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+  });
+
+  it('fiado con propina: la propina nunca se fía — queda fuera de la deuda', async () => {
+    // Servicio 90.000 + propina 10.000 → total 100.000; fiado con pago 0 → pendiente 90.000
+    apiMockServicio(90000, 'Corte Premium');
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte Premium'));
+    llenarClienteYEmpleada();
+
+    fireEvent.change(screen.getByLabelText('Propina'), { target: { value: '10000' } });
+    fireEvent.click(screen.getByLabelText(/fiado/i));
+
+    expect(await screen.findByText(/Queda pendiente: \$\s*90\.000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          pagos: [{ monto: 0, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+  });
+
+  it('fiado OFF: pago completo de contado sin cambios (monto = montoRecibido) y sin mensaje de pendiente', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte'));
+    llenarClienteYEmpleada();
+
+    // EFECTIVO default: monto recibido = total (30.000)
+    fireEvent.change(screen.getByLabelText('Monto recibido'), { target: { value: '30000' } });
+    expect(screen.queryByText(/Queda pendiente/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          pagos: [{ monto: 30000, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+  });
+});

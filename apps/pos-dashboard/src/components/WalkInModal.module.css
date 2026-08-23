@@ -447,6 +447,21 @@
   border: 1px solid rgba(80, 200, 120, 0.2);
 }
 
+.pendienteDisplay {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(212, 168, 83, 0.08);
+  border: 1px solid rgba(212, 168, 83, 0.25);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  color: var(--warning);
+  font-weight: 600;
+}
+
 /* ── Totals ── */
 .totalsSection {
   padding: 0.5rem 0;

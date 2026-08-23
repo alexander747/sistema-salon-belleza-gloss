@@ -8,6 +8,7 @@ import { isCajaCerradaError, isCajaNoAbiertaEnFechaError } from './caja/cajaErro
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
+import { calcularPendiente } from '../utils/fiado.js';
 import MoneyInput from './MoneyInput.js';
 import styles from './WalkInModal.module.css';
 
@@ -182,6 +183,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   const [empleadaId, setEmpleadaId] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState<number>(0);
+  /** Fiado: la clienta paga después (pago parcial o diferido permitido). */
+  const [esFiado, setEsFiado] = useState(false);
   const [referencia, setReferencia] = useState('');
   const [propina, setPropina] = useState<number>(0);
   const [notas, setNotas] = useState('');
@@ -272,6 +275,12 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     return Math.max(0, montoRecibido - finalTotal);
   }, [paymentMethod, montoRecibido, finalTotal]);
 
+  /** Deuda restante: la propina nunca se fía (decisión owner D8). */
+  const pendiente = useMemo(
+    () => calcularPendiente(finalTotal, propina, montoRecibido),
+    [finalTotal, propina, montoRecibido],
+  );
+
   const descripcionServicio = useMemo(() => {
     const names = cart.map((item) => item.nombre);
     names.push(...productCart.map((p) => `${p.nombre} x${p.cantidad}`));
@@ -285,10 +294,11 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     if (cart.length === 0 && productCart.length === 0) return false;
     if (!clienteId) return false;
     if (!empleadaId) return false;
-    if (paymentMethod === 'EFECTIVO' && montoRecibido < finalTotal) return false;
+    // Con fiado se acepta cualquier monto >= 0 (0 = fiado total); sin fiado, pago completo.
+    if (!esFiado && paymentMethod === 'EFECTIVO' && montoRecibido < finalTotal) return false;
     if (hasAdjustment && notaAjuste.trim().length === 0) return false;
     return true;
-  }, [cart, productCart, clienteId, empleadaId, paymentMethod, montoRecibido, finalTotal, hasAdjustment, notaAjuste]);
+  }, [cart, productCart, clienteId, empleadaId, paymentMethod, montoRecibido, finalTotal, hasAdjustment, notaAjuste, esFiado]);
 
   /* ── Fetch data on modal open ── */
 
@@ -336,6 +346,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setClienteId('');
       setEmpleadaId('');
       setMontoRecibido(0);
+      setEsFiado(false);
       setReferencia('');
       setPropina(0);
       setNotas('');
@@ -463,7 +474,13 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
         descripcionServicio: descripcionServicio || undefined,
         pagos: [
           {
-            monto: paymentMethod === 'EFECTIVO' ? montoRecibido : finalTotal,
+            // Fiado: se envía el monto cobrado (0 = fiado total, o parcial).
+            // Sin fiado: efectivo usa montoRecibido; tarjeta/transferencia pagan el total.
+            monto: esFiado
+              ? montoRecibido
+              : paymentMethod === 'EFECTIVO'
+                ? montoRecibido
+                : finalTotal,
             metodoPago: paymentMethod,
             referencia: referencia.trim() || undefined,
           },
@@ -1095,6 +1112,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                       value={propina}
                       onChange={setPropina}
                       placeholder="0"
+                      ariaLabel="Propina"
                       style={inputStyle}
                       className={styles.noSpinner}
                       onFocus={(e) => {
@@ -1276,13 +1294,54 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     )}
                   </div>
 
-                  {paymentMethod === 'EFECTIVO' && (
+                  {/* ── Fiado: la clienta paga después ── */}
+                  <div style={{ marginBottom: '0.625rem' }}>
+                    <label className={styles.switchLabel}>
+                      <input
+                        type="checkbox"
+                        checked={esFiado}
+                        onChange={(e) => setEsFiado(e.target.checked)}
+                      />
+                      <span className={styles.switchSlider} />
+                      <span className={styles.switchLabelText}>Fiado — la clienta paga después</span>
+                    </label>
+                  </div>
+
+                  {esFiado && (
+                    <div>
+                      <label style={formLabelStyle}>Monto a cobrar</label>
+                      <MoneyInput
+                        value={montoRecibido}
+                        onChange={setMontoRecibido}
+                        placeholder="0"
+                        ariaLabel="Monto a cobrar"
+                        className={styles.noSpinner}
+                        style={inputStyle}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                          e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--border)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      />
+                      {pendiente > 0 && (
+                        <div className={styles.pendienteDisplay}>
+                          <span>Queda pendiente: {formatCurrency(pendiente)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!esFiado && paymentMethod === 'EFECTIVO' && (
                     <div>
                       <label style={formLabelStyle}>Monto recibido</label>
                       <MoneyInput
                         value={montoRecibido}
                         onChange={setMontoRecibido}
                         placeholder="0"
+                        ariaLabel="Monto recibido"
                         className={styles.noSpinner}
                         style={inputStyle}
                         onFocus={(e) => {
