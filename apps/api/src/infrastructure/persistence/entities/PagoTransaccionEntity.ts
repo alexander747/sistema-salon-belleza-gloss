@@ -6,6 +6,7 @@ import {
 } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { RegistroServicioEntity } from './RegistroServicioEntity';
+import { CajaEntity } from './CajaEntity';
 
 export enum MetodoPago {
   EFECTIVO = 'EFECTIVO',
@@ -35,4 +36,15 @@ export class PagoTransaccionEntity extends BaseEntity {
 
   @Column({ type: 'int' })
   registroServicioId: number;
+
+  // Caja donde se RECIBIÓ el dinero (fecha de recepción del pago).
+  // NULL para pagos legacy (anteriores a la columna): el arqueo cae al fallback
+  // por `registro.cajaId`. Los abonos posteriores siempre llevan la caja de hoy.
+  // DB_SYNCHRONIZE=true crea la columna automáticamente (nullable, sin downtime).
+  @ManyToOne(() => CajaEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'cajaId' })
+  caja: CajaEntity | null;
+
+  @Column({ type: 'int', nullable: true })
+  cajaId: number | null;
 }

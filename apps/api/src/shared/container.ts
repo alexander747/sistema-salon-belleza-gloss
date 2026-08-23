@@ -239,6 +239,7 @@ import { CreateRegistroUseCase } from '../modules/finanzas/application/use-cases
 import { ListRegistrosUseCase } from '../modules/finanzas/application/use-cases/registro/ListRegistrosUseCase';
 import { GetRegistroUseCase } from '../modules/finanzas/application/use-cases/registro/GetRegistroUseCase';
 import { AnularRegistroUseCase } from '../modules/finanzas/application/use-cases/registro/AnularRegistroUseCase';
+import { AbonarDeudaUseCase } from '../modules/finanzas/application/use-cases/registro/AbonarDeudaUseCase';
 
 // ---- Finanzas Module — Use Cases (Gastos) ----
 import { ListGastosUseCase } from '../modules/finanzas/application/use-cases/gasto/ListGastosUseCase';
@@ -298,6 +299,7 @@ container.register(CreateRegistroUseCase, { useClass: CreateRegistroUseCase });
 container.register(ListRegistrosUseCase, { useClass: ListRegistrosUseCase });
 container.register(GetRegistroUseCase, { useClass: GetRegistroUseCase });
 container.register(AnularRegistroUseCase, { useClass: AnularRegistroUseCase });
+container.register(AbonarDeudaUseCase, { useClass: AbonarDeudaUseCase });
 
 // ---- Finanzas Module — Use Cases (Gastos) ----
 container.register(ListGastosUseCase, { useClass: ListGastosUseCase });

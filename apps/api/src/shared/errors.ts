@@ -130,3 +130,30 @@ export class CajaNoAbiertaError extends AppError {
     super(message, 404, 'CAJA_NO_ABIERTA', details);
   }
 }
+
+/**
+ * 404 — El registro no existe o no pertenece al salón (abono de deuda).
+ */
+export class RegistroNoEncontradoError extends AppError {
+  constructor(message = 'Registro no encontrado', details?: unknown) {
+    super(message, 404, 'REGISTRO_NO_ENCONTRADO', details);
+  }
+}
+
+/**
+ * 422 — El registro está ANULADO y no puede recibir abonos.
+ */
+export class RegistroAnuladoError extends AppError {
+  constructor(message = 'El registro está anulado y no puede recibir abonos', details?: unknown) {
+    super(message, 422, 'REGISTRO_ANULADO', details);
+  }
+}
+
+/**
+ * 409 — El abono supera la deuda pendiente del registro.
+ */
+export class MontoExcedePendienteError extends AppError {
+  constructor(message = 'El abono supera la deuda pendiente del registro', details?: unknown) {
+    super(message, 409, 'MONTO_EXCEDE_PENDIENTE', details);
+  }
+}
