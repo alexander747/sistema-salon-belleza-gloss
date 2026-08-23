@@ -600,8 +600,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   );
 
   const todayStr = useMemo(() => toISODate(new Date()), []);
-  const [registroDesde, setRegistroDesde] = useState('');
-  const [registroHasta, setRegistroHasta] = useState('');
+  // Default del rango: mes actual (1° del mes → hoy), consistente con Reportes.
+  // Con filtros vacíos el resumen devuelve 0 aunque la tabla tenga registros.
+  const [registroDesde, setRegistroDesde] = useState(firstOfMonthISO(new Date()));
+  const [registroHasta, setRegistroHasta] = useState(toISODate(new Date()));
   const [registroFilter, setRegistroFilter] = useState<'TODOS' | 'SERVICIOS' | 'PRODUCTOS'>('TODOS');
   const [registroPage, setRegistroPage] = useState(1);
   const [registroMeta, setRegistroMeta] = useState({ page: 1, limit: 12, total: 0, totalPages: 0 });

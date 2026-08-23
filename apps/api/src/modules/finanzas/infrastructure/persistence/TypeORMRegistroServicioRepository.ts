@@ -112,7 +112,13 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     if (params.skip !== undefined) query.skip(params.skip);
     if (params.take !== undefined && params.take > 0) query.take(params.take);
 
-    return query.orderBy('COALESCE(r.fechaHora, r.creadoEn)', 'DESC').getMany();
+    // TypeORM no acepta funciones SQL en orderBy cuando hay paginación (parsea
+    // "COALESCE(r" como alias inexistente al combinar ORDER BY con la subquery).
+    // Se agrega la expresión como columna virtual con alias y se ordena por ella.
+    return query
+      .addSelect('COALESCE(r.fechaHora, r.creadoEn)', 'r_fechaHoraOrden')
+      .orderBy('r_fechaHoraOrden', 'DESC')
+      .getMany();
   }
 
   async count(params: {
