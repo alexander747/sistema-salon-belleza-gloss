@@ -66,6 +66,11 @@ export class AnularRegistroUseCase {
     // Soft-void: zero out financial impact, preserve audit trail
     const montoPendienteAnterior = Number(registro.montoPendiente);
 
+    // LIMITACIÓN CONOCIDA (decisión owner, ventas-fiado-deudas): la anulación
+    // conserva los pagos previos en pagos_transaccion, pero `calcularReporteCierre`
+    // excluye los registros ANULADOS → el efectivo ya recibido puede no reflejarse
+    // en el arqueo de la caja original si el registro se anula después del cierre.
+    // NO se corrige en este cambio (spec finanzas-registros).
     await this.registroRepo.update(input.id, {
       estado: 'ANULADO' as any,
       montoPendiente: 0,
