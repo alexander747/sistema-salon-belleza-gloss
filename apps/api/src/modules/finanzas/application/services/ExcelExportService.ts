@@ -17,6 +17,8 @@ export interface RegistroMovimiento {
   propina: number;
   comision: number;
   valorFinal: number;
+  /** Deuda pendiente del registro (fiado por cobrar). */
+  pendiente: number;
 }
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -28,7 +30,7 @@ const HEADER_FILL: ExcelJS.Fill = {
 const COP_FORMAT = '$#,##0';
 
 const PYL_HEADER = ['Concepto', 'Valor'];
-const MOVIMIENTOS_HEADER = ['Fecha', 'Cliente', 'Empleada', 'Servicios', 'Productos', 'Propina', 'Comisión', 'Valor final'];
+const MOVIMIENTOS_HEADER = ['Fecha', 'Cliente', 'Empleada', 'Servicios', 'Productos', 'Propina', 'Comisión', 'Valor final', 'Pendiente'];
 
 /** Convierte un registro en una fila de movimientos usando la misma
  *  contribución post-descuento que el P&L (misma fuente de verdad). */
@@ -58,6 +60,7 @@ export function registroAMovimiento(registro: RegistroServicioEntity): RegistroM
     propina,
     comision: Number(registro.comisionCalculada),
     valorFinal: registro.valorFinal != null ? Number(registro.valorFinal) : montoTotal,
+    pendiente: Number(registro.montoPendiente ?? 0),
   };
 }
 
@@ -99,6 +102,9 @@ export class ExcelExportService {
       ['Total servicios', pyl.totalServicios],
       ['Total productos', pyl.totalProductos],
       ['Propinas', pyl.propinas],
+      ['Cobrado', pyl.cobrado],
+      ['Fiado del período', pyl.fiadoPeriodo],
+      ['Deudas por cobrar', pyl.deudasPorCobrar],
       ['Insumos (costo base)', pyl.costoBaseInsumos],
       ['Margen bruto', pyl.margenBruto],
       ['Comisiones', pyl.comisiones],
@@ -125,14 +131,14 @@ export class ExcelExportService {
     }
 
     // ── Hoja Movimientos: detalle por registro ──
-    movSheet.columns = [{ width: 12 }, { width: 24 }, { width: 22 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }];
+    movSheet.columns = [{ width: 12 }, { width: 24 }, { width: 22 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }];
     const movHeader = movSheet.addRow(MOVIMIENTOS_HEADER);
     movHeader.eachCell((cell) => estiloHeader(cell));
     movSheet.getRow(1).height = 20;
 
     for (const m of movimientos) {
-      const row = movSheet.addRow([m.fecha, m.cliente, m.empleada, m.servicios, m.productos, m.propina, m.comision, m.valorFinal]);
-      for (const col of [4, 5, 6, 7, 8]) {
+      const row = movSheet.addRow([m.fecha, m.cliente, m.empleada, m.servicios, m.productos, m.propina, m.comision, m.valorFinal, m.pendiente]);
+      for (const col of [4, 5, 6, 7, 8, 9]) {
         row.getCell(col).numFmt = COP_FORMAT;
       }
     }

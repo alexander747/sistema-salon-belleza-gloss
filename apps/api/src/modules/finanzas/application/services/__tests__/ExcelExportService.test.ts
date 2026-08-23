@@ -15,6 +15,9 @@ const pylData: PyLMensualOutput = {
   totalServicios: 270000,
   totalProductos: 45000,
   propinas: 15000,
+  cobrado: 330000,
+  fiadoPeriodo: 0,
+  deudasPorCobrar: 50000,
   costoBaseInsumos: 60000,
   margenBruto: 255000,
   comisiones: 48000,
@@ -23,7 +26,7 @@ const pylData: PyLMensualOutput = {
   gastosPorCategoria: { ARRIENDO: 200000, SERVICIOS_PUBLICOS: 80000 },
   totalGastos: 280000,
   devoluciones: 20000,
-  utilidadNeta: -93000,
+  utilidadNeta: -78000,
 };
 
 const movimientos: RegistroMovimiento[] = [
@@ -36,6 +39,7 @@ const movimientos: RegistroMovimiento[] = [
     propina: 5000,
     comision: 16000,
     valorFinal: 113000,
+    pendiente: 0,
   },
   {
     fecha: '2026-05-20',
@@ -46,6 +50,7 @@ const movimientos: RegistroMovimiento[] = [
     propina: 5000,
     comision: 16000,
     valorFinal: 115000,
+    pendiente: 20000,
   },
 ];
 
@@ -59,6 +64,9 @@ const emptyPyl: PyLMensualOutput = {
   totalServicios: 0,
   totalProductos: 0,
   propinas: 0,
+  cobrado: 0,
+  fiadoPeriodo: 0,
+  deudasPorCobrar: 0,
   costoBaseInsumos: 0,
   margenBruto: 0,
   comisiones: 0,
@@ -79,6 +87,7 @@ const buildRegistro = (overrides: Partial<Record<string, unknown>> = {}) => ({
   propina: 5000,
   comisionCalculada: 16000,
   valorFinal: 113000,
+  montoPendiente: 0,
   clienteId: 1,
   usuarioId: 4,
   cliente: { nombre: 'María Pérez' },
@@ -114,9 +123,25 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     const labels = rows.map((r) => r.getCell(1).value);
     expect(labels).toContain('Utilidad neta');
     const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
-    expect(utilidadRow.getCell(2).value).toBe(-93000);
+    expect(utilidadRow.getCell(2).value).toBe(-78000);
     const ingresosRow = rows.find((r) => r.getCell(1).value === 'Ingresos brutos')!;
     expect(ingresosRow.getCell(2).value).toBe(350000);
+  });
+
+  it('la hoja P&L muestra las líneas cash: Cobrado, Fiado del período y Deudas por cobrar', () => {
+    const wb = service.buildPyLWorkbook(pylData, movimientos);
+    const sheet = wb.getWorksheet('P&L')!;
+    const rows = sheet.getRows(1, sheet.rowCount)!;
+
+    const cobradoRow = rows.find((r) => r.getCell(1).value === 'Cobrado')!;
+    expect(cobradoRow.getCell(2).value).toBe(330000);
+    const fiadoRow = rows.find((r) => r.getCell(1).value === 'Fiado del período')!;
+    expect(fiadoRow.getCell(2).value).toBe(0);
+    const deudasRow = rows.find((r) => r.getCell(1).value === 'Deudas por cobrar')!;
+    expect(deudasRow.getCell(2).value).toBe(50000);
+    // Utilidad neta es cash (cobrado − costos) y aparece después de Deudas
+    const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
+    expect(utilidadRow.getCell(2).value).toBe(-78000);
   });
 
   it('las celdas de dinero usan formato COP $#,##0', () => {
@@ -142,6 +167,7 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     expect(sheet.getCell('C1').value).toBe('Empleada');
     expect(sheet.getCell('D1').value).toBe('Servicios');
     expect(sheet.getCell('H1').value).toBe('Valor final');
+    expect(sheet.getCell('I1').value).toBe('Pendiente');
     // 1 header + 2 rows
     expect(sheet.rowCount).toBe(3);
     expect(sheet.getCell('A2').value).toBe('2026-05-15');
@@ -149,8 +175,12 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     expect(sheet.getCell('C2').value).toBe('Ana Gómez');
     expect(sheet.getCell('D2').value).toBe(90000);
     expect(sheet.getCell('H2').value).toBe(113000);
+    // Columna Pendiente: 0 (pagado) y 20000 (fiado)
+    expect(sheet.getCell('I2').value).toBe(0);
+    expect(sheet.getCell('I3').value).toBe(20000);
     // Copia el formato COP en las columnas de dinero
     expect(sheet.getCell('D2').numFmt).toBe('$#,##0');
+    expect(sheet.getCell('I2').numFmt).toBe('$#,##0');
   });
 
   it('período vacío: ambas hojas existen con ceros y solo encabezado de movimientos', () => {
@@ -160,6 +190,8 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     const rows = pylSheet.getRows(1, pylSheet.rowCount)!;
     const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
     expect(utilidadRow.getCell(2).value).toBe(0);
+    const cobradoRow = rows.find((r) => r.getCell(1).value === 'Cobrado')!;
+    expect(cobradoRow.getCell(2).value).toBe(0);
     const movSheet = wb.getWorksheet('Movimientos')!;
     expect(movSheet.rowCount).toBe(1); // solo encabezado
   });
