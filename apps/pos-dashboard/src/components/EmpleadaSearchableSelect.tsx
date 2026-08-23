@@ -65,7 +65,7 @@ const EmpleadaSearchableSelect: React.FC<EmpleadaSearchableSelectProps> = ({
     async (searchQuery: string) => {
       setLoading(true);
       try {
-        const params: Record<string, unknown> = { limit: 10 };
+        const params: Record<string, unknown> = { limit: 10, activo: true };
         if (searchQuery.trim()) params.q = searchQuery.trim();
         const { data } = await api.get(`/salones/${salonId}/empleadas`, { params });
         const list = Array.isArray(data) ? data : (data as { data?: Empleada[] })?.data ?? [];
