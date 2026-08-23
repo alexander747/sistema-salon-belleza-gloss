@@ -11,6 +11,7 @@ import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
+import { calcularPendiente } from '../utils/fiado.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { getCitaActions, type CitaAccion } from '../utils/citaActions.js';
 import styles from './AgendaPage.module.css';
@@ -277,6 +278,7 @@ const AgendaPage: React.FC = () => {
     ajustarTotal: false,
     notaAjuste: '',
     montoRecibido: 0,
+    esFiado: false,
   });
   const [completando, setCompletando] = useState(false);
   const [completarError, setCompletarError] = useState<string | null>(null);
@@ -572,6 +574,7 @@ const AgendaPage: React.FC = () => {
       ajustarTotal: false,
       notaAjuste: '',
       montoRecibido: 0,
+      esFiado: false,
     });
     setShowCompletar(true);
   };
@@ -627,7 +630,13 @@ const AgendaPage: React.FC = () => {
           totalProductos,
           propina: completarForm.propina,
           montoTotal: finalTotal,
-          pagos: [{ monto: finalTotal, metodoPago: completarForm.metodoPago }],
+          // Fiado: se envía el monto cobrado (0 = fiado total, o parcial); sin fiado paga el total.
+          pagos: [
+            {
+              monto: completarForm.esFiado ? completarForm.montoRecibido : finalTotal,
+              metodoPago: completarForm.metodoPago,
+            },
+          ],
           serviciosIds: [...selectedCita.servicios.map(s => s.id), ...completarForm.nuevosServiciosIds],
           serviciosItems: [
             ...selectedCita.servicios.map(s => ({
@@ -2353,6 +2362,7 @@ interface CompletarModalProps {
     ajustarTotal: boolean;
     notaAjuste: string;
     montoRecibido: number;
+    esFiado: boolean;
   };
   onChangeForm: (patch: Partial<CompletarModalProps['form']>) => void;
   onClose: () => void;
@@ -2457,6 +2467,8 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   const descuentoMonto = subtotalBeforeDiscount * (descuentoPct / 100);
   const calculatedTotal = subtotalBeforeDiscount + form.propina - descuentoMonto;
   const totalFinal = form.totalPersonalizado ?? calculatedTotal;
+  /** Deuda restante: la propina nunca se fía (decisión owner D8). */
+  const pendiente = calcularPendiente(totalFinal, form.propina, form.montoRecibido);
   const hasAdjustment = descuentoPct > 0 || form.totalPersonalizado !== null;
   const ajusteNoteRequired = hasAdjustment && form.notaAjuste.trim().length === 0;
 
@@ -2935,8 +2947,80 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                   ))}
                 </div>
 
-                {/* Amount received (only for cash) */}
-                {form.metodoPago === 'EFECTIVO' && (
+                {/* Fiado toggle: la clienta paga después */}
+                <label
+                  className={styles.toggleLabel}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    margin: '0.4rem 0',
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.esFiado}
+                    onChange={(e) => onChangeForm({ esFiado: e.target.checked })}
+                    style={{ display: 'none' }}
+                  />
+                  <span
+                    style={{
+                      position: 'relative',
+                      width: '36px',
+                      height: '20px',
+                      background: form.esFiado ? 'var(--accent)' : 'var(--border)',
+                      borderRadius: '10px',
+                      transition: 'background 0.2s',
+                      flexShrink: 0,
+                      display: 'inline-block',
+                    }}
+                  >
+                    <span
+                      style={{
+                        content: '""',
+                        position: 'absolute',
+                        top: '2px',
+                        left: form.esFiado ? '18px' : '2px',
+                        width: '16px',
+                        height: '16px',
+                        background: 'var(--bg-root)',
+                        borderRadius: '50%',
+                        transition: 'left 0.2s',
+                      }}
+                    />
+                  </span>
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    Fiado — la clienta paga después
+                  </span>
+                </label>
+
+                {/* Fiado: monto a cobrar editable (0 o parcial) para todos los métodos */}
+                {form.esFiado && (
+                  <>
+                    <div className={styles.amountRow}>
+                      <span className={styles.receiptLabel}>Monto a cobrar</span>
+                      <MoneyInput
+                        value={form.montoRecibido}
+                        onChange={(n) => onChangeForm({ montoRecibido: n })}
+                        placeholder="0"
+                        ariaLabel="Monto a cobrar"
+                        className={`${styles.noSpinner} ${styles.amountInput}`}
+                      />
+                    </div>
+                    {pendiente > 0 && (
+                      <div className={styles.pendienteDisplay}>
+                        <span>Queda pendiente: {formatCurrency(pendiente)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Amount received (only for cash, no fiado) */}
+                {!form.esFiado && form.metodoPago === 'EFECTIVO' && (
                   <>
                     <div className={styles.amountRow}>
                       <span className={styles.receiptLabel}>Monto recibido</span>

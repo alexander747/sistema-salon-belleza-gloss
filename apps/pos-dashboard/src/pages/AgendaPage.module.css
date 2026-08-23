@@ -862,6 +862,17 @@
   color: var(--success);
 }
 
+.pendienteDisplay {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0 0.25rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--warning);
+}
+
 .adjustNoteSection {
   padding: 0.4rem 0;
 }

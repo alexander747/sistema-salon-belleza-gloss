@@ -719,3 +719,101 @@ describe('AgendaPage — MQ móvil del module.css (R5/D9)', () => {
     expect(mobileBlock).toMatch(/\.qtyBtn\s*\{[^}]*40px/s);
   });
 });
+
+describe('AgendaPage — fiado y pago parcial al completar cita (PR3)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  /** Cita de 100.000 (servicio "Corte Premium") para probar parciales. */
+  function citaHoy100k(): Record<string, unknown> {
+    const fechaHora = new Date(new Date().setHours(10, 0, 0, 0)).toISOString();
+    return {
+      id: 1,
+      salonId: 1,
+      fechaHora,
+      estado: 'CONFIRMADA',
+      clienteId: 1,
+      usuarioId: 1,
+      servicios: [{ id: 1, nombre: 'Corte Premium', duracionMinutos: 60, precioBase: 100000, costoBaseInsumos: 0 }],
+      creadoEn: new Date().toISOString(),
+    };
+  }
+
+  function apiMock100k() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/agenda/disponibilidad/slots')) {
+        return Promise.resolve({ data: [{ hora: '10:00', disponible: true }] });
+      }
+      if (url.includes('/agenda/citas')) return Promise.resolve({ data: [citaHoy100k()] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', telefono: '123456' }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Empleada Test', activo: true }] });
+      }
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte Premium', duracionMinutos: 60, precioBase: 100000, costoBaseInsumos: 0, activo: true }],
+        });
+      }
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  /** Abre el modal de completar y devuelve el último POST /completar. */
+  function ultimoCompletarCall() {
+    const calls = mockPost.mock.calls.filter(([url]) => String(url).includes('/completar'));
+    const call = calls[calls.length - 1];
+    return call as [string, { registro: { pagos: Array<{ monto: number; metodoPago: string }> } }];
+  }
+
+  it('fiado total: toggle ON → pagos [{monto:0}] y muestra pendiente completo', async () => {
+    apiMock100k();
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    fireEvent.click(screen.getByLabelText(/fiado/i));
+
+    // Total 100.000 − propina 0 − pago 0 → queda pendiente 100.000
+    expect(await screen.findByText(/Queda pendiente: \$\s*100\.000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      expect(ultimoCompletarCall()[1].registro.pagos).toEqual([{ monto: 0, metodoPago: 'EFECTIVO' }]);
+    }, WAIT);
+  }, 20000);
+
+  it('pago parcial: monto 60.000 de total 100.000 → pagos [{monto:60000}] y pendiente 40.000', async () => {
+    apiMock100k();
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    fireEvent.click(screen.getByLabelText(/fiado/i));
+    fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: '60000' } });
+
+    expect(await screen.findByText(/Queda pendiente: \$\s*40\.000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      expect(ultimoCompletarCall()[1].registro.pagos).toEqual([{ monto: 60000, metodoPago: 'EFECTIVO' }]);
+    }, WAIT);
+  }, 20000);
+});
