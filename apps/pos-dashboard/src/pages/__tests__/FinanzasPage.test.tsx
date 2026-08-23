@@ -1198,6 +1198,86 @@ describe('FinanzasPage — tabs filtrados por rol', () => {
   });
 });
 
+describe('FinanzasPage — fechaHora en registros (PR3 backfill)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+  });
+
+  const baseRegistro = {
+    id: 1,
+    salonId: 1,
+    clienteId: 1,
+    usuarioId: 2,
+    totalServicios: 50000,
+    totalProductos: 0,
+    montoTotal: 50000,
+    montoPendiente: 0,
+    propina: 0,
+    comisionCalculada: 0,
+    esRetoque: false,
+    descripcionServicio: null,
+    estaPagadaEmpleada: false,
+    pagos: [],
+    divisiones: [],
+    _clienteNombre: 'Ana Gómez',
+    _empleadaNombre: 'Dueña Test',
+  };
+
+  function registrosApiMock(registros: unknown[]) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({
+          data: { data: registros, meta: { page: 1, limit: 12, total: registros.length, totalPages: 1 } },
+        });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  it('la fila de Registros muestra fechaHora (fecha de negocio) en vez de creadoEn', async () => {
+    const registroBackfilleado = {
+      ...baseRegistro,
+      id: 1,
+      // Backfill: fecha de negocio 16/08, cargado el 22/08
+      fechaHora: '2026-08-16T12:00:00',
+      creadoEn: '2026-08-22T12:00:00',
+      actualizadoEn: '2026-08-22T12:00:00',
+    };
+    registrosApiMock([registroBackfilleado]);
+
+    renderPage();
+
+    expect(await screen.findByText('Ana Gómez')).toBeInTheDocument();
+    // La columna Fecha usa la fecha de negocio (16/08), NO el timestamp de auditoría (22/08)
+    expect(screen.getByText('16-08-2026')).toBeInTheDocument();
+    expect(screen.queryByText('22-08-2026')).toBeNull();
+  });
+
+  it('sin fechaHora, la fila cae al fallback creadoEn (legacy intacto)', async () => {
+    const registroLegacy = {
+      ...baseRegistro,
+      id: 2,
+      _clienteNombre: 'Lina Pérez',
+      // Sin fechaHora: fila legacy → COALESCE(fechaHora, creadoEn) en la UI
+      creadoEn: '2026-08-01T12:00:00',
+      actualizadoEn: '2026-08-01T12:00:00',
+    };
+    registrosApiMock([registroLegacy]);
+
+    renderPage();
+
+    expect(await screen.findByText('Lina Pérez')).toBeInTheDocument();
+    expect(screen.getByText('01-08-2026')).toBeInTheDocument();
+  });
+});
+
 describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
   beforeEach(() => {
     mockGet.mockReset();

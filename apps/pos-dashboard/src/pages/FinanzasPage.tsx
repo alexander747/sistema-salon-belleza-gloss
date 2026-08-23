@@ -86,6 +86,8 @@ interface Registro {
   porcentajeDescuento?: number;
   valorOriginal?: number;
   valorFinal?: number;
+  /** Fecha de negocio (PR1): el DTO la expone con fallback a creadoEn; la UI usa fechaHora ?? creadoEn */
+  fechaHora?: string;
   creadoEn: string;
   actualizadoEn: string;
   pagos: Pago[];
@@ -1116,11 +1118,11 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                   </td>
                   {/* Fecha */}
                   <td data-label="Fecha" style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-                    {formatShortDate(reg.creadoEn)}
+                    {formatShortDate(reg.fechaHora ?? reg.creadoEn)}
                   </td>
                   {/* Hora */}
                   <td data-label="Hora" style={{ color: 'var(--text-dim)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-                    {formatTimeAMPM(reg.creadoEn)}
+                    {formatTimeAMPM(reg.fechaHora ?? reg.creadoEn)}
                   </td>
                   <td data-label="Cliente" style={{ fontWeight: 500 }}>
                     {reg._clienteNombre ?? `Cliente #${reg.clienteId}`}
@@ -1296,7 +1298,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
                   Registro #{registro.id}
                 </h2>
                 <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', margin: '0.25rem 0 0', lineHeight: 1.5 }}>
-                  {formatDateTimeAMPM(registro.creadoEn)}
+                  {formatDateTimeAMPM(registro.fechaHora ?? registro.creadoEn)}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'flex-start' }}>
@@ -2466,7 +2468,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     const desde = new Date(`${auditDesde}T05:00:00.000Z`);
     const hasta = new Date(`${addDaysInput(auditHasta, 1)}T05:00:00.000Z`);
     return auditarAllRegistros.filter((r) => {
-      const creado = new Date(r.creadoEn);
+      const creado = new Date(r.fechaHora ?? r.creadoEn);
       return creado >= desde && creado < hasta;
     });
   }, [auditarAllRegistros, auditDesde, auditHasta]);
@@ -3544,7 +3546,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                               filas.push({
                                 id: si.id,
                                 registroId: reg.id,
-                                fecha: formatDateYMD(reg.creadoEn),
+                                fecha: formatDateYMD(reg.fechaHora ?? reg.creadoEn),
                                 nombre: si.nombreServicio,
                                 precio,
                                 costoBase: si.costoBaseInsumos ?? 0,
