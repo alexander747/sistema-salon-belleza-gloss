@@ -49,13 +49,19 @@ export class CierreTurnoUseCase {
     const propinasRecibidas = registros.reduce(
       (sum, r) => sum + Number(r.propina), 0,
     );
-    const totalMonto = registros.reduce(
-      (sum, r) => sum + Number(r.montoTotal), 0,
+    // Contabilidad de CAJA: lo que el empleado debe entregar es lo COBRADO
+    // (Σ pagos reales), no el monto total — con fiado/parcial el monto total
+    // pediría entregar dinero que nunca se recibió. r.pagos ya viene cargado
+    // por search; los pagos de registros ANULADO quedan fuera (registros
+    // filtrados arriba).
+    const totalCobrado = registros.reduce(
+      (sum, r) => sum + (r.pagos ?? []).reduce((s, p) => s + Number(p.monto), 0),
+      0,
     );
 
     const totalACobrar = comisionGanada + propinasRecibidas;
-    // montoTotal - comision - propina = what employee delivers to salon
-    const totalAEntregar = totalMonto - comisionGanada - propinasRecibidas;
+    // cobrado − comisión − propina = lo que el empleado entrega al salón
+    const totalAEntregar = totalCobrado - comisionGanada - propinasRecibidas;
 
     return {
       serviciosRealizados,
