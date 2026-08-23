@@ -32,6 +32,10 @@ interface FinanzasResumen {
   totalIngresos: number;
   totalGastos?: number;
   balanceNeto?: number;
+  /** PR2 — cash: Σ pagos recibidos en el período (fecha de recepción, no ANULADO). */
+  totalCobrado?: number;
+  /** PR2 — Σ montoPendiente de registros NO ANULADO del período (fiado originado). */
+  totalFiadoDia?: number;
 }
 
 interface Pago {
@@ -179,6 +183,12 @@ interface PyLData {
   totalGastos: number;
   devoluciones: number;
   utilidadNeta: number;
+  /** PR2 — cash: Σ pagos recibidos en el período (fecha de recepción, no ANULADO). */
+  cobrado?: number;
+  /** PR2 — Σ montoPendiente de registros NO ANULADO del período (fiado originado). */
+  fiadoPeriodo?: number;
+  /** PR2 — Σ montoPendiente de registros NO ANULADO con fecha de negocio ≤ hasta. */
+  deudasPorCobrar?: number;
 }
 
 interface CuentaCobrar {
@@ -846,6 +856,20 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
           <span className={styles.summaryLabel}>💰 TOTAL INGRESOS</span>
           <span className={styles.summaryValueAccent}>
             {resumen ? formatCurrency(resumen.totalIngresos) : '$0'}
+          </span>
+        </motion.div>
+        {/* PR2 cash (decisión owner: el ingreso se cuenta cuando se cobra):
+            totalCobrado = Σ pagos recibidos; totalFiadoDia = fiado originado en el período. */}
+        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
+          <span className={styles.summaryLabel}>💰 Cobrado</span>
+          <span className={styles.summaryValue} style={{ color: '#34d399' }}>
+            {resumen?.totalCobrado != null ? formatCurrency(resumen.totalCobrado) : '$0'}
+          </span>
+        </motion.div>
+        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
+          <span className={styles.summaryLabel}>🧾 Fiado del período</span>
+          <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
+            {resumen?.totalFiadoDia != null ? formatCurrency(resumen.totalFiadoDia) : '$0'}
           </span>
         </motion.div>
         {/* Comentado por decisión de negocio: no mostrar métricas sensibles a todo rol
@@ -4320,6 +4344,27 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
             </span>
           </h4>
           <div className={styles.summaryGrid}>
+            {/* PR2 cash-basis (decisión owner: ingreso = cuando se cobra). Las
+                líneas devengadas (brutos/netos/servicios/productos) siguen abajo
+                como informativas. */}
+            <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
+              <span className={styles.summaryLabel}>💰 Cobrado</span>
+              <span className={styles.summaryValue} style={{ color: '#34d399' }}>
+                {pyl.cobrado != null ? formatCurrency(pyl.cobrado) : '$0'}
+              </span>
+            </div>
+            <div className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
+              <span className={styles.summaryLabel}>🧾 Fiado del período</span>
+              <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
+                {pyl.fiadoPeriodo != null ? formatCurrency(pyl.fiadoPeriodo) : '$0'}
+              </span>
+            </div>
+            <div className={styles.summaryCard} style={{ borderColor: 'rgba(251,191,36,0.3)' }}>
+              <span className={styles.summaryLabel}>📌 Deudas por cobrar</span>
+              <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>
+                {pyl.deudasPorCobrar != null ? formatCurrency(pyl.deudasPorCobrar) : '$0'}
+              </span>
+            </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>💰 Ingresos brutos</span>
               <span className={styles.summaryValueAccent}>{formatCurrency(pyl.ingresosBrutos)}</span>

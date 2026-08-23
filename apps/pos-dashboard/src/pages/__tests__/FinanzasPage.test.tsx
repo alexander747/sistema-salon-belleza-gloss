@@ -162,6 +162,9 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     totalGastos: 280000,
     devoluciones: 20000,
     utilidadNeta: -93000,
+    cobrado: 150000,
+    fiadoPeriodo: 100000,
+    deudasPorCobrar: 210000,
   };
 
   const fmt = (n: number) =>
@@ -232,6 +235,28 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(screen.getByText(fmt(60000))).toBeInTheDocument(); // insumos
     expect(screen.getByText(fmt(20000))).toBeInTheDocument(); // devoluciones
     expect(screen.getByText(fmt(-93000))).toBeInTheDocument(); // utilidad neta
+  });
+
+  it('P&L cash-basis: muestra Cobrado, Fiado del período y Deudas por cobrar (PR2)', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    expect(await screen.findByText('💰 Cobrado')).toBeInTheDocument();
+    expect(screen.getByText(fmt(150000))).toBeInTheDocument(); // cobrado
+    expect(screen.getByText('🧾 Fiado del período')).toBeInTheDocument();
+    expect(screen.getByText(fmt(100000))).toBeInTheDocument(); // fiadoPeriodo
+    expect(screen.getByText('📌 Deudas por cobrar')).toBeInTheDocument();
+    expect(screen.getByText(fmt(210000))).toBeInTheDocument(); // deudasPorCobrar
   });
 
   it('el resumen del período envía desde y hasta (el input hasta ya no está muerto)', async () => {
@@ -327,6 +352,46 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
       const last = calls[calls.length - 1][1].params;
       expect(last).toMatchObject({ desde: '2026-05-01', hasta: '2026-05-31' });
     });
+  });
+});
+
+describe('FinanzasPage — resumen cash del día (Cobrado / Fiado del período, PR4)', () => {
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(n)
+      .replace(/\u00a0/g, ' ');
+
+  it('RegistrosTab: muestra Cobrado y Fiado del período junto a TOTAL INGRESOS', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/finanzas/resumen')) {
+        return Promise.resolve({
+          data: { totalIngresos: 100000, totalCobrado: 40000, totalFiadoDia: 60000 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+
+    // El tab Registros es el activo por defecto → las cards aparecen sin navegar
+    expect(await screen.findByText('💰 TOTAL INGRESOS')).toBeInTheDocument();
+    expect(screen.getByText(fmt(100000))).toBeInTheDocument(); // totalIngresos (devengado)
+    expect(screen.getByText('💰 Cobrado')).toBeInTheDocument();
+    expect(screen.getByText(fmt(40000))).toBeInTheDocument(); // totalCobrado
+    expect(screen.getByText('🧾 Fiado del período')).toBeInTheDocument();
+    expect(screen.getByText(fmt(60000))).toBeInTheDocument(); // totalFiadoDia
   });
 });
 
