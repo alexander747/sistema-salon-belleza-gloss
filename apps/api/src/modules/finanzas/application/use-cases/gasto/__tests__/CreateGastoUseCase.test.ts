@@ -8,6 +8,7 @@ vi.mock('../../../../../../infrastructure/persistence/entities/PagoTransaccionEn
 
 import { CreateGastoUseCase } from '../CreateGastoUseCase';
 import type { MetodoPago } from '../../../../../../infrastructure/persistence/entities/PagoTransaccionEntity';
+import { getColombiaDateString } from '../../../../../../shared/colombia-date';
 
 // ── Mocks ──────────────────────────────────────────────────────
 const mockGastoRepo = {
@@ -68,5 +69,38 @@ describe('CreateGastoUseCase', () => {
       expect.objectContaining({ cajaId: null }),
     );
     expect(result.cajaId).toBeNull();
+  });
+
+  describe('fecha (backfill)', () => {
+    it('should honrar input.fecha: persistirla y ligar la caja de ESA fecha', async () => {
+      mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 1, estado: 'ABIERTA', fechaCaja: '2026-08-16' });
+      mockGastoRepo.create.mockResolvedValue({ id: 1, cajaId: 5, fecha: new Date('2026-08-16T00:00:00.000Z') });
+
+      await useCase.execute({ ...validInput, fecha: '2026-08-16' });
+
+      expect(mockCajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(1, '2026-08-16');
+      expect(mockGastoRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cajaId: 5,
+          fecha: new Date('2026-08-16T00:00:00.000Z'),
+        }),
+      );
+    });
+
+    it('should default fecha y caja a HOY cuando el input no trae fecha', async () => {
+      mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 9, salonId: 1, estado: 'ABIERTA' });
+      mockGastoRepo.create.mockResolvedValue({ id: 1, cajaId: 9 });
+
+      await useCase.execute(validInput);
+
+      const hoy = getColombiaDateString();
+      expect(mockCajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(1, hoy);
+      expect(mockGastoRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cajaId: 9,
+          fecha: new Date(`${hoy}T00:00:00.000Z`),
+        }),
+      );
+    });
   });
 });

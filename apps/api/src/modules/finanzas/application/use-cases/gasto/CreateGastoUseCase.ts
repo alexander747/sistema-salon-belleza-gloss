@@ -13,6 +13,8 @@ export interface CreateGastoInput {
   esGastoFijo: boolean;
   categoria?: string;
   reportadoPorId?: number;
+  /** Fecha de negocio YYYY-MM-DD (backfill); default = hoy en Colombia. */
+  fecha?: string;
 }
 
 @injectable()
@@ -25,12 +27,11 @@ export class CreateGastoUseCase {
   ) {}
 
   async execute(input: CreateGastoInput): Promise<GastoEntity> {
-    // Asociar la caja abierta del día si existe (NO es un chokepoint: los
-    // gastos se pueden registrar sin caja abierta, spec gastos).
-    const caja = await this.cajaRepo.findAbiertaBySalonYFecha(
-      input.salonId,
-      getColombiaDateString(),
-    );
+    // Fecha de negocio: input.fecha (backfill) ?? hoy en Colombia.
+    // La caja se resuelve por ESA fecha → el gasto backfilleado cae en el
+    // arqueo de la caja de su día (y en los reportes por fecha).
+    const fecha = input.fecha ?? getColombiaDateString();
+    const caja = await this.cajaRepo.findAbiertaBySalonYFecha(input.salonId, fecha);
 
     return this.gastoRepo.create({
       salonId: input.salonId,
@@ -41,7 +42,9 @@ export class CreateGastoUseCase {
       categoria: input.categoria,
       reportadoPorId: input.reportadoPorId,
       cajaId: caja?.id ?? null,
-      fecha: new Date(),
+      // Medianoche UTC: los filtros de reportes (PyL/ResumenDia) comparan
+      // la columna DATE contra límites a medianoche UTC (patrón TZ-safe).
+      fecha: new Date(`${fecha}T00:00:00.000Z`),
     });
   }
 }
