@@ -35,14 +35,26 @@ const buildRegistro = (overrides: Partial<MockRegistro> = {}): MockRegistro => (
 
 describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
   let useCase: ResumenDiaUseCase;
-  let mockRegistroRepo: { findBySalonAndDateRange: ReturnType<typeof vi.fn>; search: ReturnType<typeof vi.fn> };
+  let mockRegistroRepo: {
+    findBySalonAndDateRange: ReturnType<typeof vi.fn>;
+    search: ReturnType<typeof vi.fn>;
+    sumPagosPorPeriodo: ReturnType<typeof vi.fn>;
+    sumMontoPendientePorPeriodo: ReturnType<typeof vi.fn>;
+  };
   let mockGastoRepo: { sumBySalonAndDateRange: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    mockRegistroRepo = { findBySalonAndDateRange: vi.fn(), search: vi.fn() };
+    mockRegistroRepo = {
+      findBySalonAndDateRange: vi.fn(),
+      search: vi.fn(),
+      sumPagosPorPeriodo: vi.fn(),
+      sumMontoPendientePorPeriodo: vi.fn(),
+    };
     mockGastoRepo = { sumBySalonAndDateRange: vi.fn() };
     useCase = new ResumenDiaUseCase(mockRegistroRepo as never, mockGastoRepo as never);
     mockGastoRepo.sumBySalonAndDateRange.mockResolvedValue(0);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(0);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
   });
 
   it('aplica la proporción del descuento a servicios y productos en modo período', async () => {
@@ -57,6 +69,8 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
         cantidadProductosVendidos: 2,
       }),
     ]);
+    // Fixture de pago completo: cobrado = Σ valorFinal
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(330000);
 
     const result = await useCase.execute({
       salonId: 1,
@@ -71,6 +85,36 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     expect(result.totalIngresos).toBe(315000);
     expect(result.cantidadAtenciones).toBe(1);
     expect(result.cantidadProductosVendidos).toBe(2);
+    expect(result.totalCobrado).toBe(330000);
+    expect(result.totalFiadoDia).toBe(0);
+  });
+
+  it('día con venta fiada: totalIngresos devengado informativo, cobrado y fiado separados (escenario spec)', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 60000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 60000,
+      }),
+      buildRegistro({
+        totalServicios: 40000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 40000,
+      }),
+    ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(40000);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(60000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      fecha: '2026-05-15',
+    });
+
+    expect(result.totalIngresos).toBe(100000);
+    expect(result.totalCobrado).toBe(40000);
+    expect(result.totalFiadoDia).toBe(60000);
   });
 
   it('excluye registros ANULADO del resumen', async () => {
@@ -89,6 +133,7 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
         propina: 15000,
       }),
     ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(130000);
 
     const result = await useCase.execute({
       salonId: 1,
@@ -100,6 +145,8 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     expect(result.totalProductos).toBe(30000);
     expect(result.totalIngresos).toBe(130000);
     expect(result.cantidadAtenciones).toBe(1);
+    // El pago del registro ANULADO no suma al cobrado (lo excluye el repo)
+    expect(result.totalCobrado).toBe(130000);
   });
 
   it('suma el costo base de insumos desde serviciosItems sin ajuste por descuento', async () => {
@@ -131,6 +178,7 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
         propina: 10000,
       }),
     ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(100000);
 
     const result = await useCase.execute({
       salonId: 1,
@@ -141,7 +189,15 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     expect(mockRegistroRepo.search).toHaveBeenCalledWith(
       expect.objectContaining({ salonId: 1, usuarioId: 4 }),
     );
+    // El total cobrado honra el mismo filtro de empleada (cash del día)
+    expect(mockRegistroRepo.sumPagosPorPeriodo).toHaveBeenCalledWith(
+      1,
+      expect.any(Date),
+      expect.any(Date),
+      4,
+    );
     expect(result.totalIngresos).toBe(100000);
     expect(result.cantidadAtenciones).toBe(1);
+    expect(result.totalCobrado).toBe(100000);
   });
 });

@@ -22,7 +22,12 @@ export interface ResumenDiaOutput {
   totalCostoBaseInsumos: number;
   cantidadAtenciones: number;
   cantidadProductosVendidos: number;
+  /** Ingresos devengados (informativo). */
   totalIngresos: number;
+  /** Σ pagos recibidos en el período por fecha de recepción (cash basis). */
+  totalCobrado: number;
+  /** Σ montoPendiente de registros NO ANULADO del período (fiado del día). */
+  totalFiadoDia: number;
   totalGastos: number;
   balanceNeto: number;
 }
@@ -66,7 +71,7 @@ export class ResumenDiaUseCase {
     // The sum keeps spanning the full date range regardless of the input filters.
     const hasFiltroPersona = input.usuarioId !== undefined || input.clienteId !== undefined;
 
-    const [registros, totalGastos] = await Promise.all([
+    const [registros, totalGastos, totalCobrado, totalFiadoDia] = await Promise.all([
       hasFiltroPersona
         ? this.registroRepo.search({
             salonId: input.salonId,
@@ -77,6 +82,11 @@ export class ResumenDiaUseCase {
           })
         : this.registroRepo.findBySalonAndDateRange(input.salonId, inicio, fin),
       this.gastoRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
+      // Cash basis: Σ pagos recibidos en el período (pago.creadoEn), con el mismo
+      // filtro de empleada cuando el resumen se filtra por persona.
+      this.registroRepo.sumPagosPorPeriodo(input.salonId, inicio, fin, input.usuarioId),
+      // Fiado originado en el período (fecha de negocio de los registros).
+      this.registroRepo.sumMontoPendientePorPeriodo(input.salonId, inicio, fin),
     ]);
 
     // ── Calcular valores ajustados por descuentos ──────────────
@@ -149,6 +159,8 @@ export class ResumenDiaUseCase {
             ).length,
       cantidadProductosVendidos,
       totalIngresos,
+      totalCobrado,
+      totalFiadoDia,
       totalGastos,
       balanceNeto,
     };
