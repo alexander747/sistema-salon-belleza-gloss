@@ -37,13 +37,13 @@ Chain strategy: stacked-to-main
 
 ## PR2 — Backend: reportes cash-basis
 
-- [ ] 2.1 RED: PyL/Resumen/ROI con cobrado/fiado; CierreTurno cobrado
-- [ ] 2.2 Repo `sumPagosPorPeriodo` + `sumMontoPendientePorPeriodo` (join pagos→cajas, COALESCE, excluye ANULADO)
-- [ ] 2.3 GREEN: `PyLMensualUseCase` +`cobrado`/`fiadoPeriodo`/`deudasPorCobrar`; `utilidadNeta` cash
-- [ ] 2.4 `ResumenDiaUseCase` +`totalCobrado`/`totalFiadoDia`
-- [ ] 2.5 `ROIMensualUseCase`: `ingresos` = cobrado; `CierreTurnoUseCase`: `totalAEntregar = Σ pagos − comisión − propina`
-- [ ] 2.6 `ExcelExportService`: +columna Pendiente +filas Cobrado/Fiado/Deudas
-- [ ] 2.7 Actualizar fixtures PyL/Resumen/ROI/ReporteController/ExcelExport; vitest api + tsc
+- [x] 2.1 RED: PyL/Resumen/ROI con cobrado/fiado; CierreTurno cobrado
+- [x] 2.2 Repo `sumPagosPorPeriodo` + `sumMontoPendientePorPeriodo` (join pagos→cajas, COALESCE, excluye ANULADO)
+- [x] 2.3 GREEN: `PyLMensualUseCase` +`cobrado`/`fiadoPeriodo`/`deudasPorCobrar`; `utilidadNeta` cash
+- [x] 2.4 `ResumenDiaUseCase` +`totalCobrado`/`totalFiadoDia`
+- [x] 2.5 `ROIMensualUseCase`: `ingresos` = cobrado; `CierreTurnoUseCase`: `totalAEntregar = Σ pagos − comisión − propina`
+- [x] 2.6 `ExcelExportService`: +columna Pendiente +filas Cobrado/Fiado/Deudas
+- [x] 2.7 Actualizar fixtures PyL/Resumen/ROI/ReporteController/ExcelExport; vitest api + tsc
 
 ## PR3 — Frontend: venta fiado/parcial
 
