@@ -7,9 +7,15 @@ import type { AntiguedadBucket } from '../../dtos/CuentasDTO';
 
 const MS_PER_DAY = 86_400_000;
 
+/** Normaliza Date | string | number a Date (MySQL datetime puede llegar como string). */
+function toDate(value: Date | string | number): Date {
+  if (value instanceof Date) return value;
+  return new Date(value);
+}
+
 /** Días transcurridos (en fechas de Colombia) entre creadoEn y hoy. */
-export function antiguedadDiasColombia(creadoEn: Date, hoy: Date = new Date()): number {
-  const desde = colombiaDayStartUTC(getColombiaDateString(creadoEn));
+export function antiguedadDiasColombia(creadoEn: Date | string | number, hoy: Date = new Date()): number {
+  const desde = colombiaDayStartUTC(getColombiaDateString(toDate(creadoEn)));
   const hasta = colombiaDayStartUTC(getColombiaDateString(hoy));
   return Math.round((hasta.getTime() - desde.getTime()) / MS_PER_DAY);
 }

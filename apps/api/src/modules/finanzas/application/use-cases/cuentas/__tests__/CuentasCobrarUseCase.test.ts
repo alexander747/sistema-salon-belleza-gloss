@@ -201,6 +201,23 @@ describe('CuentasCobrarUseCase', () => {
     ]);
   });
 
+  it('computa la antigüedad del préstamo cuando fechaCreacion llega como string (MySQL datetime)', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([
+      [
+        // El driver MySQL entrega datetime como string, no Date
+        makePrestamo({ id: 12, saldoPendiente: 50000, fechaCreacion: '2026-08-10T05:00:00.000Z' as unknown as Date }),
+      ],
+      1,
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({ id: 12, tipo: 'PRESTAMO', antiguedadDias: 6, antiguedadBucket: '0-30' }),
+    );
+  });
+
   it('usa nombreTercero cuando el préstamo no tiene usuario vinculado', async () => {
     mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([]);
     mockPrestamoRepo.findBySalon.mockResolvedValue([
