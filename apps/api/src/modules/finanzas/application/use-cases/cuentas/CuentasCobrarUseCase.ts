@@ -4,7 +4,7 @@ import type { IPrestamoRepository } from '../../../../prestamos/domain/ports/IPr
 import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { PaginationParams, PaginatedResult } from '../../../../../shared/pagination';
 import { paginate } from '../../../../../shared/pagination';
-import type { CuentaCobrarDTO } from '../../dtos/CuentasDTO';
+import type { CuentaCobrarDTO, RegistroDeudaDTO } from '../../dtos/CuentasDTO';
 import { antiguedadDiasColombia, bucketAntiguedad } from './antiguedad';
 
 export interface CuentasCobrarInput extends PaginationParams {
@@ -16,22 +16,22 @@ interface GrupoCliente {
   deudaTotal: number;
   cantidadRegistros: number;
   masAntiguo: Date;
+  registros: RegistroDeudaDTO[];
 }
 
 /**
  * Cuentas por cobrar: deuda pendiente agregada por cliente desde los registros
  * no anulados con `montoPendiente > 0` MÁS los préstamos activos
  * (estado ACTIVO con `saldoPendiente > 0`) del salón. Lista unificada: cada
- * fila lleva `tipo: 'CLIENTE' | 'PRESTAMO'`.
+ * fila lleva `tipo: 'CLIENTE' | 'PRESTAMO'`; las filas CLIENTE exponen el
+ * desglose `registros[]` (por registro, orden ASC) para el modal Cobrar/Abonar.
  *
- * CONSISTENCIA DE DEUDA — follow-ups conocidos, fuera de scope v1 (ver proposal
- * `cuentas-pagar-cobrar` → FOLLOW-UP):
- *   (a) las devoluciones NO reducen `montoPendiente`/`deudaTotal` (gap en finanzas-registros);
- *   (b) `montoPendiente` ignora `valorFinal` cuando `precioAjustado=true`
- *       (deuda espuria por descuento);
- *   (c) no existe flujo de cobro: cobrar deuda es un cambio separado posterior.
- * v1 es SOLO LECTURA y computa `deudaTotal` desde los registros (la columna
- * `cliente.deudaTotal` deriva y no se usa).
+ * CONSISTENCIA DE DEUDA — semántica vigente (decisión owner, ventas-fiado-deudas):
+ *   (a) los ABONOS (AbonarDeudaUseCase) y las DEVOLUCIONES (CreateDevolucionUseCase)
+ *       SÍ reducen `montoPendiente` y `cliente.deudaTotal` en la misma transacción;
+ *   (b) la ANULACIÓN reduce `montoPendiente` a 0 y decrementa `deudaTotal`;
+ *   (c) `cliente.deudaTotal` es una columna DESNORMALIZADA que puede divergir del
+ *       recomputado — la fuente de verdad para la UI es el agregado de este use case.
  */
 @injectable()
 export class CuentasCobrarUseCase {
@@ -60,23 +60,35 @@ export class CuentasCobrarUseCase {
       const pendiente = Number(registro.montoPendiente);
       if (pendiente <= 0) continue;
 
+      const fechaRegistro = registro.fechaHora ?? registro.creadoEn;
       const grupo = grupos.get(registro.clienteId) ?? {
         nombre: registro.cliente?.nombre ?? '',
         deudaTotal: 0,
         cantidadRegistros: 0,
         // Antigüedad por fecha de negocio (backfill); legacy -> creadoEn
-        masAntiguo: registro.fechaHora ?? registro.creadoEn,
+        masAntiguo: fechaRegistro,
+        registros: [] as RegistroDeudaDTO[],
       };
       grupo.deudaTotal += pendiente;
       grupo.cantidadRegistros += 1;
-      if ((registro.fechaHora ?? registro.creadoEn) < grupo.masAntiguo) {
-        grupo.masAntiguo = registro.fechaHora ?? registro.creadoEn;
+      grupo.registros.push({
+        registroId: registro.id,
+        fechaHora: fechaRegistro,
+        montoPendiente: pendiente,
+      });
+      if (fechaRegistro < grupo.masAntiguo) {
+        grupo.masAntiguo = fechaRegistro;
       }
       grupos.set(registro.clienteId, grupo);
     }
 
     for (const [clienteId, grupo] of grupos.entries()) {
       const antiguedadDias = antiguedadDiasColombia(grupo.masAntiguo);
+      // Spec: desglose ordenado por fecha ASC (la deuda más antigua primero).
+      // El repo ya ordena, pero el orden se garantiza localmente.
+      const registrosOrdenados = [...grupo.registros].sort(
+        (a, b) => a.fechaHora.getTime() - b.fechaHora.getTime(),
+      );
       filas.push({
         id: clienteId,
         tipo: 'CLIENTE',
@@ -85,6 +97,7 @@ export class CuentasCobrarUseCase {
         cantidadRegistros: grupo.cantidadRegistros,
         antiguedadDias,
         antiguedadBucket: bucketAntiguedad(antiguedadDias),
+        registros: registrosOrdenados,
       });
     }
 
@@ -104,6 +117,8 @@ export class CuentasCobrarUseCase {
         cantidadRegistros: null,
         antiguedadDias,
         antiguedadBucket: bucketAntiguedad(antiguedadDias),
+        // Los préstamos no tienen desglose por registro (su flujo vive en Préstamos)
+        registros: null,
       });
     }
 

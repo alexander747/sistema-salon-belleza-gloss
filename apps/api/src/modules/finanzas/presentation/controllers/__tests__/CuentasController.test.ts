@@ -20,8 +20,23 @@ describe('CuentasController', () => {
   });
 
   describe('cobrar', () => {
-    it('devuelve 200 con { ok: true, data } y pasa page/limit parseados', async () => {
-      const expected = { data: [{ clienteId: 1 }], meta: { page: 2, limit: 10, total: 1, totalPages: 1 } };
+    it('devuelve 200 con { ok: true, data } y pasa page/limit parseados (DTO con registros[] del use case)', async () => {
+      const expected = {
+        data: [
+          {
+            id: 1,
+            tipo: 'CLIENTE',
+            nombre: 'Ana',
+            deudaTotal: 40000,
+            cantidadRegistros: 2,
+            registros: [
+              { registroId: 2, fechaHora: new Date('2026-07-01T10:00:00-05:00'), montoPendiente: 25000 },
+              { registroId: 1, fechaHora: new Date('2026-08-10T10:00:00-05:00'), montoPendiente: 15000 },
+            ],
+          },
+        ],
+        meta: { page: 2, limit: 10, total: 1, totalPages: 1 },
+      };
       mockCobrarUseCase.execute.mockResolvedValue(expected);
 
       const req = { salonId: 1, query: { page: '2', limit: '10' } } as unknown as Request;

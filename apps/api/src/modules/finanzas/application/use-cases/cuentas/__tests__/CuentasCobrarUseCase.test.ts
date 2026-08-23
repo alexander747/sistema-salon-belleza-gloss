@@ -82,8 +82,48 @@ describe('CuentasCobrarUseCase', () => {
         cantidadRegistros: 2,
         antiguedadDias: 46,
         antiguedadBucket: '31-60',
+        // Desglose por registro ordenado por fecha ASC (la más antigua primero)
+        registros: [
+          { registroId: 2, fechaHora: new Date('2026-07-01T10:00:00-05:00'), montoPendiente: 25000 },
+          { registroId: 1, fechaHora: new Date('2026-08-10T10:00:00-05:00'), montoPendiente: 15000 },
+        ],
       },
     ]);
+  });
+
+  it('spec finanzas-cuentas: desglose por registro con fechaHora (backfill) ordenado ASC — la más antigua primero', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([
+      // El repo devuelve ordenado por COALESCE(fechaHora, creadoEn) ASC; el use case
+      // garantiza el orden por fecha de negocio (defensa ante cualquier orden de entrada)
+      makeRegistro({
+        id: 1,
+        clienteId: 1,
+        montoPendiente: 15000,
+        fechaHora: new Date('2026-08-10T10:00:00-05:00'),
+        creadoEn: new Date('2026-08-20T10:00:00-05:00'),
+        cliente: { id: 1, nombre: 'Ana' },
+      }),
+      makeRegistro({
+        id: 2,
+        clienteId: 1,
+        montoPendiente: 25000,
+        fechaHora: new Date('2026-07-01T10:00:00-05:00'),
+        creadoEn: new Date('2026-08-20T10:00:00-05:00'),
+        cliente: { id: 1, nombre: 'Ana' },
+      }),
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data[0]).toMatchObject({
+      id: 1,
+      deudaTotal: 40000,
+      cantidadRegistros: 2,
+      registros: [
+        { registroId: 2, fechaHora: new Date('2026-07-01T10:00:00-05:00'), montoPendiente: 25000 },
+        { registroId: 1, fechaHora: new Date('2026-08-10T10:00:00-05:00'), montoPendiente: 15000 },
+      ],
+    });
   });
 
   it('computa la antigüedad desde fechaHora (backfill) con fallback a creadoEn', async () => {
@@ -197,6 +237,8 @@ describe('CuentasCobrarUseCase', () => {
         cantidadRegistros: null,
         antiguedadDias: 6,
         antiguedadBucket: '0-30',
+        // Spec: los préstamos no exponen desglose por registro
+        registros: null,
       },
     ]);
   });
