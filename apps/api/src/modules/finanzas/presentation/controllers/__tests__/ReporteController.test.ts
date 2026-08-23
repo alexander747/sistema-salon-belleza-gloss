@@ -40,6 +40,8 @@ describe('ReporteController', () => {
         totalComisiones: 180000,
         cantidadAtenciones: 3,
         totalIngresos: 400000,
+        totalCobrado: 400000,
+        totalFiadoDia: 0,
       };
       mockResumenDiaUseCase.execute.mockResolvedValue(expected);
 
@@ -67,6 +69,8 @@ describe('ReporteController', () => {
         totalComisiones: 0,
         cantidadAtenciones: 0,
         totalIngresos: 0,
+        totalCobrado: 0,
+        totalFiadoDia: 0,
       });
 
       const req = {
@@ -95,6 +99,8 @@ describe('ReporteController', () => {
         totalComisiones: 0,
         cantidadAtenciones: 0,
         totalIngresos: 0,
+        totalCobrado: 0,
+        totalFiadoDia: 0,
       });
 
       const req = {
@@ -122,6 +128,8 @@ describe('ReporteController', () => {
         totalComisiones: 0,
         cantidadAtenciones: 0,
         totalIngresos: 0,
+        totalCobrado: 0,
+        totalFiadoDia: 0,
       });
 
       const req = {
@@ -157,6 +165,8 @@ describe('ReporteController', () => {
         totalComisiones: 0,
         cantidadAtenciones: 0,
         totalIngresos: 0,
+        totalCobrado: 0,
+        totalFiadoDia: 0,
       });
 
       const req = {
@@ -283,7 +293,7 @@ describe('ReporteController', () => {
 
   describe('pyl', () => {
     it('devuelve el P&L y honra el filtro por usuario para roles privilegiados', async () => {
-      const expected = { utilidadNeta: -93000, ingresosNetos: 315000 };
+      const expected = { utilidadNeta: -78000, ingresosNetos: 315000, cobrado: 330000, fiadoPeriodo: 0, deudasPorCobrar: 50000 };
       mockPyLMensualUseCase.execute.mockResolvedValue(expected);
 
       const req = {
@@ -305,7 +315,7 @@ describe('ReporteController', () => {
     });
 
     it('rol restringido es forzado a su propio usuarioId e ignora el filtro recibido', async () => {
-      mockPyLMensualUseCase.execute.mockResolvedValue({ utilidadNeta: 0 });
+      mockPyLMensualUseCase.execute.mockResolvedValue({ utilidadNeta: 0, cobrado: 0, fiadoPeriodo: 0, deudasPorCobrar: 0 });
 
       const req = {
         salonId: 1,
@@ -325,7 +335,7 @@ describe('ReporteController', () => {
     });
 
     it('rol privilegiado sin usuarioId no envía el filtro', async () => {
-      mockPyLMensualUseCase.execute.mockResolvedValue({ utilidadNeta: 0 });
+      mockPyLMensualUseCase.execute.mockResolvedValue({ utilidadNeta: 0, cobrado: 0, fiadoPeriodo: 0, deudasPorCobrar: 0 });
 
       const req = {
         salonId: 1,
