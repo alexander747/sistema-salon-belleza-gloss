@@ -27,6 +27,7 @@ const PYL_QUERY_SCHEMA = z.object({
   desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   usuarioId: z.coerce.number().int().positive().optional(),
+  clienteId: z.coerce.number().int().positive().optional(),
 });
 
 @injectable()
@@ -116,15 +117,17 @@ export class ReporteController {
       }
 
       // Misma regla de roles que resumenDia: roles privilegiados pueden filtrar
-      // por empleada; roles restringidos son forzados a su propio usuarioId.
+      // por empleada/cliente; roles restringidos son forzados a su propio usuarioId.
       const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
       const usuarioId = isPrivileged ? parsed.data.usuarioId : req.user!.id;
+      const clienteId = isPrivileged ? parsed.data.clienteId : undefined;
 
       const result = await this.pylMensualUseCase.execute({
         salonId: req.salonId!,
         ...(parsed.data.desde ? { desde: parsed.data.desde } : {}),
         ...(parsed.data.hasta ? { hasta: parsed.data.hasta } : {}),
         ...(usuarioId !== undefined ? { usuarioId } : {}),
+        ...(clienteId !== undefined ? { clienteId } : {}),
       });
       res.json(result);
     } catch (error) {

@@ -14,6 +14,7 @@ export interface PyLMensualInput {
   desde?: string; // YYYY-MM-DD (fecha Colombia) — inicio del período
   hasta?: string; // YYYY-MM-DD (fecha Colombia) — fin del período
   usuarioId?: number; // filtro por empleada (opcional; los gastos/dev. no se filtran)
+  clienteId?: number; // filtro por cliente (opcional)
 }
 
 export interface PyLMensualOutput {
@@ -90,17 +91,18 @@ export class PyLMensualUseCase {
       }),
       this.devolucionRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
       // Cash basis: cobrado por fecha de recepción (pago.creadoEn); el filtro de
-      // empleada aplica igual que a los registros devengados.
+      // empleada/cliente aplica igual que a los registros devengados.
       this.registroRepo.sumPagosPorPeriodo(
         input.salonId,
         inicio,
         fin,
         input.usuarioId,
+        input.clienteId,
       ),
       // Fiado originado en el período (fecha de negocio del registro).
-      this.registroRepo.sumMontoPendientePorPeriodo(input.salonId, inicio, fin),
+      this.registroRepo.sumMontoPendientePorPeriodo(input.salonId, inicio, fin, input.usuarioId, input.clienteId),
       // Deudas por cobrar acumuladas a la fecha de negocio ≤ fin del período.
-      this.registroRepo.sumMontoPendienteHasta(input.salonId, fin),
+      this.registroRepo.sumMontoPendienteHasta(input.salonId, fin, input.usuarioId, input.clienteId),
     ]);
 
     let ingresosBrutos = 0;

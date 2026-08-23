@@ -373,16 +373,21 @@ describe('PyLMensualUseCase', () => {
       colombiaDayStartUTC('2026-05-01'),
       colombiaDayEndUTC('2026-05-31'),
       4,
+      undefined,
     );
-    // Fiado y deudas son líneas a nivel salón (sin filtro de empleada)
+    // Fiado y deudas honran el mismo filtro de empleada (consistente con cobrado)
     expect(mockRegistroRepo.sumMontoPendientePorPeriodo).toHaveBeenCalledWith(
       1,
       colombiaDayStartUTC('2026-05-01'),
       colombiaDayEndUTC('2026-05-31'),
+      4,
+      undefined,
     );
     expect(mockRegistroRepo.sumMontoPendienteHasta).toHaveBeenCalledWith(
       1,
       colombiaDayEndUTC('2026-05-31'),
+      4,
+      undefined,
     );
     // Gastos y devoluciones pertenecen al salón: no se filtran por empleada
     expect(mockGastoRepo.search).toHaveBeenCalledWith({

@@ -172,6 +172,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     fechaInicio: Date,
     fechaFin: Date,
     usuarioId?: number,
+    clienteId?: number,
   ): Promise<number> {
     const query = this.getRepo()
       .createQueryBuilder('r')
@@ -185,6 +186,9 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     if (usuarioId !== undefined) {
       query.andWhere('r.usuarioId = :usuarioId', { usuarioId });
     }
+    if (clienteId !== undefined) {
+      query.andWhere('r.clienteId = :clienteId', { clienteId });
+    }
 
     const result = await query.getRawOne();
     return Number(result?.total ?? 0);
@@ -196,28 +200,51 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     salonId: number,
     fechaInicio: Date,
     fechaFin: Date,
+    usuarioId?: number,
+    clienteId?: number,
   ): Promise<number> {
-    const result = await this.getRepo()
+    const query = this.getRepo()
       .createQueryBuilder('r')
       .select('COALESCE(SUM(r.montoPendiente), 0)', 'total')
       .where('r.salonId = :salonId', { salonId })
       .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
       .andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :fechaInicio', { fechaInicio })
-      .andWhere('COALESCE(r.fechaHora, r.creadoEn) < :fechaFin', { fechaFin })
-      .getRawOne();
+      .andWhere('COALESCE(r.fechaHora, r.creadoEn) < :fechaFin', { fechaFin });
+
+    if (usuarioId !== undefined) {
+      query.andWhere('r.usuarioId = :usuarioId', { usuarioId });
+    }
+    if (clienteId !== undefined) {
+      query.andWhere('r.clienteId = :clienteId', { clienteId });
+    }
+
+    const result = await query.getRawOne();
     return Number(result?.total ?? 0);
   }
 
   /** Deudas por cobrar acumuladas (snapshot): Σ montoPendiente de registros
    *  NO ANULADO con fecha de negocio (COALESCE(fechaHora, creadoEn)) ≤ hasta. */
-  async sumMontoPendienteHasta(salonId: number, hasta: Date): Promise<number> {
-    const result = await this.getRepo()
+  async sumMontoPendienteHasta(
+    salonId: number,
+    hasta: Date,
+    usuarioId?: number,
+    clienteId?: number,
+  ): Promise<number> {
+    const query = this.getRepo()
       .createQueryBuilder('r')
       .select('COALESCE(SUM(r.montoPendiente), 0)', 'total')
       .where('r.salonId = :salonId', { salonId })
       .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
-      .andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta })
-      .getRawOne();
+      .andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta });
+
+    if (usuarioId !== undefined) {
+      query.andWhere('r.usuarioId = :usuarioId', { usuarioId });
+    }
+    if (clienteId !== undefined) {
+      query.andWhere('r.clienteId = :clienteId', { clienteId });
+    }
+
+    const result = await query.getRawOne();
     return Number(result?.total ?? 0);
   }
 }

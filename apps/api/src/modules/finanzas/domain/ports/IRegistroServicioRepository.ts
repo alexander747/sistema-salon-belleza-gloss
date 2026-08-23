@@ -28,12 +28,12 @@ export interface IRegistroServicioRepository {
   }): Promise<number>;
   update(id: number, data: Partial<RegistroServicioEntity>, queryRunner?: QueryRunner): Promise<RegistroServicioEntity | null>;
   /** Σ pagos recibidos en el período por fecha de recepción (pago.creadoEn),
-   *  solo de registros NO ANULADO del salón. `usuarioId` filtra por empleada. */
-  sumPagosPorPeriodo(salonId: number, fechaInicio: Date, fechaFin: Date, usuarioId?: number): Promise<number>;
+   *  solo de registros NO ANULADO del salón. `usuarioId`/`clienteId` filtran. */
+  sumPagosPorPeriodo(salonId: number, fechaInicio: Date, fechaFin: Date, usuarioId?: number, clienteId?: number): Promise<number>;
   /** Σ montoPendiente de registros NO ANULADO del salón cuya fecha de negocio
    *  (COALESCE(fechaHora, creadoEn)) cae en el período — fiado originado. */
-  sumMontoPendientePorPeriodo(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<number>;
+  sumMontoPendientePorPeriodo(salonId: number, fechaInicio: Date, fechaFin: Date, usuarioId?: number, clienteId?: number): Promise<number>;
   /** Σ montoPendiente de registros NO ANULADO con fecha de negocio ≤ hasta —
    *  deudas por cobrar acumuladas (snapshot). */
-  sumMontoPendienteHasta(salonId: number, hasta: Date): Promise<number>;
+  sumMontoPendienteHasta(salonId: number, hasta: Date, usuarioId?: number, clienteId?: number): Promise<number>;
 }

@@ -83,10 +83,10 @@ export class ResumenDiaUseCase {
         : this.registroRepo.findBySalonAndDateRange(input.salonId, inicio, fin),
       this.gastoRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
       // Cash basis: Σ pagos recibidos en el período (pago.creadoEn), con el mismo
-      // filtro de empleada cuando el resumen se filtra por persona.
-      this.registroRepo.sumPagosPorPeriodo(input.salonId, inicio, fin, input.usuarioId),
+      // filtro de empleada/cliente cuando el resumen se filtra por persona.
+      this.registroRepo.sumPagosPorPeriodo(input.salonId, inicio, fin, input.usuarioId, input.clienteId),
       // Fiado originado en el período (fecha de negocio de los registros).
-      this.registroRepo.sumMontoPendientePorPeriodo(input.salonId, inicio, fin),
+      this.registroRepo.sumMontoPendientePorPeriodo(input.salonId, inicio, fin, input.usuarioId, input.clienteId),
     ]);
 
     // ── Calcular valores ajustados por descuentos ──────────────

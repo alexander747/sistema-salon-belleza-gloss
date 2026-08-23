@@ -195,9 +195,41 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
       expect.any(Date),
       expect.any(Date),
       4,
+      undefined,
     );
     expect(result.totalIngresos).toBe(100000);
     expect(result.cantidadAtenciones).toBe(1);
     expect(result.totalCobrado).toBe(100000);
+  });
+
+  it('filtra el cobrado y el fiado por clienteId cuando se pasa un cliente (fix card Cobrado)', async () => {
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(40000);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(60000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      fecha: '2026-05-15',
+      clienteId: 7,
+    });
+
+    // El cobrado y el fiado honran el filtro de cliente (bug reportado: el card
+    // Cobrado ignoraba clienteId y traía el total del salón)
+    expect(mockRegistroRepo.sumPagosPorPeriodo).toHaveBeenCalledWith(
+      1,
+      expect.any(Date),
+      expect.any(Date),
+      undefined,
+      7,
+    );
+    expect(mockRegistroRepo.sumMontoPendientePorPeriodo).toHaveBeenCalledWith(
+      1,
+      expect.any(Date),
+      expect.any(Date),
+      undefined,
+      7,
+    );
+    expect(result.totalCobrado).toBe(40000);
+    expect(result.totalFiadoDia).toBe(60000);
   });
 });
