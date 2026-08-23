@@ -4,7 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Skeleton } from '@pos-final/ui';
 import api from '../services/api.js';
 import { dispatchCajaRefresh } from './caja/CajaBanner.js';
-import { isCajaCerradaError } from './caja/cajaError.js';
+import { isCajaCerradaError, isCajaNoAbiertaEnFechaError } from './caja/cajaError.js';
+import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import MoneyInput from './MoneyInput.js';
@@ -84,6 +85,14 @@ interface WalkInModalProps {
 }
 
 /* ── Constants ── */
+
+/** Fecha local yyyy-mm-dd (mismo patrón que AgendaPage/DashboardPage). */
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 /* ── Inline styles (matching VentasPage / FinanzasPage patterns) ── */
 
@@ -176,6 +185,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   const [referencia, setReferencia] = useState('');
   const [propina, setPropina] = useState<number>(0);
   const [notas, setNotas] = useState('');
+  /** Fecha de negocio (backfill): default hoy, fechas pasadas permitidas. */
+  const [fecha, setFecha] = useState(() => toISODate(new Date()));
 
   /* ── Discount & Override state ── */
   const [descuento, setDescuento] = useState<number>(0);
@@ -335,6 +346,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setTotalPersonalizado(null);
       setAjustarTotal(false);
       setNotaAjuste('');
+      setFecha(toISODate(new Date()));
       setError(null);
       setErrorEsCajaCerrada(false);
       setProcessing(false);
@@ -442,6 +454,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
         salonId,
         clienteId: Number(clienteId),
         usuarioId: Number(empleadaId),
+        // Fecha de negocio: mediodía local TZ-safe (AD7) — el backend liga la caja de esa fecha
+        fechaHora: new Date(`${fecha}T12:00:00`).toISOString(),
         totalServicios,
         totalProductos,
         propina,
@@ -474,7 +488,17 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       await api.post(`/salones/${salonId}/registros`, payload);
       onSuccess();
     } catch (err: unknown) {
-      if (isCajaCerradaError(err)) {
+      if (isCajaNoAbiertaEnFechaError(err)) {
+        // Backfill (PR1): no hay caja ABIERTA para la fecha seleccionada (409).
+        // El mensaje del backend es accionable (abrir la caja de esa fecha); el modal permanece abierto.
+        setError(
+          extractApiErrorMessage(
+            err,
+            'No hay caja abierta para esa fecha. Abrí la caja de esa fecha antes de registrar la venta.',
+          ),
+        );
+        setErrorEsCajaCerrada(false);
+      } else if (isCajaCerradaError(err)) {
         // Regla de oro: sin caja abierta no se vende. Mensaje accionable + refresco del banner; el modal permanece abierto.
         setError('No hay caja abierta. Abrí la caja primero para registrar la venta.');
         setErrorEsCajaCerrada(true);
@@ -1011,6 +1035,23 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                 {/* ── Client + Employee ── */}
                 <div className={styles.checkoutSection}>
                   <div>
+                    <label style={formLabelStyle}>Fecha de la venta</label>
+                    <input
+                      type="date"
+                      value={fecha}
+                      onChange={(e) => setFecha(e.target.value)}
+                      style={inputStyle}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--accent)';
+                        e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    />
+                  </div>
+                  <div style={{ marginTop: '0.625rem' }}>
                     <label style={formLabelStyle}>Cliente *</label>
                     <select
                       value={clienteId}

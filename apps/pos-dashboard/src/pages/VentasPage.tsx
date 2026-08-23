@@ -6,7 +6,8 @@ import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
-import { isCajaCerradaError } from '../components/caja/cajaError.js';
+import { isCajaCerradaError, isCajaNoAbiertaEnFechaError } from '../components/caja/cajaError.js';
+import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import tableSkeletonStyles from '../components/TableSkeleton.module.css';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
@@ -115,6 +116,14 @@ const formLabelStyle: React.CSSProperties = {
 
 /* ── Helpers ── */
 
+/** Fecha local yyyy-mm-dd (mismo patrón que AgendaPage/DashboardPage). */
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /* ── Component ── */
 
 const VentasPage: React.FC = () => {
@@ -143,6 +152,8 @@ const VentasPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState<number>(0);
   const [paymentRef, setPaymentRef] = useState('');
+  /** Fecha de negocio (backfill): default hoy, fechas pasadas permitidas. */
+  const [fecha, setFecha] = useState(() => toISODate(new Date()));
   const [processing, setProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -307,6 +318,7 @@ const VentasPage: React.FC = () => {
     setAjustarTotal(false);
     setTotalPersonalizado(null);
     setNotaAjuste('');
+    setFecha(toISODate(new Date()));
     setSuccessMsg(null);
   };
 
@@ -331,6 +343,8 @@ const VentasPage: React.FC = () => {
         salonId,
         clienteId: Number(selectedCustomerId),
         usuarioId: Number(selectedEmployeeId),
+        // Fecha de negocio: mediodía local TZ-safe (AD7) — el backend liga la caja de esa fecha
+        fechaHora: new Date(`${fecha}T12:00:00`).toISOString(),
         totalServicios: 0,
         totalProductos: cartSubtotal,
         propina,
@@ -366,10 +380,20 @@ const VentasPage: React.FC = () => {
       setAjustarTotal(false);
       setTotalPersonalizado(null);
       setNotaAjuste('');
+      setFecha(toISODate(new Date()));
       fetchData();
     } catch (err: unknown) {
       setSuccessMsg(null);
-      if (isCajaCerradaError(err)) {
+      if (isCajaNoAbiertaEnFechaError(err)) {
+        // Backfill (PR1): no hay caja ABIERTA para la fecha seleccionada (409).
+        // Mensaje accionable del backend; el flujo permanece abierto.
+        setDataError(
+          extractApiErrorMessage(
+            err,
+            'No hay caja abierta para esa fecha. Abrí la caja de esa fecha antes de registrar la venta.',
+          ),
+        );
+      } else if (isCajaCerradaError(err)) {
         // Regla de oro: sin caja abierta no se vende. Mensaje accionable + refresco del banner; el flujo permanece abierto.
         setDataError('No hay caja abierta. Abrí la caja primero para vender.');
         dispatchCajaRefresh();
@@ -926,6 +950,26 @@ const VentasPage: React.FC = () => {
                   gap: '0.625rem',
                 }}
               >
+                <div>
+                  <label style={formLabelStyle}>Fecha de la venta</label>
+                  <input
+                    type="date"
+                    value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                    style={{
+                      ...searchInputStyle,
+                      maxWidth: '100%',
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--accent)';
+                      e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
                 <div>
                   <label style={formLabelStyle}>Cliente *</label>
                   <select

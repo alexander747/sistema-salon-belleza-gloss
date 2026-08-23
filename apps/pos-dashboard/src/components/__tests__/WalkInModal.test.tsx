@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
@@ -59,12 +59,30 @@ function renderModal(overrides: { onSuccess?: () => void; onNavigateToCaja?: () 
   );
 }
 
+/** Fecha en formato yyyy-mm-dd local. */
+function toISODateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Fecha pasada fija (relativa a hoy) para probar backfill sin depender del reloj. */
+function fechaPasada(): string {
+  return toISODateLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+}
+
 /** Llena el formulario y dispara el submit: carrito (1 servicio) + cliente + empleada + pago Tarjeta. */
-async function completarFormYEnviar() {
+async function completarFormYEnviar(fechaISO?: string) {
   fireEvent.click(await screen.findByText('Corte'));
   const combos = screen.getAllByRole('combobox');
   fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
   fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+  if (fechaISO) {
+    fireEvent.change(document.querySelector('input[type="date"]')!, {
+      target: { value: fechaISO },
+    });
+  }
   fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
   fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
 }
@@ -124,6 +142,91 @@ describe('WalkInModal — caja cerrada (regla de oro)', () => {
     expect(screen.queryByRole('button', { name: 'Abrir caja' })).not.toBeInTheDocument();
     expect(refreshSpy).not.toHaveBeenCalled();
     // El modal sigue abierto
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
+  });
+});
+
+describe('WalkInModal — fecha de negocio / backfill (PR3)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+    defaultApiMock();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('muestra un input de fecha con default hoy', async () => {
+    const { container } = renderModal();
+
+    await screen.findByText('Corte');
+
+    const dateInput = container.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(dateInput).not.toBeNull();
+    expect(dateInput.value).toBe(toISODateLocal(new Date()));
+  });
+
+  it('POST por defecto (sin tocar la fecha) envía fechaHora = hoy a las 12:00 local', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    const onSuccess = vi.fn();
+    renderModal({ onSuccess });
+
+    await completarFormYEnviar();
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          fechaHora: new Date(`${toISODateLocal(new Date())}T12:00:00`).toISOString(),
+        }),
+      );
+    });
+  });
+
+  it('cambiar la fecha a una pasada envía fechaHora = esa fecha a las 12:00 local', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    const onSuccess = vi.fn();
+    renderModal({ onSuccess });
+
+    await completarFormYEnviar(fechaPasada());
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          fechaHora: new Date(`${fechaPasada()}T12:00:00`).toISOString(),
+        }),
+      );
+    });
+  });
+
+  it('409 CAJA_NO_ABIERTA_EN_FECHA → muestra el mensaje del backend y mantiene el modal abierto', async () => {
+    const cajaNoAbiertaEnFecha = {
+      response: {
+        status: 409,
+        data: {
+          ok: false,
+          data: null,
+          error: {
+            code: 'CAJA_NO_ABIERTA_EN_FECHA',
+            message:
+              'No hay caja abierta para la fecha 2026-08-16 — abrí la caja de esa fecha antes de registrar la venta',
+          },
+        },
+      },
+    };
+    mockPost.mockRejectedValueOnce(cajaNoAbiertaEnFecha);
+    renderModal();
+
+    await completarFormYEnviar(fechaPasada());
+
+    expect(await screen.findByText(/no hay caja abierta para la fecha/i)).toBeInTheDocument();
+    // Sin botón "Abrir caja" (la caja de hoy puede estar abierta; el fix es abrir la de esa fecha)
+    expect(screen.queryByRole('button', { name: 'Abrir caja' })).not.toBeInTheDocument();
+    // El modal permanece abierto para corregir la fecha o abrir la caja
     expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
   });
 });

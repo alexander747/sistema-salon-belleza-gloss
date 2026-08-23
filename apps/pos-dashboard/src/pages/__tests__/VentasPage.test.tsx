@@ -198,6 +198,121 @@ describe('VentasPage — carrito y cobro (happy path)', () => {
   }, 20000);
 });
 
+describe('VentasPage — fecha de negocio / backfill (PR3)', () => {
+  const producto = { id: 1, nombre: 'Shampoo', marca: null, precioVenta: 20000, cantidadStock: 10, categoriaId: 1 };
+
+  function toISODateLocal(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  const fechaPasada = toISODateLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+
+  function cartApiMock() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/productos')) return Promise.resolve({ data: [producto] });
+      if (url.includes('/categorias')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', activo: true }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'María', activo: true }] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    cartApiMock();
+  });
+
+  /** Agrega 1 producto + cliente + empleada y cobra con tarjeta (opcional: cambia la fecha). */
+  async function cobrarCarrito(fechaISO?: string) {
+    fireEvent.click(await screen.findByText('Shampoo'));
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[1], { target: { value: '1' } });
+    fireEvent.change(combos[2], { target: { value: '1' } });
+    if (fechaISO) {
+      fireEvent.change(document.querySelector('input[type="date"]')!, {
+        target: { value: fechaISO },
+      });
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Cobrar\s+\$\s*20\.000/ }));
+  }
+
+  it('muestra un input de fecha con default hoy en el panel de cobro', async () => {
+    const { container } = renderPage();
+
+    await screen.findByText('Shampoo');
+
+    const dateInput = container.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(dateInput).not.toBeNull();
+    expect(dateInput.value).toBe(toISODateLocal(new Date()));
+  }, 20000);
+
+  it('cobrar sin tocar la fecha envía fechaHora = hoy a las 12:00 local', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderPage();
+
+    await cobrarCarrito();
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          fechaHora: new Date(`${toISODateLocal(new Date())}T12:00:00`).toISOString(),
+        }),
+      );
+    });
+  }, 20000);
+
+  it('cobrar con fecha pasada envía fechaHora = esa fecha a las 12:00 local (backfill)', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderPage();
+
+    await cobrarCarrito(fechaPasada);
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          fechaHora: new Date(`${fechaPasada}T12:00:00`).toISOString(),
+        }),
+      );
+    });
+  }, 20000);
+
+  it('409 CAJA_NO_ABIERTA_EN_FECHA → muestra el mensaje del backend y el carrito queda intacto', async () => {
+    mockPost.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: {
+          ok: false,
+          data: null,
+          error: {
+            code: 'CAJA_NO_ABIERTA_EN_FECHA',
+            message:
+              'No hay caja abierta para la fecha 2026-08-16 — abrí la caja de esa fecha antes de registrar la venta',
+          },
+        },
+      },
+    });
+    renderPage();
+
+    await cobrarCarrito(fechaPasada);
+
+    expect(await screen.findByText(/no hay caja abierta para la fecha/i)).toBeInTheDocument();
+    // El carrito sigue con el producto (el flujo permanece abierto)
+    expect(screen.getByText('$ 20.000 × 1')).toBeInTheDocument();
+  }, 20000);
+});
+
 describe('VentasPage — contratos responsive (R5)', () => {
   const producto = { id: 1, nombre: 'Shampoo', marca: null, precioVenta: 20000, cantidadStock: 10, categoriaId: 1 };
 
