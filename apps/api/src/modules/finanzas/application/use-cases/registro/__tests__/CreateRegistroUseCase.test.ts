@@ -222,6 +222,19 @@ describe('CreateRegistroUseCase', () => {
     // montoPendiente se computa sobre el VALOR FINAL cobrado (montoTotal 160000), excluye propina
     expect(mockComisionService.calcularMontoPendiente).toHaveBeenCalledWith(160000, 10000, 100000);
 
+    // Los pagos de la venta persisten ligados a la caja del registro (cajaId)
+    expect(mockPagoRepo.bulkCreate).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          registroServicioId: 1,
+          monto: 100000,
+          metodoPago: 'EFECTIVO',
+          cajaId: 5,
+        }),
+      ]),
+      expect.anything(),
+    );
+
     expect(mockRegistroRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         salonId: 1,
@@ -761,7 +774,10 @@ describe('CreateRegistroUseCase', () => {
         expect.objectContaining({ cajaId: 5 }),
         externalQr,
       );
-      expect(mockPagoRepo.bulkCreate).toHaveBeenCalledWith(expect.anything(), externalQr);
+      expect(mockPagoRepo.bulkCreate).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ cajaId: 5 })]),
+        externalQr,
+      );
       expect(externalQr.manager.getRepository).toHaveBeenCalled();
       // No se cierra ni commitea nada
       expect(externalQr.commitTransaction).not.toHaveBeenCalled();

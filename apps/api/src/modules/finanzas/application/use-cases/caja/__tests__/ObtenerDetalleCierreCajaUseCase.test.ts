@@ -28,6 +28,9 @@ const mockRegistroRepo = {
 const mockGastoRepo = {
   findByCajaId: vi.fn(),
 };
+const mockPagoRepo = {
+  findByCajaConFallback: vi.fn(),
+};
 
 const cajaCerrada = {
   id: 5,
@@ -50,10 +53,12 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
     useCase = new ObtenerDetalleCierreCajaUseCase(
       mockCajaRepo as never,
       mockRegistroRepo as never,
       mockGastoRepo as never,
+      mockPagoRepo as never,
     );
   });
 
@@ -78,6 +83,8 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     mockGastoRepo.findByCajaId.mockResolvedValue([
       { id: 9, descripcion: 'Insumos', monto: 15000, metodoPago: 'EFECTIVO', fecha: new Date('2026-08-15') },
     ]);
+    // El dinero se cuenta por pago.cajaId (findByCajaConFallback)
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 100000, metodoPago: 'EFECTIVO' }]);
 
     const result = await useCase.execute({ salonId: 1, cajaId: 5 });
 
@@ -89,6 +96,7 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     expect(result.reporte.diferencia).toBe(25000);
     expect(result.reporte.porMetodoPago.EFECTIVO).toBe(100000);
     expect(result.reporte.cantidadMovimientos).toBe(2);
+    expect(mockPagoRepo.findByCajaConFallback).toHaveBeenCalledWith(5);
 
     // movimientos: registros como SERVICIO, gastos como GASTO
     expect(result.movimientos).toEqual([
@@ -247,13 +255,19 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
       },
     ]);
     mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    // Abono EFECTIVO de la caja (pago.cajaId = esta caja) + pago de venta
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([
+      { id: 1, monto: 90000, metodoPago: 'EFECTIVO' },
+      { id: 88, monto: 25000, metodoPago: 'EFECTIVO' },
+    ]);
 
     const result = await useCase.execute({ salonId: 1, cajaId: 9 });
 
-    // El esperado se calcula (fondo 50000 + EFECTIVO 100000), pero al no haber
+    // El esperado se calcula (fondo 50000 + EFECTIVO 115000), pero al no haber
     // arqueo físico el montoReal y la diferencia deben ser null — NO 0/−esperado.
     expect(result.caja).toEqual(expect.objectContaining({ id: 9, estado: 'ABIERTA' }));
-    expect(result.reporte.montoEsperado).toBe(150000);
+    expect(result.reporte.porMetodoPago.EFECTIVO).toBe(115000);
+    expect(result.reporte.montoEsperado).toBe(165000);
     expect(result.reporte.montoReal).toBeNull();
     expect(result.reporte.diferencia).toBeNull();
     // La lista de movimientos sigue presente aunque la caja esté abierta

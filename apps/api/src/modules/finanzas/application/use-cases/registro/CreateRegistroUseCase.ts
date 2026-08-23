@@ -157,12 +157,16 @@ export class CreateRegistroUseCase {
       );
 
       // ── 7. Create PagoTransaccion rows ──────────────────────
+      // Cada pago persiste la caja del registro (fecha de negocio): el arqueo
+      // cuenta el dinero por pago.cajaId. Los abonos posteriores usarán la caja
+      // del día en que se reciben (AbonarDeudaUseCase).
       if (input.pagos && input.pagos.length > 0) {
         const pagosData = input.pagos.map((p) => ({
           registroServicioId: registro.id,
           monto: p.monto,
           metodoPago: p.metodoPago as MetodoPago,
           referencia: p.referencia,
+          cajaId: caja.id,
         }));
         await this.pagoRepo.bulkCreate(pagosData, qr);
       }

@@ -30,6 +30,9 @@ const mockRegistroRepo = {
 const mockGastoRepo = {
   findByCajaId: vi.fn(),
 };
+const mockPagoRepo = {
+  findByCajaConFallback: vi.fn(),
+};
 
 describe('ListarCierresCajaUseCase', () => {
   let useCase: ListarCierresCajaUseCase;
@@ -114,10 +117,12 @@ describe('ObtenerEsperadoCajaUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
     useCase = new ObtenerEsperadoCajaUseCase(
       mockCajaRepo as never,
       mockRegistroRepo as never,
       mockGastoRepo as never,
+      mockPagoRepo as never,
     );
   });
 
@@ -146,10 +151,11 @@ describe('ObtenerEsperadoCajaUseCase', () => {
         precioAjustado: false,
         valorOriginal: 0,
         valorFinal: 0,
-        pagos: [{ monto: 100000, metodoPago: 'EFECTIVO' }],
       },
     ]);
     mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    // El dinero se cuenta por pago.cajaId (findByCajaConFallback), no por r.pagos
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 100000, metodoPago: 'EFECTIVO' }]);
 
     const result = await useCase.execute({ salonId: 1 });
 
@@ -157,6 +163,7 @@ describe('ObtenerEsperadoCajaUseCase', () => {
     expect(result.montoEsperado).toBe(150000);
     expect(result.montoReal).toBeNull();
     expect(result.diferencia).toBeNull();
+    expect(mockPagoRepo.findByCajaConFallback).toHaveBeenCalledWith(5);
     // preview no debe cerrar la caja
     expect(mockCajaRepo.listBySalonPaginated).not.toHaveBeenCalled();
   });

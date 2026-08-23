@@ -11,6 +11,9 @@ export interface PorMetodoPagoTotals {
 /**
  * Tipo estructural de movimiento de caja (compatible con RegistroServicioEntity):
  * la función pura no acopla al repositorio y es trivialmente testeable.
+ * Las líneas informativas (ingresosBrutos/netos, comisiones) se derivan de los
+ * registros; el dinero del arqueo (porMetodoPago/montoEsperado) se deriva de
+ * `pagosExtra` (los pagos que pertenecen a ESTA caja según `pago.cajaId`).
  */
 export interface MovimientoCajaInput {
   estado: EstadoRegistro;
@@ -20,7 +23,12 @@ export interface MovimientoCajaInput {
   precioAjustado: boolean;
   valorOriginal: number;
   valorFinal: number;
-  pagos?: Array<{ monto: number; metodoPago: MetodoPagoCaja }>;
+}
+
+/** Pago que pertenece a la caja (pago.cajaId = C o fallback legacy por registro.cajaId). */
+export interface PagoExtraCajaInput {
+  monto: number;
+  metodoPago: MetodoPagoCaja;
 }
 
 /** Tipo estructural de gasto (compatible con GastoEntity). */
@@ -55,6 +63,13 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * El breakdown por método de pago se reporta completo como información.
  * Los registros ANULADOS se excluyen de todos los totales.
  *
+ * Contabilidad de CAJA con abonos (ventas-fiado-deudas): el dinero se cuenta en
+ * la caja donde se RECIBIÓ, identificada por `pago.cajaId`. Cada caja pasa su
+ * conjunto completo de pagos vía `pagosExtra` (repo `findByCajaConFallback`):
+ *   pagosCaja = {p.cajaId = C} ∪ {p.cajaId NULL ∧ r.cajaId = C} → porMetodoPago
+ * Así un abono de HOY sobre un registro de AYER entra en el arqueo de HOY y
+ * cada pago cuenta en UNA sola caja — sin doble conteo.
+ *
  * `montoRealEfectivo` es null en preview (GET /caja/actual/esperado) → `diferencia` null.
  */
 export function calcularReporteCierre(
@@ -62,6 +77,7 @@ export function calcularReporteCierre(
   gastos: GastoCajaInput[],
   montoRealEfectivo: number | null,
   montoInicial: number = 0,
+  pagosExtra: PagoExtraCajaInput[] = [],
 ): ReporteCierre {
   const activos = registros.filter((r) => r.estado !== EstadoRegistro.ANULADO);
 
@@ -73,15 +89,16 @@ export function calcularReporteCierre(
   );
   const comisiones = activos.reduce((sum, r) => sum + Number(r.comisionCalculada), 0);
 
+  // Dinero de la caja: SOLO los pagos que pertenecen a esta caja (pagosExtra).
+  // No se suman r.pagos: un pago de un abono posterior (pago.cajaId = otra caja)
+  // vive en el registro pero debe contar en la caja donde se recibió.
   const porMetodoPago: PorMetodoPagoTotals = {
     EFECTIVO: 0,
     TARJETA: 0,
     TRANSFERENCIA: 0,
   };
-  for (const r of activos) {
-    for (const p of r.pagos ?? []) {
-      porMetodoPago[p.metodoPago] = (porMetodoPago[p.metodoPago] ?? 0) + Number(p.monto);
-    }
+  for (const p of pagosExtra) {
+    porMetodoPago[p.metodoPago] = (porMetodoPago[p.metodoPago] ?? 0) + Number(p.monto);
   }
 
   const ingresosBrutos = totalServicios + totalProductos;

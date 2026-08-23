@@ -2,6 +2,7 @@ import { injectable, inject } from 'tsyringe';
 import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
+import type { IPagoTransaccionRepository } from '../../../domain/ports/IPagoTransaccionRepository';
 import { NotFoundError } from '../../../../../shared/errors';
 import { calcularReporteCierre, type MetodoPagoCaja, type ReporteCierre } from './calcularReporteCierre';
 import type { CajaDTO } from '../../dtos/CajaDTO';
@@ -41,6 +42,8 @@ export class ObtenerDetalleCierreCajaUseCase {
     private readonly registroRepo: IRegistroServicioRepository,
     @inject('IGastoRepository')
     private readonly gastoRepo: IGastoRepository,
+    @inject('IPagoTransaccionRepository')
+    private readonly pagoRepo: IPagoTransaccionRepository,
   ) {}
 
   async execute(input: ObtenerDetalleCierreCajaInput): Promise<ObtenerDetalleCierreCajaResult> {
@@ -50,9 +53,11 @@ export class ObtenerDetalleCierreCajaUseCase {
       throw new NotFoundError('Caja no encontrada');
     }
 
-    const [registros, gastos] = await Promise.all([
+    const [registros, gastos, pagosDeLaCaja] = await Promise.all([
       this.registroRepo.search({ salonId: input.salonId, cajaId: caja.id }),
       this.gastoRepo.findByCajaId(caja.id),
+      // Arqueo por caja: pagos recibidos en ESTA caja (abonos incluidos)
+      this.pagoRepo.findByCajaConFallback(caja.id),
     ]);
 
     // Caja ABIERTA → montoRealEfectivo null (aún no hay arqueo): pasar null en vez
@@ -64,6 +69,7 @@ export class ObtenerDetalleCierreCajaUseCase {
       gastos,
       montoRealEfectivo,
       Number(caja.montoInicial),
+      pagosDeLaCaja,
     );
 
     // Movimientos: registros ACTIVOS como SERVICIO + gastos como GASTO.

@@ -30,6 +30,9 @@ const mockRegistroRepo = {
 const mockGastoRepo = {
   findByCajaId: vi.fn(),
 };
+const mockPagoRepo = {
+  findByCajaConFallback: vi.fn(),
+};
 
 const cajaAbierta = {
   id: 5,
@@ -49,7 +52,7 @@ const cajaAbierta = {
 /** Huérfana: ABIERTA de un día anterior — solo se puede cerrar por cajaId. */
 const cajaHuerfana = { ...cajaAbierta, id: 9 };
 
-/** Registro ACTIVO con pagos EFECTIVO 180000 → montoEsperado 210000 (50000 inicial + 180000 − 20000 gastos). */
+/** Registro ACTIVO (línea informativa) — el dinero se reporta por pagosExtra. */
 const registroEfectivo180k = {
   id: 1,
   estado: 'ACTIVO',
@@ -59,7 +62,6 @@ const registroEfectivo180k = {
   precioAjustado: false,
   valorOriginal: 0,
   valorFinal: 0,
-  pagos: [{ monto: 180000, metodoPago: 'EFECTIVO' }],
 };
 
 describe('CerrarCajaUseCase', () => {
@@ -67,10 +69,13 @@ describe('CerrarCajaUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: caja sin pagos (arqueo solo con fondo) — cada test sobrescribe
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
     useCase = new CerrarCajaUseCase(
       mockCajaRepo as never,
       mockRegistroRepo as never,
       mockGastoRepo as never,
+      mockPagoRepo as never,
     );
   });
 
@@ -80,6 +85,7 @@ describe('CerrarCajaUseCase', () => {
     mockCajaRepo.findBySalonYFecha.mockResolvedValue(cajaAbierta);
     mockRegistroRepo.search.mockResolvedValue([registroEfectivo180k]);
     mockGastoRepo.findByCajaId.mockResolvedValue([{ id: 1, monto: 20000, metodoPago: 'EFECTIVO' }]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 180000, metodoPago: 'EFECTIVO' }]);
     mockCajaRepo.cerrar.mockResolvedValue(true);
 
     const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 210000, cierrePorId: 3 });
@@ -90,6 +96,8 @@ describe('CerrarCajaUseCase', () => {
       expect.objectContaining({ salonId: 1, cajaId: 5 }),
     );
     expect(mockGastoRepo.findByCajaId).toHaveBeenCalledWith(5);
+    // El dinero se cuenta por pago.cajaId (findByCajaConFallback), no por r.pagos
+    expect(mockPagoRepo.findByCajaConFallback).toHaveBeenCalledWith(5);
     expect(mockCajaRepo.cerrar).toHaveBeenCalledWith(
       5,
       expect.objectContaining({
@@ -108,12 +116,31 @@ describe('CerrarCajaUseCase', () => {
     mockCajaRepo.findBySalonYFecha.mockResolvedValue(cajaAbierta);
     mockRegistroRepo.search.mockResolvedValue([registroEfectivo180k]);
     mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 180000, metodoPago: 'EFECTIVO' }]);
     mockCajaRepo.cerrar.mockResolvedValue(true);
 
     const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 225000 });
 
     expect(result.reporte.montoEsperado).toBe(230000);
     expect(result.reporte.diferencia).toBe(-5000);
+  });
+
+  it('spec finanzas-caja: abono de HOY sobre registro de AYER entra en el arqueo de HOY (pagosExtra) aunque no haya registros de esta caja', async () => {
+    mockCajaRepo.findBySalonYFecha.mockResolvedValue(cajaAbierta);
+    // La caja de hoy no tiene registros propios (el registro fiado es de AYER)
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    // El abono de 25000 EFECTIVO tiene pago.cajaId = caja de HOY
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 88, monto: 25000, metodoPago: 'EFECTIVO' }]);
+    mockCajaRepo.cerrar.mockResolvedValue(true);
+
+    const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 75000 });
+
+    expect(mockPagoRepo.findByCajaConFallback).toHaveBeenCalledWith(5);
+    // Fondo 50000 + abono EFECTIVO 25000 = 75000 esperado
+    expect(result.reporte.porMetodoPago.EFECTIVO).toBe(25000);
+    expect(result.reporte.montoEsperado).toBe(75000);
+    expect(result.reporte.diferencia).toBe(0);
   });
 
   it('should throw CajaNoAbiertaError cuando no existe caja para hoy', async () => {
@@ -148,6 +175,7 @@ describe('CerrarCajaUseCase', () => {
     mockCajaRepo.findById.mockResolvedValue(cajaHuerfana);
     mockRegistroRepo.search.mockResolvedValue([registroEfectivo180k]);
     mockGastoRepo.findByCajaId.mockResolvedValue([{ id: 1, monto: 20000, metodoPago: 'EFECTIVO' }]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 180000, metodoPago: 'EFECTIVO' }]);
     mockCajaRepo.cerrar.mockResolvedValue(true);
 
     const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 210000, cajaId: 9, cierrePorId: 3 });
@@ -158,6 +186,7 @@ describe('CerrarCajaUseCase', () => {
       expect.objectContaining({ salonId: 1, cajaId: 9 }),
     );
     expect(mockGastoRepo.findByCajaId).toHaveBeenCalledWith(9);
+    expect(mockPagoRepo.findByCajaConFallback).toHaveBeenCalledWith(9);
     expect(mockCajaRepo.cerrar).toHaveBeenCalledWith(
       9,
       expect.objectContaining({

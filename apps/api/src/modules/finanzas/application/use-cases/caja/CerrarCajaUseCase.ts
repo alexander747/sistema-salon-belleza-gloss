@@ -2,6 +2,7 @@ import { injectable, inject } from 'tsyringe';
 import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
+import type { IPagoTransaccionRepository } from '../../../domain/ports/IPagoTransaccionRepository';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { CajaNoAbiertaError, CajaNoEncontradaError, CajaYaCerradaError } from '../../../../../shared/errors';
 import { calcularReporteCierre } from './calcularReporteCierre';
@@ -27,6 +28,8 @@ export class CerrarCajaUseCase {
     private readonly registroRepo: IRegistroServicioRepository,
     @inject('IGastoRepository')
     private readonly gastoRepo: IGastoRepository,
+    @inject('IPagoTransaccionRepository')
+    private readonly pagoRepo: IPagoTransaccionRepository,
   ) {}
 
   async execute(input: CerrarCajaInput): Promise<ReporteCierreDTO> {
@@ -34,12 +37,21 @@ export class CerrarCajaUseCase {
       ? await this.cajaPorId(input.salonId, input.cajaId)
       : await this.cajaDeHoy(input.salonId);
 
-    const [registros, gastos] = await Promise.all([
+    const [registros, gastos, pagosDeLaCaja] = await Promise.all([
       this.registroRepo.search({ salonId: input.salonId, cajaId: caja.id }),
       this.gastoRepo.findByCajaId(caja.id),
+      // Arqueo por caja: todos los pagos recibidos en ESTA caja (pago.cajaId = C,
+      // incluye abonos de hoy sobre registros de otra caja; legacy → registro.cajaId)
+      this.pagoRepo.findByCajaConFallback(caja.id),
     ]);
 
-    const reporte = calcularReporteCierre(registros, gastos, input.montoRealEfectivo, Number(caja.montoInicial));
+    const reporte = calcularReporteCierre(
+      registros,
+      gastos,
+      input.montoRealEfectivo,
+      Number(caja.montoInicial),
+      pagosDeLaCaja,
+    );
 
     // UPDATE condicional: guard atómico contra doble cierre (race)
     const cerrado = await this.cajaRepo.cerrar(caja.id, {
