@@ -1689,4 +1689,48 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
     expect(overlay).not.toBeNull();
     expect(panel).not.toBeNull();
   });
+
+  it('filtro por estado: default Activos oculta anulados; Anulados los muestra; Todos ambos', async () => {
+    const anulado = { ...registroFila, id: 3, estado: 'ANULADO', _clienteNombre: 'Rosa Anulada' };
+    const mockWithAnulado = (url: string): Promise<unknown> => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [registroFila, registroFila2, anulado], meta: { page: 1, limit: 12, total: 3, totalPages: 1 } } });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    };
+
+    mockGet.mockImplementation(mockWithAnulado);
+    render(
+      <MemoryRouter initialEntries={['/finanzas']}>
+        <FinanzasPage />
+      </MemoryRouter>,
+    );
+
+    // Default: Activos → Ana y Lina visibles, Rosa (anulada) oculta
+    const select = await screen.findByLabelText('Filtrar por estado de registro');
+    expect(select).toHaveValue('ACTIVOS');
+    await screen.findByText('Ana Gómez');
+    expect(screen.getByText('Lina Pérez')).toBeInTheDocument();
+    expect(screen.queryByText('Rosa Anulada')).toBeNull();
+
+    // Anulados → solo Rosa
+    fireEvent.change(select, { target: { value: 'ANULADOS' } });
+    expect(await screen.findByText('Rosa Anulada')).toBeInTheDocument();
+    expect(screen.queryByText('Ana Gómez')).toBeNull();
+
+    // Todos → los 3
+    fireEvent.change(screen.getByLabelText('Filtrar por estado de registro'), { target: { value: 'TODOS' } });
+    expect(await screen.findByText('Ana Gómez')).toBeInTheDocument();
+    expect(screen.getByText('Rosa Anulada')).toBeInTheDocument();
+  });
 });

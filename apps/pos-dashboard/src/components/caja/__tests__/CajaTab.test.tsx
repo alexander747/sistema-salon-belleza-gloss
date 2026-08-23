@@ -621,6 +621,9 @@ describe('CajaTab', () => {
     // Modal con reporte del arqueo + tabla de movimientos (SERVICIO y GASTO)
     const modal = await screen.findByTestId('detalle-cierre-modal');
     expect(within(modal).getByText(/detalle del cierre/i)).toBeInTheDocument();
+    expect(within(modal).getByText(/fondo inicial/i)).toBeInTheDocument();
+    // 50.000 es el montoInicial de apertura (puede repetirse en el desglose)
+    expect(within(modal).getAllByText(/50\.000/).length).toBeGreaterThanOrEqual(1);
     expect(within(modal).getByText(/140\.000/)).toBeInTheDocument(); // montoEsperado
     // 170.000 aparece como ingresosBrutos y como montoReal del arqueo
     expect(within(modal).getAllByText(/170\.000/).length).toBeGreaterThanOrEqual(1);

@@ -621,6 +621,8 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   const [registroDesde, setRegistroDesde] = useState(firstOfMonthISO(new Date()));
   const [registroHasta, setRegistroHasta] = useState(toISODate(new Date()));
   const [registroFilter, setRegistroFilter] = useState<'TODOS' | 'SERVICIOS' | 'PRODUCTOS'>('TODOS');
+  // Filtro por estado: default Activos al ingresar a la página (los anulados se ocultan)
+  const [registroEstadoFilter, setRegistroEstadoFilter] = useState<'ACTIVOS' | 'ANULADOS' | 'TODOS'>('ACTIVOS');
   const [registroPage, setRegistroPage] = useState(1);
   const [registroMeta, setRegistroMeta] = useState({ page: 1, limit: 12, total: 0, totalPages: 0 });
   // Role-scoped filters: only privileged roles (dueña/admin/contador/superadmin) can filter by empleada/cliente
@@ -631,10 +633,12 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   const [registroClienteNombre, setRegistroClienteNombre] = useState('');
 
   const filteredRegistros = useMemo(() => {
-    if (registroFilter === 'TODOS') return registros;
-    if (registroFilter === 'SERVICIOS') return registros.filter((r) => r.totalServicios > 0);
-    return registros.filter((r) => r.totalProductos > 0);
-  }, [registros, registroFilter]);
+    const estadoOk = (r: Registro) =>
+      registroEstadoFilter === 'TODOS' ? true : registroEstadoFilter === 'ACTIVOS' ? r.estado !== 'ANULADO' : r.estado === 'ANULADO';
+    const tipoOk = (r: Registro) =>
+      registroFilter === 'TODOS' ? true : registroFilter === 'SERVICIOS' ? r.totalServicios > 0 : r.totalProductos > 0;
+    return registros.filter((r) => estadoOk(r) && tipoOk(r));
+  }, [registros, registroFilter, registroEstadoFilter]);
 
   const fetchData = useCallback(async () => {
     // Rango incompleto: no buscar ni mostrar loading hasta tener desde Y hasta
@@ -1078,6 +1082,28 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
           </span>
         )}
         <div style={{ display: 'flex', gap: '0.35rem', marginLeft: 'auto' }}>
+          <select
+            aria-label="Filtrar por estado de registro"
+            value={registroEstadoFilter}
+            onChange={(e) => {
+              setRegistroEstadoFilter(e.target.value as 'ACTIVOS' | 'ANULADOS' | 'TODOS');
+              setRegistroPage(1);
+            }}
+            style={{
+              background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.35rem 0.6rem',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="ACTIVOS">Activos</option>
+            <option value="ANULADOS">Anulados</option>
+            <option value="TODOS">Todos</option>
+          </select>
           {(['TODOS', 'SERVICIOS', 'PRODUCTOS'] as const).map((t) => {
             const isActive = registroFilter === t;
             return (

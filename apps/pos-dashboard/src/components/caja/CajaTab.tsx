@@ -1012,6 +1012,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
                       {[
+                        { label: 'Fondo inicial', value: detalleCierre.montoInicial },
                         { label: 'Servicios', value: detalleReporte.totalServicios },
                         { label: 'Productos', value: detalleReporte.totalProductos },
                         { label: 'Ingresos brutos', value: detalleReporte.ingresosBrutos },
