@@ -55,10 +55,10 @@ Chain strategy: stacked-to-main
 
 ## PR4 — Frontend: deudas (abonar)
 
-- [ ] 4.1 RED: "abonar reduce deuda y refresca"; **reescribir `FinanzasPage.test.tsx:631-637`** (read-only → acciones)
-- [ ] 4.2 `FinanzasPage`: columna acción en filas CLIENTE + modal (select registro + monto + método) + refresh; PRESTAMO sin botón; errores 409/422 en el modal
-- [ ] 4.3 RegistrosTab: cards "Cobrado" y "Fiado del período" junto a TOTAL INGRESOS
-- [ ] 4.4 Vitest dashboard + tsc; build
+- [x] 4.1 RED: "abonar reduce deuda y refresca"; **reescribir `FinanzasPage.test.tsx:631-637`** (read-only → acciones)
+- [x] 4.2 `FinanzasPage`: columna acción en filas CLIENTE + modal (select registro + monto + método) + refresh; PRESTAMO sin botón; errores 409/422 en el modal
+- [x] 4.3 RegistrosTab: cards "Cobrado" y "Fiado del período" junto a TOTAL INGRESOS
+- [x] 4.4 Vitest dashboard + tsc; build
 
 ## Test Break Inventory
 
