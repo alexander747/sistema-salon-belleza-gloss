@@ -53,6 +53,16 @@ export const createRegistroSchema = z.object({
 
 export type CreateRegistroInput = z.infer<typeof createRegistroSchema>;
 
+// ── Abonar deuda (POST /registros/:id/pagos) ──────────────────
+
+export const abonarDeudaSchema = z.object({
+  monto: z.number().positive('El monto debe ser positivo'),
+  metodoPago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA']),
+  referencia: z.string().max(100).optional(),
+});
+
+export type AbonarDeudaInput = z.infer<typeof abonarDeudaSchema>;
+
 // ── Completar cita (atómico) ─────────────────────────────────
 
 export const completarCitaSchema = z.object({

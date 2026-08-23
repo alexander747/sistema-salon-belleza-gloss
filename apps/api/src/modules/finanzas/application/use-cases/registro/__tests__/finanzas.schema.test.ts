@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createRegistroSchema, completarCitaSchema } from '@pos-final/validation';
+import { createRegistroSchema, completarCitaSchema, abonarDeudaSchema } from '@pos-final/validation';
 
 describe('createRegistroSchema — fechaHora opcional', () => {
   const baseValid = {
@@ -147,5 +147,35 @@ describe('completarCitaSchema', () => {
       },
     };
     expect(() => completarCitaSchema.parse(bad)).toThrow();
+  });
+});
+
+describe('abonarDeudaSchema', () => {
+  const baseValid = { monto: 25000, metodoPago: 'EFECTIVO' };
+
+  it('should accept a valid abono payload (monto, metodoPago, referencia opcional)', () => {
+    const result = abonarDeudaSchema.parse(baseValid);
+    expect(result).toEqual({ monto: 25000, metodoPago: 'EFECTIVO' });
+  });
+
+  it('should accept referencia opcional y preservarla', () => {
+    const result = abonarDeudaSchema.parse({ ...baseValid, referencia: 'AB-1' });
+    expect(result.referencia).toBe('AB-1');
+  });
+
+  it('should reject monto 0 (spec: monto positivo)', () => {
+    expect(() => abonarDeudaSchema.parse({ ...baseValid, monto: 0 })).toThrow();
+  });
+
+  it('should reject monto negativo', () => {
+    expect(() => abonarDeudaSchema.parse({ ...baseValid, monto: -5 })).toThrow();
+  });
+
+  it('should reject un metodoPago inválido', () => {
+    expect(() => abonarDeudaSchema.parse({ ...baseValid, metodoPago: 'BITCOIN' })).toThrow();
+  });
+
+  it('should reject sin metodoPago (requerido)', () => {
+    expect(() => abonarDeudaSchema.parse({ monto: 10000 })).toThrow();
   });
 });

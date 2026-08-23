@@ -10,7 +10,7 @@ import { CuentasController } from '../controllers/CuentasController';
 import { validate } from '../../../../presentation/middleware/validate';
 import { requireRole } from '../../../../presentation/middleware/requireRole';
 import { Rol } from '@pos-final/types';
-import { createRegistroSchema, abrirCajaSchema, cerrarCajaSchema } from '@pos-final/validation';
+import { createRegistroSchema, abrirCajaSchema, cerrarCajaSchema, abonarDeudaSchema } from '@pos-final/validation';
 
 const router = Router({ mergeParams: true });
 
@@ -36,6 +36,13 @@ router.delete(
   '/registros/:id',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   registroController.anular,
+);
+// Abono a deuda (fiado): roles iguales a POST /registros
+router.post(
+  '/registros/:id/pagos',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  validate(abonarDeudaSchema),
+  registroController.abonar,
 );
 
 // ── Gastos ────────────────────────────────────────────────────

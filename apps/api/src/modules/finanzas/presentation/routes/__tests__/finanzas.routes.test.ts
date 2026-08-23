@@ -24,7 +24,7 @@ vi.mock('../../../../../presentation/middleware/requireRole', () => ({
   requireRole: requireRoleMock,
 }));
 
-vi.mock('../../controllers/RegistroController', () => ({ RegistroController: class { list = stub; create = stub; get = stub; anular = stub; } }));
+vi.mock('../../controllers/RegistroController', () => ({ RegistroController: class { list = stub; create = stub; get = stub; anular = stub; abonar = stub; } }));
 vi.mock('../../controllers/GastoController', () => ({ GastoController: class { list = stub; create = stub; delete = stub; } }));
 vi.mock('../../controllers/DevolucionController', () => ({ DevolucionController: class { list = stub; create = stub; } }));
 vi.mock('../../controllers/LiquidacionController', () => ({ LiquidacionController: class { nominaPendiente = stub; liquidarEmpleada = stub; historial = stub; } }));
@@ -41,6 +41,26 @@ function guardsFor(path: string): Rol[][] {
   };
   const layers = router.stack.filter(
     (l) => l.route && l.route.path === path && l.route.methods.get,
+  );
+  const roles: Rol[][] = [];
+  for (const layer of layers) {
+    for (const h of layer.route!.stack) {
+      const handle = h.handle as unknown as { __requireRole?: boolean; __roles?: Rol[] };
+      if (typeof h.handle === 'function' && handle.__requireRole) {
+        roles.push(handle.__roles!);
+      }
+    }
+  }
+  return roles;
+}
+
+/** Roles exigidos por requireRole en la ruta POST dada. */
+function guardsForPost(path: string): Rol[][] {
+  const router = finanzasRouter as unknown as {
+    stack: { route?: { path: string; methods: Record<string, boolean>; stack: { handle: unknown }[] } }[];
+  };
+  const layers = router.stack.filter(
+    (l) => l.route && l.route.path === path && l.route.methods.post,
   );
   const roles: Rol[][] = [];
   for (const layer of layers) {
@@ -75,6 +95,15 @@ describe('finanzas.routes — guards de rol en GETs sensibles', () => {
       Rol.DUEÑA,
       Rol.ADMINISTRADOR,
       Rol.CONTADOR,
+      Rol.RECEPCIONISTA,
+    ]);
+  });
+
+  it('POST /registros/:id/pagos (abono) exige SUPERADMIN/DUEÑA/ADMINISTRADOR/RECEPCIONISTA — mismos roles que POST /registros', () => {
+    expect(guardsForPost('/registros/:id/pagos')).toContainEqual([
+      Rol.SUPERADMIN,
+      Rol.DUEÑA,
+      Rol.ADMINISTRADOR,
       Rol.RECEPCIONISTA,
     ]);
   });

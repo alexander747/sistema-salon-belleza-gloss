@@ -40,6 +40,7 @@ describe('RegistroController', () => {
   let mockListUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockGetUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockAnularUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockAbonarUseCase: { execute: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -47,12 +48,14 @@ describe('RegistroController', () => {
     mockListUseCase = { execute: vi.fn() };
     mockGetUseCase = { execute: vi.fn() };
     mockAnularUseCase = { execute: vi.fn() };
+    mockAbonarUseCase = { execute: vi.fn() };
     next = vi.fn();
     controller = new RegistroController(
       mockCreateUseCase as never,
       mockListUseCase as never,
       mockGetUseCase as never,
       mockAnularUseCase as never,
+      mockAbonarUseCase as never,
     );
   });
 
@@ -181,6 +184,59 @@ describe('RegistroController', () => {
       expect(mockAnularUseCase.execute).toHaveBeenCalledWith({
         id: 5,
         salonId: 1,
+      });
+    });
+  });
+
+  describe('abonar', () => {
+    it('should return 201 with the updated registro (DTO con pagos + montoPendiente)', async () => {
+      const expected = { id: 5, montoPendiente: 15000, pagos: [{ id: 99, monto: 25000, metodoPago: 'EFECTIVO' }] };
+      mockAbonarUseCase.execute.mockResolvedValue(expected);
+
+      const req = {
+        salonId: 1,
+        params: { id: '5' },
+        body: { monto: 25000, metodoPago: 'EFECTIVO', referencia: 'AB-1' },
+      } as unknown as Request;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      await controller.abonar(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(expected);
+      expect(mockAbonarUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        registroId: 5,
+        monto: 25000,
+        metodoPago: 'EFECTIVO',
+        referencia: 'AB-1',
+      });
+    });
+
+    it('should pass referencia undefined when the body omits it', async () => {
+      mockAbonarUseCase.execute.mockResolvedValue({});
+
+      const req = {
+        salonId: 1,
+        params: { id: '5' },
+        body: { monto: 10000, metodoPago: 'TARJETA' },
+      } as unknown as Request;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      await controller.abonar(req, res, next);
+
+      expect(mockAbonarUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        registroId: 5,
+        monto: 10000,
+        metodoPago: 'TARJETA',
+        referencia: undefined,
       });
     });
   });

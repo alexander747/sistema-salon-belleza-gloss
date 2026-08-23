@@ -5,6 +5,7 @@ import { CreateRegistroUseCase } from '../../application/use-cases/registro/Crea
 import { ListRegistrosUseCase } from '../../application/use-cases/registro/ListRegistrosUseCase';
 import { GetRegistroUseCase } from '../../application/use-cases/registro/GetRegistroUseCase';
 import { AnularRegistroUseCase } from '../../application/use-cases/registro/AnularRegistroUseCase';
+import { AbonarDeudaUseCase } from '../../application/use-cases/registro/AbonarDeudaUseCase';
 import { paginationSchema } from '@pos-final/validation';
 
 const REGISTROS_PRIVILEGED_ROLES = new Set<number>([
@@ -21,6 +22,7 @@ export class RegistroController {
     @inject(ListRegistrosUseCase) private readonly listUseCase: ListRegistrosUseCase,
     @inject(GetRegistroUseCase) private readonly getUseCase: GetRegistroUseCase,
     @inject(AnularRegistroUseCase) private readonly anularUseCase: AnularRegistroUseCase,
+    @inject(AbonarDeudaUseCase) private readonly abonarUseCase: AbonarDeudaUseCase,
   ) {}
 
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -83,6 +85,21 @@ export class RegistroController {
         salonId: req.salonId!,
       });
       res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  abonar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.abonarUseCase.execute({
+        salonId: req.salonId!,
+        registroId: Number(req.params.id),
+        monto: req.body.monto,
+        metodoPago: req.body.metodoPago,
+        referencia: req.body.referencia,
+      });
+      res.status(201).json(result);
     } catch (error) {
       next(error);
     }
