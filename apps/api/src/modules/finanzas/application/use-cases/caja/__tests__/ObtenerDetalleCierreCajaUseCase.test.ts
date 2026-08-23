@@ -111,6 +111,59 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     ]);
   });
 
+  it('should devolver la fecha del movimiento desde fechaHora (backfill) con fallback a creadoEn', async () => {
+    mockCajaRepo.findById.mockResolvedValue(cajaCerrada);
+    // Registro backfilleado: fecha de negocio 16/08 (fechaHora) ≠ creadoEn 22/08
+    mockRegistroRepo.search.mockResolvedValue([
+      {
+        id: 20,
+        estado: 'ACTIVO',
+        totalServicios: 90000,
+        totalProductos: 0,
+        comisionCalculada: 0,
+        precioAjustado: false,
+        valorOriginal: 0,
+        valorFinal: 0,
+        montoTotal: 90000,
+        serviciosItems: [{ nombreServicio: 'Corte' }],
+        pagos: [{ monto: 90000, metodoPago: 'EFECTIVO' }],
+        fechaHora: new Date('2026-08-16T15:00:00.000Z'),
+        creadoEn: new Date('2026-08-22T10:00:00.000Z'),
+      },
+      {
+        id: 21,
+        estado: 'ACTIVO',
+        totalServicios: 10000,
+        totalProductos: 0,
+        comisionCalculada: 0,
+        precioAjustado: false,
+        valorOriginal: 0,
+        valorFinal: 0,
+        montoTotal: 10000,
+        serviciosItems: [],
+        pagos: [],
+        // Legacy: sin fechaHora → fallback a creadoEn
+        creadoEn: new Date('2026-08-15T14:00:00.000Z'),
+      },
+    ]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1, cajaId: 5 });
+
+    expect(result.movimientos).toEqual([
+      expect.objectContaining({
+        id: 20,
+        tipo: 'SERVICIO',
+        fecha: new Date('2026-08-16T15:00:00.000Z'),
+      }),
+      expect.objectContaining({
+        id: 21,
+        tipo: 'SERVICIO',
+        fecha: new Date('2026-08-15T14:00:00.000Z'),
+      }),
+    ]);
+  });
+
   it('should usar "Registro #id" y metodoPago null cuando un registro no tiene items ni pagos, y excluir ANULADOS', async () => {
     mockCajaRepo.findById.mockResolvedValue(cajaCerrada);
     mockRegistroRepo.search.mockResolvedValue([

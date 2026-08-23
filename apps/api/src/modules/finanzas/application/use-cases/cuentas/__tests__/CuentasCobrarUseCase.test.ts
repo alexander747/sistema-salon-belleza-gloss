@@ -86,6 +86,25 @@ describe('CuentasCobrarUseCase', () => {
     ]);
   });
 
+  it('computa la antigüedad desde fechaHora (backfill) con fallback a creadoEn', async () => {
+    // Registro backfilleado: fecha de negocio 01/07 pero creadoEn 10/08 → la
+    // deuda envejece desde la FECHA DE NEGOCIO (46 días), no desde creadoEn (6).
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([
+      makeRegistro({
+        id: 1,
+        clienteId: 1,
+        montoPendiente: 15000,
+        fechaHora: new Date('2026-07-01T10:00:00-05:00'),
+        creadoEn: new Date('2026-08-10T10:00:00-05:00'),
+        cliente: { id: 1, nombre: 'Ana' },
+      }),
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0 });
+
+    expect(result.data[0]).toMatchObject({ nombre: 'Ana', antiguedadDias: 46, antiguedadBucket: '31-60' });
+  });
+
   it('ordena por deudaTotal DESC y pagina (spec: 25 clientes, primera "Ana")', async () => {
     const registros = Array.from({ length: 25 }, (_, i) => {
       const id = i + 1;

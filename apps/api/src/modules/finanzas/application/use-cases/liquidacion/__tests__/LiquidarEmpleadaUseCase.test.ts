@@ -67,6 +67,8 @@ const makeRegistro = (overrides: Record<string, unknown> = {}) => ({
   estaPagadaEmpleada: false,
   comisionCalculada: 0,
   propina: 0,
+  // Fecha de negocio (backfill): el repo filtra el período por COALESCE(fechaHora, creadoEn)
+  fechaHora: new Date('2026-08-01T10:00:00'),
   creadoEn: new Date('2026-08-01T10:00:00'),
   ...overrides,
 });
@@ -385,6 +387,37 @@ describe('LiquidarEmpleadaUseCase', () => {
     expect(mockRegistroRepo.update).toHaveBeenCalledWith(2, expect.anything(), expect.anything());
     expect(mockRegistroRepo.update).not.toHaveBeenCalledWith(1, expect.anything(), expect.anything());
     expect(result).toEqual(expect.objectContaining({ id: 13, totalPagado: 205000 }));
+  });
+
+  it('liquida registros backfilleados: el período lo filtra el repo (COALESCE) y el guard anti-doble-pago usa creadoEn', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    // El repo (mocked) ya filtró por fechaHora (COALESCE): devuelve el registro
+    // backfilleado con fechaHora 05/08 pero creadoEn 15/08 (después de la liquidación 10/08).
+    mockRegistroRepo.search.mockResolvedValue([
+      makeRegistro({
+        id: 1,
+        comisionCalculada: 30000,
+        fechaHora: new Date('2026-08-05T10:00:00'),
+        creadoEn: new Date('2026-08-15T10:00:00'),
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
+      { id: 10, creadoEn: new Date('2026-08-10T10:00:00') },
+    ]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 14 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 14, totalPagado: 230000 });
+
+    const result = await useCase.execute(baseInput);
+
+    // Guard: creadoEn (15/08) > última liquidación (10/08) → se mantiene pese a
+    // que su fecha de negocio (05/08) es anterior a la liquidación.
+    expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ totalComisiones: 30000, totalPagado: 230000 }),
+      expect.anything(),
+    );
+    expect(result).toEqual(expect.objectContaining({ id: 14, totalPagado: 230000 }));
   });
 
   it('liquida a empleada QUINCENAL registrando el 50% del comp fijo (coherente con NominaPendiente)', async () => {

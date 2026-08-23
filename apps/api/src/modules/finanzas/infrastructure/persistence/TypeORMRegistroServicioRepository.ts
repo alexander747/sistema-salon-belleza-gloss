@@ -49,7 +49,8 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .where('r.salonId = :salonId', { salonId })
       .andWhere('r.montoPendiente > 0')
       .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
-      .orderBy('r.creadoEn', 'ASC')
+      // Antigüedad de la deuda por fecha de negocio (backfill); legacy -> creadoEn
+      .orderBy('COALESCE(r.fechaHora, r.creadoEn)', 'ASC')
       .getMany();
   }
 
@@ -65,9 +66,9 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.devoluciones', 'devolucion')
       .leftJoinAndSelect('r.serviciosItems', 'si')
       .where('r.salonId = :salonId', { salonId })
-      .andWhere('r.creadoEn >= :fechaInicio', { fechaInicio })
-      .andWhere('r.creadoEn <= :fechaFin', { fechaFin })
-      .orderBy('r.creadoEn', 'DESC')
+      .andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :fechaInicio', { fechaInicio })
+      .andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :fechaFin', { fechaFin })
+      .orderBy('COALESCE(r.fechaHora, r.creadoEn)', 'DESC')
       .getMany();
   }
 
@@ -93,10 +94,10 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .where('r.salonId = :salonId', { salonId: params.salonId });
 
     if (params.desde) {
-      query.andWhere('r.creadoEn >= :desde', { desde: params.desde });
+      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :desde', { desde: params.desde });
     }
     if (params.hasta) {
-      query.andWhere('r.creadoEn <= :hasta', { hasta: params.hasta });
+      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta: params.hasta });
     }
     if (params.usuarioId) {
       query.andWhere('r.usuarioId = :usuarioId', { usuarioId: params.usuarioId });
@@ -111,7 +112,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     if (params.skip !== undefined) query.skip(params.skip);
     if (params.take !== undefined && params.take > 0) query.take(params.take);
 
-    return query.orderBy('r.creadoEn', 'DESC').getMany();
+    return query.orderBy('COALESCE(r.fechaHora, r.creadoEn)', 'DESC').getMany();
   }
 
   async count(params: {
@@ -127,10 +128,10 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .where('r.salonId = :salonId', { salonId: params.salonId });
 
     if (params.desde) {
-      query.andWhere('r.creadoEn >= :desde', { desde: params.desde });
+      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :desde', { desde: params.desde });
     }
     if (params.hasta) {
-      query.andWhere('r.creadoEn <= :hasta', { hasta: params.hasta });
+      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta: params.hasta });
     }
     if (params.usuarioId) {
       query.andWhere('r.usuarioId = :usuarioId', { usuarioId: params.usuarioId });

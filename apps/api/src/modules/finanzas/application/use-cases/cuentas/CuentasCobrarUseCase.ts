@@ -64,12 +64,13 @@ export class CuentasCobrarUseCase {
         nombre: registro.cliente?.nombre ?? '',
         deudaTotal: 0,
         cantidadRegistros: 0,
-        masAntiguo: registro.creadoEn,
+        // Antigüedad por fecha de negocio (backfill); legacy -> creadoEn
+        masAntiguo: registro.fechaHora ?? registro.creadoEn,
       };
       grupo.deudaTotal += pendiente;
       grupo.cantidadRegistros += 1;
-      if (registro.creadoEn < grupo.masAntiguo) {
-        grupo.masAntiguo = registro.creadoEn;
+      if ((registro.fechaHora ?? registro.creadoEn) < grupo.masAntiguo) {
+        grupo.masAntiguo = registro.fechaHora ?? registro.creadoEn;
       }
       grupos.set(registro.clienteId, grupo);
     }

@@ -132,11 +132,15 @@ export class NominaPendienteUseCase {
       (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada && r.estado !== EstadoRegistro.ANULADO,
     );
 
-    // QUINCENAL/SEMANAL: solo cuentan los registros creados dentro del período.
-    // MENSUAL: comportamiento actual — todos los no pagados, sin filtro de período.
+    // QUINCENAL/SEMANAL: solo cuentan los registros del período por FECHA DE
+    // NEGOCIO (fechaHora ?? creadoEn para legacy). MENSUAL: comportamiento
+    // actual — todos los no pagados, sin filtro de período.
     if (frecuenciaPago === 'QUINCENAL' || frecuenciaPago === 'SEMANAL') {
       pendingRegistros = pendingRegistros.filter(
-        (r) => new Date(r.creadoEn) >= periodoInicio && new Date(r.creadoEn) <= periodoFin,
+        (r) => {
+          const fechaNegocio = new Date(r.fechaHora ?? r.creadoEn);
+          return fechaNegocio >= periodoInicio && fechaNegocio <= periodoFin;
+        },
       );
     }
 

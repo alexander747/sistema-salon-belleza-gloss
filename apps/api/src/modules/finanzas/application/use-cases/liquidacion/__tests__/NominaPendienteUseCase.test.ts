@@ -304,6 +304,77 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
     );
   });
 
+  it('QUINCENAL con backfill: el período filtra por fechaHora (no creadoEn)', async () => {
+    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08 → quincena [1,15]
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({
+        id: 30,
+        nombre: 'B1',
+        frecuenciaPago: 'QUINCENAL',
+        sueldoFijo: 0,
+      }),
+    ]);
+    // Registro backfilleado: fecha de negocio 05/08, pero CREADO el 22/08 (creadoEn fuera de la quincena)
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      makeRegistro({
+        id: 31,
+        usuarioId: 30,
+        comisionCalculada: 12000,
+        fechaHora: new Date('2026-08-05T10:00:00'),
+        creadoEn: new Date('2026-08-22T10:00:00'),
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        nombre: 'B1',
+        totalComisionesPendientes: 12000, // cuenta en la quincena del 05/08 (fechaHora), no por creadoEn
+        cantidadRegistros: 1,
+      }),
+    );
+  });
+
+  it('QUINCENAL con backfill: el guard anti-doble-pago SIGUE comparando contra creadoEn', async () => {
+    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08 → quincena [1,15]
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({
+        id: 31,
+        nombre: 'B2',
+        frecuenciaPago: 'QUINCENAL',
+        sueldoFijo: 0,
+      }),
+    ]);
+    // Registro con fechaHora 05/08 (en la quincena) creado el 22/08 (DESPUÉS de la última liquidación 10/08)
+    // → el guard lo MANTIENE porque creadoEn (22/08) > liquidación (10/08) — semántica de auditoría.
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      makeRegistro({
+        id: 32,
+        usuarioId: 31,
+        comisionCalculada: 8000,
+        fechaHora: new Date('2026-08-05T10:00:00'),
+        creadoEn: new Date('2026-08-22T10:00:00'),
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
+      { id: 40, creadoEn: new Date('2026-08-10T10:00:00') },
+    ]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        nombre: 'B2',
+        totalComisionesPendientes: 8000,
+        cantidadRegistros: 1,
+      }),
+    );
+  });
+
   it('QUINCENAL día 20: período [16, último día del mes] y comp fijo al 50%', async () => {
     vi.setSystemTime(new Date('2026-08-20T12:00:00Z')); // 07:00 COT = 20/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([

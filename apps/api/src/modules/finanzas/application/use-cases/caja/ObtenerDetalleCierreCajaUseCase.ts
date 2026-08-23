@@ -74,7 +74,8 @@ export class ObtenerDetalleCierreCajaUseCase {
         .map((r) => ({
           id: r.id,
           tipo: 'SERVICIO' as const,
-          fecha: r.creadoEn,
+          // Fecha de negocio del movimiento (backfill); legacy -> creadoEn
+          fecha: r.fechaHora ?? r.creadoEn,
           descripcion:
             r.serviciosItems?.map((si) => si.nombreServicio).join(', ') || `Registro #${r.id}`,
           monto: Number(r.montoTotal),
