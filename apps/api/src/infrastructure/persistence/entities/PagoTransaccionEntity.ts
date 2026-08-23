@@ -7,12 +7,10 @@ import {
 import { BaseEntity } from './BaseEntity';
 import { RegistroServicioEntity } from './RegistroServicioEntity';
 import { CajaEntity } from './CajaEntity';
+import { MetodoPago } from './MetodoPago';
 
-export enum MetodoPago {
-  EFECTIVO = 'EFECTIVO',
-  TRANSFERENCIA = 'TRANSFERENCIA',
-  TARJETA = 'TARJETA',
-}
+// Re-export para compatibilidad con los importers existentes (use cases y tests).
+export { MetodoPago };
 
 @Entity('pagos_transaccion')
 export class PagoTransaccionEntity extends BaseEntity {

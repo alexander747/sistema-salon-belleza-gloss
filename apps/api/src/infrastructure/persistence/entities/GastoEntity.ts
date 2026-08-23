@@ -5,7 +5,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
-import { MetodoPago } from './PagoTransaccionEntity';
+import { MetodoPago } from './MetodoPago';
 import { UsuarioEntity } from './UsuarioEntity';
 import { SalonEntity } from './SalonEntity';
 import { CajaEntity } from './CajaEntity';
