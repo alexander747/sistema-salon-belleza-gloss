@@ -41,10 +41,10 @@ Chain strategy: stacked-to-main
 
 ## PR2 — Caja backfill (TDD, base main)
 
-- [ ] 2.1 RED: `caja.schema.test.ts` — `fechaCaja` regex opcional; **rebuild** validation
-- [ ] 2.2 RED→GREEN: `AbrirCajaUseCase.test.ts` + uso — `fechaCaja` passthrough (default hoy); día/any-open/backstop con fecha pasada; `CajaController.test.ts` + controller (spread condicional)
-- [ ] 2.3 RED→GREEN: `CajaTab.test.tsx` + `CajaTab.tsx` — date input en modal Abrir (default hoy) + `fechaCaja` en POST
-- [ ] 2.4 vitest api + dashboard
+- [x] 2.1 RED: `caja.schema.test.ts` — `fechaCaja` regex opcional; **rebuild** validation
+- [x] 2.2 RED→GREEN: `AbrirCajaUseCase.test.ts` + uso — `fechaCaja` passthrough (default hoy); día/any-open/backstop con fecha pasada; `CajaController.test.ts` + controller (spread condicional)
+- [x] 2.3 RED→GREEN: `CajaTab.test.tsx` + `CajaTab.tsx` — date input en modal Abrir (default hoy) + `fechaCaja` en POST
+- [x] 2.4 vitest api + dashboard
 
 ## PR3 — Frontend formularios (TDD, base main)
 
