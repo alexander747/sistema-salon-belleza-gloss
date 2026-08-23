@@ -85,8 +85,22 @@ function renderAgenda() {
   );
 }
 
+/** Fecha en formato yyyy-mm-dd local (mismo helper que AgendaPage). */
+function toISODateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Fecha pasada fija (relativa a hoy) para probar backfill sin depender del reloj. */
+function fechaPasada(): string {
+  const pasada = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  return toISODateLocal(pasada);
+}
+
 /** Llena el modal de nueva cita (cliente + servicio + empleada + fecha + hora). */
-async function fillCreateForm(container: HTMLElement) {
+async function fillCreateForm(container: HTMLElement, fechaISO?: string) {
   fireEvent.click(await screen.findByRole('button', { name: '+ Nueva Cita' }));
 
   // El modal arranca con skeleton mientras carga datos de referencia: espera el form
@@ -113,11 +127,10 @@ async function fillCreateForm(container: HTMLElement) {
   const selects = container.querySelectorAll('select');
   fireEvent.change(selects[1], { target: { value: '1' } });
 
-  // Fecha (mañana — el mínimo es hoy)
-  const mañana = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const fechaISO = `${mañana.getFullYear()}-${String(mañana.getMonth() + 1).padStart(2, '0')}-${String(mañana.getDate()).padStart(2, '0')}`;
+  // Fecha (default: mañana; caller puede pasar una fecha pasada)
+  const fecha = fechaISO ?? toISODateLocal(new Date(Date.now() + 24 * 60 * 60 * 1000));
   fireEvent.change(container.querySelector('input[type="date"]')!, {
-    target: { value: fechaISO },
+    target: { value: fecha },
   });
 
   // Slot disponible
@@ -582,6 +595,55 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
 
     await waitFor(() => {
       expect(getDesde()).toBe(semanaOriginal);
+    }, WAIT);
+  }, 20000);
+});
+
+describe('AgendaPage — fechas backfill (PR3)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    refreshSpy.mockClear();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('la fecha del modal arranca en hoy y NO tiene min (backfill de fechas pasadas)', async () => {
+    defaultApiMock();
+    const { container } = renderAgenda();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nueva Cita' }, WAIT));
+    await screen.findByPlaceholderText(/buscar cliente/i, {}, WAIT);
+
+    const dateInput = container.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(dateInput).not.toBeNull();
+    expect(dateInput.hasAttribute('min')).toBe(false);
+    expect(dateInput.value).toBe(toISODateLocal(new Date()));
+  }, 20000);
+
+  it('permite crear una cita con fecha pasada (fechaHora = fecha pasada T10:00 local)', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+    const { container } = renderAgenda();
+
+    await fillCreateForm(container, fechaPasada());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear cita' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/agenda/citas',
+        expect.objectContaining({
+          fechaHora: new Date(`${fechaPasada()}T10:00:00`).toISOString(),
+        }),
+      );
+    }, WAIT);
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Crear cita' })).not.toBeInTheDocument();
     }, WAIT);
   }, 20000);
 });

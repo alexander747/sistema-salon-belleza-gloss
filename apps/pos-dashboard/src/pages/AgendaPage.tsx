@@ -247,7 +247,7 @@ const AgendaPage: React.FC = () => {
     clienteId: 0,
     serviciosIds: [] as number[],
     empleadaId: 0,
-    fecha: '',
+    fecha: toISODate(new Date()),
     horaInicio: '',
     notas: '',
   });
@@ -496,7 +496,7 @@ const AgendaPage: React.FC = () => {
       clienteId: 0,
       serviciosIds: [],
       empleadaId: 0,
-      fecha: '',
+      fecha: toISODate(new Date()),
       horaInicio: '',
       notas: '',
     });
@@ -1674,7 +1674,6 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
                 className={styles.formInput}
                 value={form.fecha}
                 onChange={(e) => onChange({ fecha: e.target.value, horaInicio: '' })}
-                min={toISODate(new Date())}
               />
             </div>
 
