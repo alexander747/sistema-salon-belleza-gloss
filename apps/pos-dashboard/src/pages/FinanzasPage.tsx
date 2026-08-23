@@ -189,6 +189,12 @@ interface CuentaCobrar {
   cantidadRegistros: number | null;
   antiguedadDias: number;
   antiguedadBucket: string;
+  /** Desglose por registro (PR1): ordenado por fecha ASC, null para PRESTAMO. */
+  registros?: Array<{
+    registroId: number;
+    fechaHora: string;
+    montoPendiente: number;
+  }> | null;
 }
 
 interface CuentaPagar {
@@ -4490,6 +4496,215 @@ function esAlDia(empleada: CuentaPagar): boolean {
   return empleada.alDia ?? (empleada.pendienteActual === 0 && empleada.liquidadoAcumulado > 0);
 }
 
+/**
+ * Modal Cobrar/Abonar (D7, ventas-fiado-deudas): el endpoint de abono es POR
+ * REGISTRO, así que el modal ofrece un select con el desglose `registros[]`
+ * del cliente (default = el más antiguo, el backend los ordena ASC). El monto
+ * arranca en el pendiente del registro seleccionado; al cambiar de registro el
+ * monto se resetea al pendiente de ese registro. Los errores del backend
+ * (409 MONTO_EXCEDE_PENDIENTE, 422 REGISTRO_ANULADO/CAJA_CERRADA, 404) se
+ * muestran DENTRO del modal sin cerrarlo.
+ */
+const AbonarModal: React.FC<{
+  cliente: CuentaCobrar;
+  onClose: () => void;
+  onConfirm: (registroId: number, monto: number, metodoPago: string) => Promise<void>;
+}> = ({ cliente, onClose, onConfirm }) => {
+  const registros = cliente.registros ?? [];
+  const [registroId, setRegistroId] = useState<number>(registros[0]?.registroId ?? 0);
+  const [monto, setMonto] = useState<number>(registros[0]?.montoPendiente ?? 0);
+  const [metodoPago, setMetodoPago] = useState<string>('EFECTIVO');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const registroSeleccionado = registros.find((r) => r.registroId === registroId);
+
+  const cambiarRegistro = (id: number) => {
+    setRegistroId(id);
+    const reg = registros.find((r) => r.registroId === id);
+    setMonto(reg?.montoPendiente ?? 0);
+    setError(null);
+  };
+
+  const confirmar = async () => {
+    if (submitting || !registroSeleccionado || monto <= 0) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      // Éxito: el padre cierra el modal y refresca la lista
+      await onConfirm(registroSeleccionado.registroId, monto, metodoPago);
+    } catch (err) {
+      setError(extractApiErrorMessage(err, 'Error al registrar el abono. Intentá de nuevo.'));
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        data-testid="modal-abonar"
+        className={`${styles.modalOverlay} mobileBottomSheet`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !submitting) onClose();
+        }}
+      >
+        <motion.div
+          className={`${styles.modalContent} mobileBottomSheetContent`}
+          initial={{ opacity: 0, scale: 0.92, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+          transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className={styles.modalHeader}>
+            <span className={styles.modalTitle}>💳 Cobrar / Abonar</span>
+            <button
+              className={styles.modalCloseBtn}
+              onClick={onClose}
+              disabled={submitting}
+              aria-label="Cerrar"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className={styles.modalBody}>
+            {/* Cliente + deuda total */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {cliente.nombre}
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'baseline', marginTop: '0.25rem' }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Deuda total
+                </span>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1.125rem', fontWeight: 700, color: 'var(--danger)' }}>
+                  {formatCurrency(cliente.deudaTotal)}
+                </span>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
+                  {cliente.cantidadRegistros ?? 0} registros
+                </span>
+              </div>
+            </div>
+
+            {/* Desglose: select de registro (default = más antiguo, D7) */}
+            <label
+              style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: '0.3rem' }}
+            >
+              Registro a abonar
+            </label>
+            <select
+              aria-label="Registro a abonar"
+              value={registroId}
+              onChange={(e) => cambiarRegistro(Number(e.target.value))}
+              disabled={submitting || registros.length === 0}
+              style={{
+                width: '100%',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+                padding: '0.5rem 0.6rem',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                marginBottom: '0.75rem',
+              }}
+            >
+              {registros.map((r) => (
+                <option key={r.registroId} value={r.registroId}>
+                  📅 {formatDate(r.fechaHora)} — {formatCurrency(r.montoPendiente)} pend.
+                </option>
+              ))}
+            </select>
+
+            {/* Monto */}
+            <label
+              style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: '0.3rem' }}
+            >
+              Monto a abonar
+            </label>
+            <MoneyInput
+              value={monto}
+              onChange={setMonto}
+              ariaLabel="Monto a abonar"
+              disabled={submitting}
+              style={{
+                width: '100%',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.875rem',
+                padding: '0.5rem 0.6rem',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                marginBottom: '0.75rem',
+              }}
+            />
+
+            {/* Método de pago */}
+            <label
+              style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: '0.3rem' }}
+            >
+              Método de pago
+            </label>
+            <select
+              aria-label="Método de pago"
+              value={metodoPago}
+              onChange={(e) => setMetodoPago(e.target.value)}
+              disabled={submitting}
+              style={{
+                width: '100%',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+                padding: '0.5rem 0.6rem',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              {Object.entries(METODO_PAGO_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+
+            {error && (
+              <div
+                role="alert"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.8125rem',
+                  color: 'var(--danger)',
+                  background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.6rem 0.9rem',
+                  marginTop: '0.75rem',
+                }}
+              >
+                ⚠️ {error}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.modalFooter}>
+            <Button variant="secondary" size="sm" onClick={onClose} disabled={submitting}>
+              Cancelar
+            </Button>
+            <Button variant="primary" size="sm" onClick={confirmar} disabled={submitting || monto <= 0 || !registroSeleccionado}>
+              {submitting ? 'Cobrando…' : 'Cobrar'}
+            </Button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
 const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   /* ── Sub-vistas: Cobrar (clientes con deuda) / Pagar (empleadas) ── */
   const [cuentasSubtab, setCuentasSubtab] = useState<'cobrar' | 'pagar'>('cobrar');
@@ -4504,6 +4719,10 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  /* ── Modal Cobrar/Abonar (PR4): cliente seleccionado + banner de éxito ── */
+  const [abonarCliente, setAbonarCliente] = useState<CuentaCobrar | null>(null);
+  const [abonoOk, setAbonoOk] = useState<string | null>(null);
 
   /* ── Fetchers (devuelven éxito para decidir el estado global de error) ── */
   const loadCobrar = useCallback(async (page: number): Promise<boolean> => {
@@ -4567,6 +4786,26 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     loadPagar(next);
   };
 
+  /* ── Abono (PR4): POST /registros/:id/pagos → éxito cierra modal + refresca ──
+   * Los errores del backend (409/422/404) se propagan al modal (throw) para
+   * mostrarse sin cerrarlo; la lista NO se refresca (spec finanzas-cuentas).
+   */
+  const confirmarAbono = useCallback(
+    async (registroId: number, monto: number, metodoPago: string): Promise<void> => {
+      if (salonId == null) return;
+      await api.post(`/salones/${salonId}/registros/${registroId}/pagos`, { monto, metodoPago });
+      setAbonarCliente(null);
+      setAbonoOk('✅ Abono registrado');
+      await loadCobrar(cobrarPage);
+    },
+    [salonId, loadCobrar, cobrarPage],
+  );
+
+  const openAbonar = (cliente: CuentaCobrar) => {
+    setAbonoOk(null);
+    setAbonarCliente(cliente);
+  };
+
   if (loading) {
     return (
       <motion.div key="cuentas-loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -4627,6 +4866,23 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         /*  POR COBRAR — clientes con deuda + préstamos      */
         /* ════════════════════════════════════════════════ */
         <div>
+          {abonoOk && (
+            <div
+              role="status"
+              style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.8125rem',
+                color: 'var(--success)',
+                background: 'rgba(92,186,123,0.1)',
+                border: '1px solid rgba(92,186,123,0.3)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.6rem 0.9rem',
+                marginBottom: '0.75rem',
+              }}
+            >
+              {abonoOk}
+            </div>
+          )}
           {cobrar.length === 0 ? (
             <div className={styles.emptyState}>
               <span className={styles.emptyIcon}>✅</span>
@@ -4646,6 +4902,7 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                       <th>Deuda total</th>
                       <th>Registros</th>
                       <th>Antigüedad</th>
+                      <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4664,6 +4921,15 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                         <td data-label="Antigüedad" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
                           {antiguedadLabel(c.antiguedadBucket)}
                         </td>
+                        <td data-label="Acciones">
+                          {/* Solo filas CLIENTE: el abono es por registro; los préstamos
+                              tienen su propio flujo en Préstamos (read-only aquí). */}
+                          {c.tipo === 'CLIENTE' && c.registros && c.registros.length > 0 ? (
+                            <Button variant="secondary" size="sm" onClick={() => openAbonar(c)}>
+                              Cobrar/Abonar
+                            </Button>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -4679,6 +4945,14 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                 onNext={() => goCobrarPage(cobrarPage + 1)}
               />
             </>
+          )}
+
+          {abonarCliente && (
+            <AbonarModal
+              cliente={abonarCliente}
+              onClose={() => setAbonarCliente(null)}
+              onConfirm={confirmarAbono}
+            />
           )}
         </div>
       ) : (

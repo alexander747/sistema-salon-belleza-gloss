@@ -455,9 +455,18 @@ describe('FinanzasPage — Exportar Excel', () => {
 
 describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
   const cuentasCobrar = [
-    { id: 1, tipo: 'CLIENTE', nombre: 'Ana Gómez', deudaTotal: 120000, cantidadRegistros: 2, antiguedadDias: 45, antiguedadBucket: '31-60' },
-    { id: 2, tipo: 'CLIENTE', nombre: 'Lina Pérez', deudaTotal: 40000, cantidadRegistros: 1, antiguedadDias: 5, antiguedadBucket: '0-30' },
-    { id: 99, tipo: 'PRESTAMO', nombre: 'Luis Ramírez', deudaTotal: 85000, cantidadRegistros: null, antiguedadDias: 3, antiguedadBucket: '0-30' },
+    {
+      id: 1, tipo: 'CLIENTE', nombre: 'Ana Gómez', deudaTotal: 120000, cantidadRegistros: 2, antiguedadDias: 45, antiguedadBucket: '31-60',
+      registros: [
+        { registroId: 101, fechaHora: '2026-04-01T10:00:00.000Z', montoPendiente: 70000 },
+        { registroId: 102, fechaHora: '2026-05-10T10:00:00.000Z', montoPendiente: 50000 },
+      ],
+    },
+    {
+      id: 2, tipo: 'CLIENTE', nombre: 'Lina Pérez', deudaTotal: 40000, cantidadRegistros: 1, antiguedadDias: 5, antiguedadBucket: '0-30',
+      registros: [{ registroId: 103, fechaHora: '2026-08-01T10:00:00.000Z', montoPendiente: 40000 }],
+    },
+    { id: 99, tipo: 'PRESTAMO', nombre: 'Luis Ramírez', deudaTotal: 85000, cantidadRegistros: null, antiguedadDias: 3, antiguedadBucket: '0-30', registros: null },
   ];
 
   const cuentasPagar = [
@@ -628,12 +637,171 @@ describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
     expect(within(alDia).getByText('Sofía Ruiz')).toBeInTheDocument();
   });
 
-  it('NO muestra botones de cobro ni "registrar pago" en la sub-vista Cobrar (v1 read-only)', async () => {
+  it('muestra el botón "Cobrar/Abonar" SOLO en filas CLIENTE (PRESTAMO read-only)', async () => {
     await openCuentasTab();
     await screen.findByText('Ana Gómez');
 
-    expect(screen.queryByRole('button', { name: 'Cobrar' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /registrar pago/i })).toBeNull();
+    const anaRow = screen.getByText('Ana Gómez').closest('tr')!;
+    expect(within(anaRow).getByRole('button', { name: /cobrar\/abonar/i })).toBeInTheDocument();
+
+    const linaRow = screen.getByText('Lina Pérez').closest('tr')!;
+    expect(within(linaRow).getByRole('button', { name: /cobrar\/abonar/i })).toBeInTheDocument();
+
+    const luisRow = screen.getByText('Luis Ramírez').closest('tr')!;
+    expect(within(luisRow).queryByRole('button', { name: /cobrar\/abonar/i })).toBeNull();
+  });
+
+  it('abre el modal Cobrar/Abonar con cliente, deuda total y desglose por registro (default = el más antiguo)', async () => {
+    await openCuentasTab();
+
+    fireEvent.click(
+      within(screen.getByText('Ana Gómez').closest('tr')!).getByRole('button', { name: /cobrar\/abonar/i }),
+    );
+
+    const modal = await screen.findByTestId('modal-abonar');
+    expect(within(modal).getByText(/Ana Gómez/)).toBeInTheDocument();
+    expect(within(modal).getByText(/deuda total/i)).toBeInTheDocument();
+    expect(within(modal).getByText(fmt(120000))).toBeInTheDocument();
+
+    // Desglose: ambos registros pendientes visibles con su fecha y monto
+    const select = within(modal).getByLabelText('Registro a abonar');
+    expect(select).toHaveValue('101'); // default = registro más antiguo (101)
+    expect(within(modal).getByRole('option', { name: /01\/04\/2026/ })).toBeInTheDocument();
+    expect(within(modal).getByRole('option', { name: /10\/05\/2026/ })).toBeInTheDocument();
+    expect(within(modal).getByRole('option', { name: /70\.000/ })).toBeInTheDocument();
+    expect(within(modal).getByRole('option', { name: /50\.000/ })).toBeInTheDocument();
+
+    // Monto default = pendiente del registro seleccionado (el más antiguo)
+    expect(within(modal).getByLabelText('Monto a abonar')).toHaveValue('70.000');
+    expect(within(modal).getByLabelText('Método de pago')).toHaveValue('EFECTIVO');
+    expect(within(modal).getByRole('button', { name: 'Cobrar' })).toBeInTheDocument();
+  });
+
+  it('abonar reduce la deuda: POST /registros/:id/pagos, cierra el modal, muestra éxito y refresca la lista', async () => {
+    let anaDeuda = 120000;
+    let anaRegistros = [
+      { registroId: 101, fechaHora: '2026-04-01T10:00:00.000Z', montoPendiente: 70000 },
+      { registroId: 102, fechaHora: '2026-05-10T10:00:00.000Z', montoPendiente: 50000 },
+    ];
+    const abonoApiMock = (url: string) => {
+      if (url.includes('/finanzas/cuentas/cobrar')) {
+        return Promise.resolve(
+          cuentasResponse(
+            [
+              {
+                id: 1, tipo: 'CLIENTE', nombre: 'Ana Gómez', deudaTotal: anaDeuda, cantidadRegistros: anaRegistros.length, antiguedadDias: 45, antiguedadBucket: '31-60',
+                registros: anaRegistros,
+              },
+              cuentasCobrar[1],
+              cuentasCobrar[2],
+            ],
+            3,
+          ),
+        );
+      }
+      return cuentasApiMock(url);
+    };
+    mockPost.mockImplementation((url) => {
+      if (String(url).includes('/pagos')) {
+        // Abono de 70000 al registro 101: el saldo pasa a 50000 y el registro 101 sale del desglose
+        anaDeuda = 50000;
+        anaRegistros = [{ registroId: 102, fechaHora: '2026-05-10T10:00:00.000Z', montoPendiente: 50000 }];
+        return Promise.resolve({ data: { ok: true, data: { id: 101, montoPendiente: 0, pagos: [] } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    await openCuentasTab(abonoApiMock);
+
+    fireEvent.click(
+      within(screen.getByText('Ana Gómez').closest('tr')!).getByRole('button', { name: /cobrar\/abonar/i }),
+    );
+    await screen.findByTestId('modal-abonar');
+
+    // Default: registro 101 (más antiguo), monto 70000, EFECTIVO → Cobrar
+    fireEvent.click(within(screen.getByTestId('modal-abonar')).getByRole('button', { name: 'Cobrar' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/registros/101/pagos', {
+        monto: 70000,
+        metodoPago: 'EFECTIVO',
+      });
+    });
+
+    // Éxito visible + modal cerrado + lista refrescada con la deuda reducida
+    expect(await screen.findByText(/abono registrado/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('modal-abonar')).toBeNull());
+    expect(await screen.findByText(fmt(50000))).toBeInTheDocument();
+  });
+
+  it('abonar otro registro: cambiar el select actualiza el monto default y el POST apunta al registro elegido', async () => {
+    await openCuentasTab();
+
+    fireEvent.click(
+      within(screen.getByText('Ana Gómez').closest('tr')!).getByRole('button', { name: /cobrar\/abonar/i }),
+    );
+    const modal = await screen.findByTestId('modal-abonar');
+
+    // Cambiar al segundo registro (102, pendiente 50000)
+    fireEvent.change(within(modal).getByLabelText('Registro a abonar'), { target: { value: '102' } });
+    expect(within(modal).getByLabelText('Monto a abonar')).toHaveValue('50.000');
+
+    fireEvent.click(within(modal).getByRole('button', { name: 'Cobrar' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/registros/102/pagos', {
+        monto: 50000,
+        metodoPago: 'EFECTIVO',
+      });
+    });
+  });
+
+  it('monto > pendiente muestra el error 409 del backend en el modal y NO refresca la lista', async () => {
+    await openCuentasTab();
+    mockPost.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { ok: false, error: { code: 'MONTO_EXCEDE_PENDIENTE', message: 'El abono supera la deuda pendiente del registro' } },
+      },
+    });
+
+    fireEvent.click(
+      within(screen.getByText('Ana Gómez').closest('tr')!).getByRole('button', { name: /cobrar\/abonar/i }),
+    );
+    await screen.findByTestId('modal-abonar');
+
+    fireEvent.change(screen.getByLabelText('Monto a abonar'), { target: { value: '99999' } });
+    const cobrarCalls = () => mockGet.mock.calls.filter(([u]) => String(u).includes('/finanzas/cuentas/cobrar'));
+    const llamadasAntes = cobrarCalls().length;
+
+    fireEvent.click(within(screen.getByTestId('modal-abonar')).getByRole('button', { name: 'Cobrar' }));
+
+    expect(await screen.findByText(/el abono supera la deuda pendiente del registro/i)).toBeInTheDocument();
+    // El modal sigue abierto y la lista NO se refrescó
+    expect(screen.getByTestId('modal-abonar')).toBeInTheDocument();
+    expect(screen.queryByText(/abono registrado/i)).toBeNull();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(cobrarCalls().length).toBe(llamadasAntes);
+  });
+
+  it('sin caja abierta muestra el error 422 CAJA_CERRADA del backend en el modal', async () => {
+    await openCuentasTab();
+    mockPost.mockRejectedValue({
+      response: {
+        status: 422,
+        data: { ok: false, error: { code: 'CAJA_CERRADA', message: 'No hay caja abierta para el salón. Abrí la caja antes de vender.' } },
+      },
+    });
+
+    fireEvent.click(
+      within(screen.getByText('Ana Gómez').closest('tr')!).getByRole('button', { name: /cobrar\/abonar/i }),
+    );
+    await screen.findByTestId('modal-abonar');
+
+    fireEvent.click(within(screen.getByTestId('modal-abonar')).getByRole('button', { name: 'Cobrar' }));
+
+    expect(await screen.findByText(/no hay caja abierta para el salón/i)).toBeInTheDocument();
+    expect(screen.getByTestId('modal-abonar')).toBeInTheDocument();
   });
 
   it('muestra estado vacío "No hay deudas pendientes" cuando Cobrar viene vacío', async () => {
@@ -1288,7 +1456,7 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
 
   const REGISTROS_LABELS = ['#', 'Fecha', 'Hora', 'Cliente', 'Empleada', 'Servicios', 'Productos', 'Dto.%', 'Ajustado', 'Total', 'Método de pago', 'Estado', 'Acciones'];
   const GASTOS_LABELS = ['Descripción', 'Categoría', 'Monto', 'Fecha', 'Acciones'];
-  const COBRAR_LABELS = ['Cliente / Préstamo', 'Tipo', 'Deuda total', 'Registros', 'Antigüedad'];
+  const COBRAR_LABELS = ['Cliente / Préstamo', 'Tipo', 'Deuda total', 'Registros', 'Antigüedad', 'Acciones'];
   const PAGAR_LABELS = ['Empleada', 'Pendiente', 'Liquidado acumulado', 'Sueldo fijo', 'Comisión %'];
 
   const registroFila = {
