@@ -26,6 +26,12 @@ export interface PyLMensualOutput {
   totalServicios: number;
   totalProductos: number;
   propinas: number;
+  /** Σ pagos recibidos en el período por fecha de recepción (cash basis). */
+  cobrado: number;
+  /** Σ montoPendiente de registros del período (fiado originado). */
+  fiadoPeriodo: number;
+  /** Σ montoPendiente de registros no ANULADO con fecha ≤ hasta (snapshot). */
+  deudasPorCobrar: number;
   costoBaseInsumos: number;
   margenBruto: number;
   comisiones: number;
@@ -34,6 +40,7 @@ export interface PyLMensualOutput {
   gastosPorCategoria: Record<string, number>;
   totalGastos: number;
   devoluciones: number;
+  /** Utilidad en base CAJA: cobrado − insumos − comisiones − gastos − devoluciones. */
   utilidadNeta: number;
 }
 
@@ -69,7 +76,7 @@ export class PyLMensualUseCase {
     const gastoDesde = new Date(`${desde}T00:00:00.000Z`);
     const gastoHasta = new Date(`${hasta}T00:00:00.000Z`);
 
-    const [registros, gastos, devoluciones] = await Promise.all([
+    const [registros, gastos, devoluciones, cobrado, fiadoPeriodo, deudasPorCobrar] = await Promise.all([
       this.registroRepo.search({
         salonId: input.salonId,
         desde: inicio,
@@ -82,6 +89,18 @@ export class PyLMensualUseCase {
         hasta: gastoHasta,
       }),
       this.devolucionRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
+      // Cash basis: cobrado por fecha de recepción (pago.creadoEn); el filtro de
+      // empleada aplica igual que a los registros devengados.
+      this.registroRepo.sumPagosPorPeriodo(
+        input.salonId,
+        inicio,
+        fin,
+        input.usuarioId,
+      ),
+      // Fiado originado en el período (fecha de negocio del registro).
+      this.registroRepo.sumMontoPendientePorPeriodo(input.salonId, inicio, fin),
+      // Deudas por cobrar acumuladas a la fecha de negocio ≤ fin del período.
+      this.registroRepo.sumMontoPendienteHasta(input.salonId, fin),
     ]);
 
     let ingresosBrutos = 0;
@@ -142,8 +161,10 @@ export class PyLMensualUseCase {
 
     const costoBaseInsumosRounded = round2(costoBaseInsumos);
     const margenBruto = round2(ingresosNetos - costoBaseInsumosRounded);
+    // Contabilidad de CAJA (decisión owner): el ingreso se cuenta cuando se cobra.
+    // Las líneas devengadas (ingresosBrutos/ingresosNetos/…) quedan informativas.
     const utilidadNeta = round2(
-      ingresosNetos - costoBaseInsumosRounded - comisiones - totalGastos - devoluciones,
+      cobrado - costoBaseInsumosRounded - comisiones - totalGastos - devoluciones,
     );
 
     return {
@@ -156,6 +177,9 @@ export class PyLMensualUseCase {
       totalServicios: round2(totalServicios),
       totalProductos: round2(totalProductos),
       propinas: round2(propinas),
+      cobrado: round2(cobrado),
+      fiadoPeriodo: round2(fiadoPeriodo),
+      deudasPorCobrar: round2(deudasPorCobrar),
       costoBaseInsumos: costoBaseInsumosRounded,
       margenBruto,
       comisiones: round2(comisiones),

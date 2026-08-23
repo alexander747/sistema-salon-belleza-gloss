@@ -41,12 +41,22 @@ const buildGasto = (overrides: Partial<MockGasto> = {}): MockGasto => ({
 
 describe('PyLMensualUseCase', () => {
   let useCase: PyLMensualUseCase;
-  let mockRegistroRepo: { search: ReturnType<typeof vi.fn> };
+  let mockRegistroRepo: {
+    search: ReturnType<typeof vi.fn>;
+    sumPagosPorPeriodo: ReturnType<typeof vi.fn>;
+    sumMontoPendientePorPeriodo: ReturnType<typeof vi.fn>;
+    sumMontoPendienteHasta: ReturnType<typeof vi.fn>;
+  };
   let mockGastoRepo: { search: ReturnType<typeof vi.fn> };
   let mockDevolucionRepo: { sumBySalonAndDateRange: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    mockRegistroRepo = { search: vi.fn() };
+    mockRegistroRepo = {
+      search: vi.fn(),
+      sumPagosPorPeriodo: vi.fn(),
+      sumMontoPendientePorPeriodo: vi.fn(),
+      sumMontoPendienteHasta: vi.fn(),
+    };
     mockGastoRepo = { search: vi.fn() };
     mockDevolucionRepo = { sumBySalonAndDateRange: vi.fn() };
     useCase = new PyLMensualUseCase(
@@ -55,6 +65,9 @@ describe('PyLMensualUseCase', () => {
       mockDevolucionRepo as never,
     );
     mockRegistroRepo.search.mockResolvedValue([]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(0);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
+    mockRegistroRepo.sumMontoPendienteHasta.mockResolvedValue(0);
     mockGastoRepo.search.mockResolvedValue([]);
     mockDevolucionRepo.sumBySalonAndDateRange.mockResolvedValue(0);
   });
@@ -92,6 +105,10 @@ describe('PyLMensualUseCase', () => {
       }),
     ];
     mockRegistroRepo.search.mockResolvedValue(registros);
+    // Fixtures de pago completo: cobrado = Σ valorFinal (113000+113000+104000)
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(330000);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
+    mockRegistroRepo.sumMontoPendienteHasta.mockResolvedValue(0);
     mockGastoRepo.search.mockResolvedValue([
       buildGasto({ monto: 200000, esGastoFijo: true, categoria: 'ARRIENDO' }),
       buildGasto({ monto: 80000, esGastoFijo: false, categoria: 'SERVICIOS_PUBLICOS' }),
@@ -121,7 +138,12 @@ describe('PyLMensualUseCase', () => {
     });
     expect(result.totalGastos).toBe(280000);
     expect(result.devoluciones).toBe(20000);
-    expect(result.utilidadNeta).toBe(-93000);
+    // Cash basis: utilidadNeta = cobrado − insumos − comisiones − gastos − dev.
+    // cobrado = 330000 (todo cobrado) → 330000 − 60000 − 48000 − 280000 − 20000
+    expect(result.cobrado).toBe(330000);
+    expect(result.fiadoPeriodo).toBe(0);
+    expect(result.deudasPorCobrar).toBe(0);
+    expect(result.utilidadNeta).toBe(-78000);
     expect(result.cantidadAtenciones).toBe(3);
     expect(result.desde).toBe('2026-05-01');
     expect(result.hasta).toBe('2026-05-31');
@@ -149,6 +171,9 @@ describe('PyLMensualUseCase', () => {
       gastosPorCategoria: {},
       totalGastos: 0,
       devoluciones: 0,
+      cobrado: 0,
+      fiadoPeriodo: 0,
+      deudasPorCobrar: 0,
       utilidadNeta: 0,
       cantidadAtenciones: 0,
     });
@@ -163,6 +188,7 @@ describe('PyLMensualUseCase', () => {
         montoTotal: 100000,
       }),
     ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(100000);
     mockDevolucionRepo.sumBySalonAndDateRange.mockResolvedValue(20000);
 
     const result = await useCase.execute({
@@ -172,7 +198,7 @@ describe('PyLMensualUseCase', () => {
     });
 
     expect(result.devoluciones).toBe(20000);
-    // 100000 − 0 insumos − 0 comisiones − 0 gastos − 20000 devolución
+    // Cash: 100000 cobrado − 0 insumos − 0 comisiones − 0 gastos − 20000 devolución
     expect(result.utilidadNeta).toBe(80000);
   });
 
@@ -192,6 +218,7 @@ describe('PyLMensualUseCase', () => {
         montoTotal: 100000,
       }),
     ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(100000);
 
     const result = await useCase.execute({
       salonId: 1,
@@ -201,6 +228,98 @@ describe('PyLMensualUseCase', () => {
 
     expect(result.ingresosBrutos).toBe(100000);
     expect(result.cantidadAtenciones).toBe(1);
+  });
+
+  it('venta fiada no es ingreso hasta cobrarse (escenario spec)', async () => {
+    // Venta fiada de 100000 (sin pagos) + venta cobrada de 50000
+    mockRegistroRepo.search.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 100000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 100000,
+      }),
+      buildRegistro({
+        totalServicios: 50000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 50000,
+      }),
+    ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(50000);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(100000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.cobrado).toBe(50000);
+    expect(result.fiadoPeriodo).toBe(100000);
+    // Devengado informativo sigue viendo las dos ventas
+    expect(result.ingresosBrutos).toBe(150000);
+    // utilidadNeta usa cobrado (50000), NO los 150000 devengados
+    expect(result.utilidadNeta).toBe(50000);
+  });
+
+  it('abono posterior cuenta en el período del cobro (escenario spec)', async () => {
+    // Venta fiada en mayo (montoPendiente=100000); abono de 100000 recibido en junio.
+    // El P&L de junio NO ve registros nuevos (fiadoPeriodo=0) pero sí el cobro del abono.
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(100000);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-06-01',
+      hasta: '2026-06-30',
+    });
+
+    expect(result.cobrado).toBe(100000);
+    expect(result.fiadoPeriodo).toBe(0);
+    expect(result.utilidadNeta).toBe(100000);
+  });
+
+  it('deudas por cobrar acumuladas a la fecha hasta (escenario spec)', async () => {
+    // Registro fiado de marzo (30000) + registro fiado de junio (20000) → 50000
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockRegistroRepo.sumMontoPendienteHasta.mockResolvedValue(50000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-06-01',
+      hasta: '2026-06-30',
+    });
+
+    expect(result.deudasPorCobrar).toBe(50000);
+    expect(result.cobrado).toBe(0);
+    expect(result.fiadoPeriodo).toBe(0);
+  });
+
+  it('pago de registro anulado excluido del cobrado (escenario spec)', async () => {
+    // El período solo tiene un registro ANULADO con pago histórico: el repo
+    // (r.estado != ANULADO en el join) descarta su pago → cobrado en 0.
+    mockRegistroRepo.search.mockResolvedValue([
+      buildRegistro({
+        estado: EstadoRegistro.ANULADO,
+        totalServicios: 900000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 900000,
+      }),
+    ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(0);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.cobrado).toBe(0);
+    expect(result.ingresosBrutos).toBe(0);
+    expect(result.utilidadNeta).toBe(0);
   });
 
   it('agrupa gastos por categoría y suma repetidos', async () => {
@@ -248,6 +367,23 @@ describe('PyLMensualUseCase', () => {
       hasta: colombiaDayEndUTC('2026-05-31'),
       usuarioId: 4,
     });
+    // El cobrado (cash) honra el mismo filtro de empleada que los registros
+    expect(mockRegistroRepo.sumPagosPorPeriodo).toHaveBeenCalledWith(
+      1,
+      colombiaDayStartUTC('2026-05-01'),
+      colombiaDayEndUTC('2026-05-31'),
+      4,
+    );
+    // Fiado y deudas son líneas a nivel salón (sin filtro de empleada)
+    expect(mockRegistroRepo.sumMontoPendientePorPeriodo).toHaveBeenCalledWith(
+      1,
+      colombiaDayStartUTC('2026-05-01'),
+      colombiaDayEndUTC('2026-05-31'),
+    );
+    expect(mockRegistroRepo.sumMontoPendienteHasta).toHaveBeenCalledWith(
+      1,
+      colombiaDayEndUTC('2026-05-31'),
+    );
     // Gastos y devoluciones pertenecen al salón: no se filtran por empleada
     expect(mockGastoRepo.search).toHaveBeenCalledWith({
       salonId: 1,
