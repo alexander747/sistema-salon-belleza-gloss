@@ -6,6 +6,7 @@ import { CitaDTO } from '../../dtos/CitaDTO';
 import { validarTransicion } from '../../../domain/state-machine';
 import { EstadoCita } from '../../../../../infrastructure/persistence/entities/CitaEntity';
 import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
+import { getColombiaDateString } from '../../../../../shared/colombia-date';
 
 export interface CambiarEstadoCitaInput {
   id: number;
@@ -34,8 +35,13 @@ export class CambiarEstadoCitaUseCase {
 
     // Regla de oro: solo completar una cita (venta) exige caja abierta.
     // Los demás estados (CANCELADA, NO_LLEGO, CONFIRMADA) no se bloquean.
+    // La caja se resuelve por la fecha de negocio de la cita (backfill).
     if (input.estado === EstadoCita.COMPLETADA) {
-      await verificarCajaAbierta(this.cajaRepo, cita.salonId);
+      await verificarCajaAbierta(
+        this.cajaRepo,
+        cita.salonId,
+        getColombiaDateString(cita.fechaHora),
+      );
     }
 
     // Set auditor field based on target estado

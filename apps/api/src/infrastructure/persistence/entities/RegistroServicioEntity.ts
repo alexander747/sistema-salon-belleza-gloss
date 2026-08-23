@@ -76,6 +76,11 @@ export class RegistroServicioEntity extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   registradoPorId: number;
 
+  // Fecha de negocio del registro (nullable: filas legacy anteriores al backfill
+  // no la tienen — los filtros usan COALESCE(fechaHora, creadoEn)).
+  @Column({ type: 'datetime', nullable: true })
+  fechaHora: Date | null;
+
   // ---- Relations ----
   @ManyToOne(() => SalonEntity)
   @JoinColumn({ name: 'salonId' })

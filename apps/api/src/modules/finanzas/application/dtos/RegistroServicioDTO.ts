@@ -43,6 +43,8 @@ export interface RegistroServicioDTO {
   divisiones: DivisionDTO[];
   productosVendidos: RegistroProductoDTO[];
   serviciosItems: RegistroServicioItemDTO[];
+  // Fecha de negocio; fallback a creadoEn para filas legacy sin fechaHora.
+  fechaHora: Date;
   creadoEn: Date;
   actualizadoEn: Date;
 }
@@ -83,6 +85,7 @@ export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroS
     })),
     productosVendidos: (entity.productosVendidos ?? []).map(registroProductoToDTO),
     serviciosItems: (entity.serviciosItems ?? []).map(registroServicioItemToDTO),
+    fechaHora: entity.fechaHora ?? entity.creadoEn,
     creadoEn: entity.creadoEn,
     actualizadoEn: entity.actualizadoEn,
   };

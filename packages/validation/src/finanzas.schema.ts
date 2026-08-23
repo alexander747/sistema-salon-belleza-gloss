@@ -27,6 +27,9 @@ export const createRegistroSchema = z.object({
   propina: z.number().min(0).default(0),
   descripcionServicio: z.string().max(200).optional(),
   esRetoque: z.boolean().default(false),
+  // Fecha de negocio (ISO datetime). Default = ahora en CreateRegistroUseCase;
+  // los registros legacy sin ella caen al fallback creadoEn en los filtros.
+  fechaHora: z.string().datetime().optional(),
   pagos: z.array(pagoTransaccionSchema).optional().default([]),
   divisiones: z.array(divisionRegistroSchema).optional().default([]),
   notas: z.string().max(500).optional(),

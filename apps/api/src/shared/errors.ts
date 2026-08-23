@@ -83,6 +83,17 @@ export class CajaCerradaError extends AppError {
 }
 
 /**
+ * 409 — Backfill: no hay caja ABIERTA para la FECHA del payload (≠ hoy).
+ * El registro se liga a la caja de la fecha de negocio; sin esa caja la venta
+ * quedaría sin caja para el arqueo → se rechaza antes de persistir.
+ */
+export class CajaNoAbiertaEnFechaError extends AppError {
+  constructor(message = 'No hay caja abierta para la fecha indicada', details?: unknown) {
+    super(message, 409, 'CAJA_NO_ABIERTA_EN_FECHA', details);
+  }
+}
+
+/**
  * 409 — Ya existe una caja ABIERTA para el salón.
  * Abrir: cualquier ABIERTA (cualquier fecha, incluidas huérfanas) bloquea.
  * Reabrir: la caja de hoy ya está abierta.

@@ -22,7 +22,8 @@ function makeMockCita(estado: EstadoCita, overrides: Record<string, unknown> = {
     salonId: 1,
     usuarioId: 1,
     clienteId: 1,
-    fechaHora: new Date('2026-06-01T10:00:00'),
+    // Hoy (fecha de negocio): el guard de COMPLETADA resuelve el día actual → 422 CAJA_CERRADA
+    fechaHora: new Date(),
     estado,
     notas: null,
     esWalkIn: false,
@@ -88,6 +89,22 @@ describe('CambiarEstadoCitaUseCase', () => {
       // Estado intacto y nada persistido
       expect(mocks.citaRepo.cambiarEstado).not.toHaveBeenCalled();
       expect(cita.estado).toBe(EstadoCita.CONFIRMADA);
+    });
+
+    it('should resolver la caja por la fecha de la cita al completar (backfill)', async () => {
+      const mocks = createMocks();
+      const cita = makeMockCita(EstadoCita.CONFIRMADA, {
+        fechaHora: new Date('2026-08-16T10:00:00.000Z'),
+      });
+      mocks.citaRepo.findById.mockResolvedValue(cita);
+      mocks.cajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 1, estado: 'ABIERTA' });
+      mocks.citaRepo.cambiarEstado.mockResolvedValue(makeMockCita(EstadoCita.COMPLETADA));
+
+      const useCase = new CambiarEstadoCitaUseCase(mocks.citaRepo as any, mocks.cajaRepo as any);
+
+      await useCase.execute({ id: 1, estado: EstadoCita.COMPLETADA, usuarioId: 1 });
+
+      expect(mocks.cajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(1, '2026-08-16');
     });
 
     it('should NOT block CANCELADA when no caja is open', async () => {

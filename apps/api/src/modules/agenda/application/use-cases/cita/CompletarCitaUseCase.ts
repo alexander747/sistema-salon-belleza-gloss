@@ -7,6 +7,7 @@ import { CitaDTO } from '../../dtos/CitaDTO';
 import { cambiarEstado } from '../../../domain/state-machine';
 import { EstadoCita } from '../../../../../infrastructure/persistence/entities/CitaEntity';
 import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
+import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import {
   CreateRegistroUseCase,
   type CreateRegistroInputConCita,
@@ -37,8 +38,15 @@ export class CompletarCitaUseCase {
     }
 
     // Regla de oro: no se completa una cita (venta) sin caja abierta.
+    // La caja se resuelve por la FECHA DE NEGOCIO del registro a crear:
+    // `input.registro.fechaHora` si viene (backfill) ?? `cita.fechaHora`.
     // La cita permanece en su estado previo si no hay caja.
-    await verificarCajaAbierta(this.cajaRepo, cita.salonId);
+    const fechaHoraRegistro = input.registro?.fechaHora ?? cita.fechaHora.toISOString();
+    await verificarCajaAbierta(
+      this.cajaRepo,
+      cita.salonId,
+      getColombiaDateString(new Date(fechaHoraRegistro)),
+    );
 
     // Validar la transición EN MEMORIA antes de escribir nada.
     // Reintentar sobre una COMPLETADA o completar una PENDIENTE → 422 y
@@ -69,8 +77,14 @@ export class CompletarCitaUseCase {
     try {
       // salonId SIEMPRE desde la cita — el cliente nunca decide el salón.
       // citaId se inyecta para el linkage go-forward.
+      // fechaHora: explícito del payload ?? cita.fechaHora (fecha de negocio).
       const registro = await this.createRegistroUseCase.execute(
-        { ...input.registro, salonId: cita.salonId, citaId: cita.id },
+        {
+          ...input.registro,
+          salonId: cita.salonId,
+          citaId: cita.id,
+          fechaHora: fechaHoraRegistro,
+        },
         queryRunner,
       );
 

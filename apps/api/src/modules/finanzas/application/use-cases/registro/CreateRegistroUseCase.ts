@@ -17,6 +17,7 @@ import { verificarCajaAbierta } from '../../services/verificarCajaAbierta';
 import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { RegistroServicioDTO } from '../../dtos/RegistroServicioDTO';
 import { registroServicioToDTO } from '../../dtos/RegistroServicioDTO';
+import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
 
 /**
@@ -44,7 +45,11 @@ export class CreateRegistroUseCase {
     queryRunner?: QueryRunner,
   ): Promise<RegistroServicioDTO> {
     // ── 0. Regla de oro: no se vende sin caja abierta ──────────
-    const caja = await verificarCajaAbierta(this.cajaRepo, input.salonId);
+    // La caja se resuelve por la FECHA DE NEGOCIO del payload: fechaHora
+    // explícito (backfill) → caja de esa fecha; ausente → hoy (default ahora).
+    const fechaHora = input.fechaHora ? new Date(input.fechaHora) : new Date();
+    const fecha = getColombiaDateString(fechaHora);
+    const caja = await verificarCajaAbierta(this.cajaRepo, input.salonId, fecha);
 
     // ── 1. Validate cliente exists ────────────────────────────
     const cliente = await this.clienteRepo.findBySalonAndId(input.salonId, input.clienteId);
@@ -140,6 +145,8 @@ export class CreateRegistroUseCase {
           montoPendiente,
           notas: input.notas,
           registradoPorId: input.registradoPorId,
+          // Fecha de negocio (backfill): se persiste SIEMPRE (default = ahora)
+          fechaHora,
           // Price adjustment fields
           precioAjustado,
           porcentajeDescuento,

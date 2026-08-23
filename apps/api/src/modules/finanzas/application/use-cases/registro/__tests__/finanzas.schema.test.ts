@@ -1,6 +1,41 @@
 import { describe, it, expect } from 'vitest';
 import { createRegistroSchema, completarCitaSchema } from '@pos-final/validation';
 
+describe('createRegistroSchema — fechaHora opcional', () => {
+  const baseValid = {
+    salonId: 1,
+    clienteId: 1,
+    usuarioId: 1,
+    totalServicios: 50000,
+    totalProductos: 0,
+    propina: 0,
+    pagos: [{ monto: 50000, metodoPago: 'EFECTIVO' }],
+  };
+
+  it('should accept a payload without fechaHora (default = now en el use case)', () => {
+    const result = createRegistroSchema.parse(baseValid);
+    expect(result.fechaHora).toBeUndefined();
+  });
+
+  it('should accept a valid ISO fechaHora and preserve it', () => {
+    const result = createRegistroSchema.parse({
+      ...baseValid,
+      fechaHora: '2026-08-16T15:00:00.000Z',
+    });
+    expect(result.fechaHora).toBe('2026-08-16T15:00:00.000Z');
+  });
+
+  it('should reject an invalid fechaHora (not ISO datetime)', () => {
+    const payload = { ...baseValid, fechaHora: '16/08/2026' };
+    expect(() => createRegistroSchema.parse(payload)).toThrow();
+  });
+
+  it('should reject a date-only fechaHora (spec: ISO datetime required)', () => {
+    const payload = { ...baseValid, fechaHora: '2026-08-16' };
+    expect(() => createRegistroSchema.parse(payload)).toThrow();
+  });
+});
+
 describe('createRegistroSchema — serviciosItems', () => {
   const baseValid = {
     salonId: 1,

@@ -44,7 +44,8 @@ function makeMockCita(estado: EstadoCita, overrides: Record<string, unknown> = {
     salonId: 3,
     usuarioId: 1,
     clienteId: 1,
-    fechaHora: new Date('2026-06-01T10:00:00'),
+    // Hoy (fecha de negocio): los guards de caja resuelven el día actual → 422 CAJA_CERRADA
+    fechaHora: new Date(),
     estado,
     notas: null,
     esWalkIn: false,
@@ -300,5 +301,85 @@ describe('CompletarCitaUseCase', () => {
 
     await expect(useCase.execute({ id: 999 })).rejects.toThrow(NotFoundError);
     expect(repo.cajaRepo.findAbiertaBySalonYFecha).not.toHaveBeenCalled();
+  });
+
+  describe('fechaHora (backfill) — caja por la fecha de negocio', () => {
+    it('should pasar la fecha de la cita al guard en el camino legacy (sin registro)', async () => {
+      const repo = mocks();
+      const cita = makeMockCita(EstadoCita.CONFIRMADA, {
+        fechaHora: new Date('2026-08-16T10:00:00.000Z'),
+      });
+      repo.citaRepo.findById.mockResolvedValue(cita);
+      repo.cajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 3, estado: 'ABIERTA' });
+      repo.citaRepo.cambiarEstado.mockResolvedValue(makeMockCita(EstadoCita.COMPLETADA));
+
+      useCase = buildUseCase(repo);
+
+      await useCase.execute({ id: 1, usuarioId: 2 });
+
+      expect(repo.cajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(3, '2026-08-16');
+    });
+
+    it('should inyectar fechaHora del registro (?? cita.fechaHora) al CreateRegistro y pasar su fecha al guard', async () => {
+      const repo = mocks();
+      const cita = makeMockCita(EstadoCita.CONFIRMADA, {
+        fechaHora: new Date('2026-08-16T10:00:00.000Z'),
+      });
+      const citaCompletada = makeMockCita(EstadoCita.COMPLETADA, {
+        fechaHora: new Date('2026-08-16T10:00:00.000Z'),
+      });
+      repo.citaRepo.findById
+        .mockResolvedValueOnce(cita)
+        .mockResolvedValueOnce(citaCompletada); // re-fetch AFTER commit
+      repo.cajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 3, estado: 'ABIERTA' });
+      repo.citaRepo.cambiarEstado.mockResolvedValue(citaCompletada);
+      createRegistroUseCase.execute.mockResolvedValue(mockRegistroDTO);
+
+      useCase = buildUseCase(repo);
+
+      await useCase.execute({
+        id: 1,
+        usuarioId: 2,
+        registro: makeRegistroPayload({ fechaHora: '2026-08-16T15:00:00.000Z' }),
+      });
+
+      // El guard usa la fecha del payload (15:00Z del 16/08 → 16/08 en Colombia)
+      expect(repo.cajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(3, '2026-08-16');
+      // CreateRegistro recibe el fechaHora inyectado (explícito del payload)
+      expect(createRegistroUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ fechaHora: '2026-08-16T15:00:00.000Z' }),
+        mockQueryRunner,
+      );
+    });
+
+    it('should usar cita.fechaHora como fechaHora del registro cuando el payload no la trae', async () => {
+      const repo = mocks();
+      const cita = makeMockCita(EstadoCita.CONFIRMADA, {
+        fechaHora: new Date('2026-08-16T10:00:00.000Z'),
+      });
+      const citaCompletada = makeMockCita(EstadoCita.COMPLETADA, {
+        fechaHora: new Date('2026-08-16T10:00:00.000Z'),
+      });
+      repo.citaRepo.findById
+        .mockResolvedValueOnce(cita)
+        .mockResolvedValueOnce(citaCompletada);
+      repo.cajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 3, estado: 'ABIERTA' });
+      repo.citaRepo.cambiarEstado.mockResolvedValue(citaCompletada);
+      createRegistroUseCase.execute.mockResolvedValue(mockRegistroDTO);
+
+      useCase = buildUseCase(repo);
+
+      await useCase.execute({
+        id: 1,
+        usuarioId: 2,
+        registro: makeRegistroPayload(),
+      });
+
+      expect(repo.cajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(3, '2026-08-16');
+      expect(createRegistroUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ fechaHora: '2026-08-16T10:00:00.000Z' }),
+        mockQueryRunner,
+      );
+    });
   });
 });

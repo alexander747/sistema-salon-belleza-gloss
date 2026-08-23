@@ -53,8 +53,9 @@ vi.mock('../../../../../../shared/database.js', () => ({
 }));
 
 import { CreateRegistroUseCase } from '../CreateRegistroUseCase';
-import { NotFoundError, CajaCerradaError, UnprocessableEntityError } from '../../../../../../shared/errors';
+import { NotFoundError, CajaCerradaError, CajaNoAbiertaEnFechaError, UnprocessableEntityError } from '../../../../../../shared/errors';
 import { AppDataSource } from '../../../../../../shared/database';
+import { getColombiaDateString } from '../../../../../../shared/colombia-date';
 import type { CreateRegistroInput } from '@pos-final/validation';
 
 // ── Mocks ──────────────────────────────────────────────────────
@@ -619,6 +620,85 @@ describe('CreateRegistroUseCase', () => {
       expect(qr.rollbackTransaction).not.toHaveBeenCalled();
       expect(mockProductoRepo.decrementStock).toHaveBeenCalledWith(99, 3, expect.anything());
       expect(result.id).toBe(1);
+    });
+  });
+
+  describe('fechaHora (backfill)', () => {
+    const setupHappy = () => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 5, deudaTotal: 50000 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '60' });
+      mockComisionService.calcularComision.mockReturnValue(60000);
+      mockComisionService.calcularMontoTotal.mockReturnValue(160000);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(50000);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue({
+        id: 1,
+        salonId: 1,
+        clienteId: 1,
+        usuarioId: 2,
+        totalServicios: 100000,
+        totalProductos: 50000,
+        montoTotal: 160000,
+        propina: 10000,
+        comisionCalculada: 60000,
+        esRetoque: false,
+        montoPendiente: 50000,
+        estaPagadaEmpleada: false,
+        notas: null,
+        descripcionServicio: null,
+        pagos: [],
+        divisiones: [],
+        fechaHora: new Date('2026-08-16T15:00:00.000Z'),
+        creadoEn: new Date(),
+        actualizadoEn: new Date(),
+      });
+    };
+
+    it('should persist fechaHora = ahora por defecto y ligar la caja de HOY', async () => {
+      setupHappy();
+      mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 9, salonId: 1, estado: 'ABIERTA' });
+
+      await useCase.execute(validInput);
+
+      expect(mockCajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(1, getColombiaDateString());
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ cajaId: 9, fechaHora: expect.any(Date) }),
+        expect.anything(),
+      );
+    });
+
+    it('should persist la fechaHora del payload y ligar la caja de ESA fecha (no la de hoy)', async () => {
+      setupHappy();
+      mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 1, estado: 'ABIERTA', fechaCaja: '2026-08-16' });
+
+      await useCase.execute({ ...validInput, fechaHora: '2026-08-16T15:00:00.000Z' });
+
+      expect(mockCajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalledWith(1, '2026-08-16');
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ cajaId: 5, fechaHora: new Date('2026-08-16T15:00:00.000Z') }),
+        expect.anything(),
+      );
+    });
+
+    it('should rechazar con 409 CAJA_NO_ABIERTA_EN_FECHA sin caja de la fecha pasada y NO persistir', async () => {
+      mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue(null);
+
+      await expect(
+        useCase.execute({ ...validInput, fechaHora: '2026-08-16T15:00:00.000Z' }),
+      ).rejects.toThrow(CajaNoAbiertaEnFechaError);
+
+      expect(mockRegistroRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('should mantener CajaCerradaError (422) cuando la fechaHora explícita es de hoy', async () => {
+      mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue(null);
+
+      const hoyISO = new Date(`${getColombiaDateString()}T12:00:00`).toISOString();
+      await expect(
+        useCase.execute({ ...validInput, fechaHora: hoyISO }),
+      ).rejects.toThrow(CajaCerradaError);
+
+      expect(mockRegistroRepo.create).not.toHaveBeenCalled();
     });
   });
 
