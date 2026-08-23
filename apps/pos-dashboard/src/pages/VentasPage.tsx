@@ -12,6 +12,7 @@ import tableSkeletonStyles from '../components/TableSkeleton.module.css';
 import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
+import { calcularPendiente } from '../utils/fiado.js';
 import styles from './VentasPage.module.css';
 
 /* ── Types ── */
@@ -151,6 +152,8 @@ const VentasPage: React.FC = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState<number>(0);
+  /** Fiado: la clienta paga después (pago parcial o diferido permitido). */
+  const [esFiado, setEsFiado] = useState(false);
   const [paymentRef, setPaymentRef] = useState('');
   /** Fecha de negocio (backfill): default hoy, fechas pasadas permitidas. */
   const [fecha, setFecha] = useState(() => toISODate(new Date()));
@@ -205,6 +208,12 @@ const VentasPage: React.FC = () => {
     return Math.max(0, montoRecibido - finalTotal);
   }, [paymentMethod, montoRecibido, finalTotal]);
 
+  /** Deuda restante: la propina nunca se fía (decisión owner D8). */
+  const pendiente = useMemo(
+    () => calcularPendiente(finalTotal, propina, montoRecibido),
+    [finalTotal, propina, montoRecibido],
+  );
+
   const hasAdjustment = descuento > 0 || totalPersonalizado !== null;
   const ajusteNoteRequired = hasAdjustment && notaAjuste.trim().length === 0;
 
@@ -213,9 +222,10 @@ const VentasPage: React.FC = () => {
     if (!selectedCustomerId) return false;
     if (!selectedEmployeeId) return false;
     if (hasAdjustment && notaAjuste.trim().length === 0) return false;
-    if (paymentMethod === 'EFECTIVO' && montoRecibido < finalTotal) return false;
+    // Con fiado se acepta cualquier monto >= 0 (0 = fiado total); sin fiado, pago completo.
+    if (!esFiado && paymentMethod === 'EFECTIVO' && montoRecibido < finalTotal) return false;
     return true;
-  }, [cart, selectedCustomerId, selectedEmployeeId, paymentMethod, montoRecibido, finalTotal, hasAdjustment, notaAjuste]);
+  }, [cart, selectedCustomerId, selectedEmployeeId, paymentMethod, montoRecibido, finalTotal, hasAdjustment, notaAjuste, esFiado]);
 
   const hasProductos = filteredProductos.length > 0;
 
@@ -311,6 +321,7 @@ const VentasPage: React.FC = () => {
     setSelectedCustomerId('');
     setSelectedEmployeeId('');
     setMontoRecibido(0);
+    setEsFiado(false);
     setPaymentRef('');
     setPaymentMethod('EFECTIVO');
     setPropina(0);
@@ -351,7 +362,13 @@ const VentasPage: React.FC = () => {
         montoTotal: finalTotal,
         pagos: [
           {
-            monto: paymentMethod === 'EFECTIVO' ? montoRecibido : finalTotal,
+            // Fiado: se envía el monto cobrado (0 = fiado total, o parcial).
+            // Sin fiado: efectivo usa montoRecibido; tarjeta/transferencia pagan el total.
+            monto: esFiado
+              ? montoRecibido
+              : paymentMethod === 'EFECTIVO'
+                ? montoRecibido
+                : finalTotal,
             metodoPago: paymentMethod,
             referencia: paymentRef.trim() || undefined,
           },
@@ -373,6 +390,7 @@ const VentasPage: React.FC = () => {
       setSelectedCustomerId('');
       setSelectedEmployeeId('');
       setMontoRecibido(0);
+      setEsFiado(false);
       setPaymentRef('');
       setPaymentMethod('EFECTIVO');
       setPropina(0);
@@ -1053,14 +1071,107 @@ const VentasPage: React.FC = () => {
                   )}
                 </div>
 
+                {/* ── Fiado: la clienta paga después ── */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={esFiado}
+                      onChange={(e) => setEsFiado(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <span
+                      style={{
+                        position: 'relative',
+                        width: '36px',
+                        height: '20px',
+                        background: esFiado ? 'var(--accent)' : 'var(--border)',
+                        borderRadius: '10px',
+                        transition: 'background 0.2s',
+                        flexShrink: 0,
+                        display: 'inline-block',
+                      }}
+                    >
+                      <span
+                        style={{
+                          content: '""',
+                          position: 'absolute',
+                          top: '2px',
+                          left: esFiado ? '18px' : '2px',
+                          width: '16px',
+                          height: '16px',
+                          background: 'var(--bg-root)',
+                          borderRadius: '50%',
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </span>
+                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                      Fiado — la clienta paga después
+                    </span>
+                  </label>
+                </div>
+
+                {/* Fiado: monto a cobrar editable (0 o parcial) para todos los métodos */}
+                {esFiado && (
+                  <div style={{ marginBottom: '0.625rem' }}>
+                    <label style={formLabelStyle}>Monto a cobrar</label>
+                    <MoneyInput
+                      value={montoRecibido}
+                      onChange={setMontoRecibido}
+                      placeholder="0"
+                      ariaLabel="Monto a cobrar"
+                      style={{
+                        ...searchInputStyle,
+                        maxWidth: '100%',
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--accent)';
+                        e.currentTarget.style.boxShadow =
+                          '0 0 0 2px var(--accent-glow)';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    />
+                    {pendiente > 0 && (
+                      <div
+                        style={{
+                          marginTop: '0.35rem',
+                          padding: '0.35rem 0.5rem',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'rgba(212,168,83,0.08)',
+                          border: '1px solid rgba(212,168,83,0.25)',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: 'var(--warning)',
+                        }}
+                      >
+                        Queda pendiente: {formatCurrency(pendiente)}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Efectivo: monto recibido + cambio */}
-                {paymentMethod === 'EFECTIVO' && (
+                {!esFiado && paymentMethod === 'EFECTIVO' && (
                   <div style={{ marginBottom: '0.625rem' }}>
                     <label style={formLabelStyle}>Monto recibido</label>
                     <MoneyInput
                       value={montoRecibido}
                       onChange={setMontoRecibido}
                       placeholder="0"
+                      ariaLabel="Monto recibido"
                       style={{
                         ...searchInputStyle,
                         maxWidth: '100%',

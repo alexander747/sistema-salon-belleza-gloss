@@ -364,3 +364,109 @@ describe('VentasPage — contratos responsive (R5)', () => {
     expect(plus).toHaveStyle({ minWidth: '40px', minHeight: '40px' });
   });
 });
+
+describe('VentasPage — fiado y pago parcial (PR3)', () => {
+  const producto = { id: 1, nombre: 'Shampoo', marca: null, precioVenta: 100000, cantidadStock: 10, categoriaId: 1 };
+
+  function cartApiMock(precio: number) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/productos')) {
+        return Promise.resolve({ data: [{ ...producto, precioVenta: precio }] });
+      }
+      if (url.includes('/categorias')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', activo: true }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'María', activo: true }] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  /** Agrega el producto + cliente + empleada y activa el toggle Fiado. */
+  async function llenarCarritoConFiado(montoCobrar?: string) {
+    fireEvent.click(await screen.findByText('Shampoo'));
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[1], { target: { value: '1' } }); // cliente
+    fireEvent.change(combos[2], { target: { value: '1' } }); // empleada
+    fireEvent.click(screen.getByLabelText(/fiado/i));
+    if (montoCobrar) {
+      fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: montoCobrar } });
+    }
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    cartApiMock(100000);
+  });
+
+  it('fiado total: toggle ON → pago 0, muestra "Queda pendiente" y envía pagos [{monto:0}]', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderPage();
+
+    await llenarCarritoConFiado();
+
+    // Total 100.000 − propina 0 − pago 0 → queda pendiente 100.000
+    expect(await screen.findByText(/Queda pendiente: \$\s*100\.000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cobrar\s+\$\s*100\.000/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          pagos: [{ monto: 0, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+  }, 20000);
+
+  it('pago parcial: monto 60.000 de total 100.000 → pagos [{monto:60000}] y pendiente 40.000', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderPage();
+
+    await llenarCarritoConFiado('60000');
+
+    expect(await screen.findByText(/Queda pendiente: \$\s*40\.000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cobrar\s+\$\s*100\.000/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          pagos: [{ monto: 60000, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+  }, 20000);
+
+  it('fiado OFF: efectivo con monto recibido completo → pagos [{monto:20000}] y sin mensaje de pendiente', async () => {
+    cartApiMock(20000);
+    mockPost.mockResolvedValue({ data: {} });
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Shampoo'));
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[1], { target: { value: '1' } });
+    fireEvent.change(combos[2], { target: { value: '1' } });
+
+    // EFECTIVO default: monto recibido = total (20.000) habilita el botón
+    fireEvent.change(screen.getByLabelText('Monto recibido'), { target: { value: '20000' } });
+    expect(screen.queryByText(/Queda pendiente/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cobrar\s+\$\s*20\.000/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          pagos: [{ monto: 20000, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+  }, 20000);
+});
