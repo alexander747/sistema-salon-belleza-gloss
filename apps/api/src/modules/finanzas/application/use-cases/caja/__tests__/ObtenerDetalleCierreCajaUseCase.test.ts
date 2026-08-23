@@ -255,19 +255,20 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
       },
     ]);
     mockGastoRepo.findByCajaId.mockResolvedValue([]);
-    // Abono EFECTIVO de la caja (pago.cajaId = esta caja) + pago de venta
+    // Dinero de la caja: pago de venta del registro + abono de hoy (pagosExtra);
+    // el pago en r.pagos NO se suma (podría duplicar) — solo cuenta pagosExtra.
     mockPagoRepo.findByCajaConFallback.mockResolvedValue([
-      { id: 1, monto: 90000, metodoPago: 'EFECTIVO' },
+      { id: 1, monto: 100000, metodoPago: 'EFECTIVO' },
       { id: 88, monto: 25000, metodoPago: 'EFECTIVO' },
     ]);
 
     const result = await useCase.execute({ salonId: 1, cajaId: 9 });
 
-    // El esperado se calcula (fondo 50000 + EFECTIVO 115000), pero al no haber
+    // El esperado se calcula (fondo 50000 + EFECTIVO 125000), pero al no haber
     // arqueo físico el montoReal y la diferencia deben ser null — NO 0/−esperado.
     expect(result.caja).toEqual(expect.objectContaining({ id: 9, estado: 'ABIERTA' }));
-    expect(result.reporte.porMetodoPago.EFECTIVO).toBe(115000);
-    expect(result.reporte.montoEsperado).toBe(165000);
+    expect(result.reporte.porMetodoPago.EFECTIVO).toBe(125000);
+    expect(result.reporte.montoEsperado).toBe(175000);
     expect(result.reporte.montoReal).toBeNull();
     expect(result.reporte.diferencia).toBeNull();
     // La lista de movimientos sigue presente aunque la caja esté abierta

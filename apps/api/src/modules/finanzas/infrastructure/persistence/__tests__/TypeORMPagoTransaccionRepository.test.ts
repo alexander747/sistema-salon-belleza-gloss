@@ -3,12 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGetMany = vi.fn();
 
+interface MockQueryBuilder {
+  leftJoinAndSelect: ReturnType<typeof vi.fn>;
+  where: ReturnType<typeof vi.fn>;
+  orWhere: ReturnType<typeof vi.fn>;
+  getMany: ReturnType<typeof vi.fn>;
+}
+
 const mockQueryBuilder = {
   leftJoinAndSelect: vi.fn(() => mockQueryBuilder),
   where: vi.fn(() => mockQueryBuilder),
   orWhere: vi.fn(() => mockQueryBuilder),
   getMany: mockGetMany,
-};
+} as unknown as MockQueryBuilder;
 
 vi.mock('../../../../../shared/database', () => ({
   AppDataSource: {
