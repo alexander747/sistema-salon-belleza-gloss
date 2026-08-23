@@ -47,11 +47,11 @@ Chain strategy: stacked-to-main
 
 ## PR3 — Frontend: venta fiado/parcial
 
-- [ ] 3.1 RED: WalkInModal/VentasPage/AgendaPage (fiado, parcial, "queda $X pend.")
-- [ ] 3.2 `WalkInModal`: toggle Fiado + `montoCobrar` editable (todos los métodos) + pendiente + payload `pagos: fiado ? [] : [{monto: montoCobrar}]`
-- [ ] 3.3 `VentasPage`: mismo patrón (relajar guarda `canSubmit` línea 216)
-- [ ] 3.4 `AgendaPage` completar cita: `esFiado` + `montoCobrar` en `completarForm` + payload línea 630
-- [ ] 3.5 Actualizar tests de payload; vitest dashboard + tsc
+- [x] 3.1 RED: WalkInModal/VentasPage/AgendaPage (fiado, parcial, "queda $X pend.")
+- [x] 3.2 `WalkInModal`: toggle Fiado + `montoCobrar` editable (todos los métodos) + pendiente + payload `pagos: fiado ? [] : [{monto: montoCobrar}]`
+- [x] 3.3 `VentasPage`: mismo patrón (relajar guarda `canSubmit` línea 216)
+- [x] 3.4 `AgendaPage` completar cita: `esFiado` + `montoCobrar` en `completarForm` + payload línea 630
+- [x] 3.5 Actualizar tests de payload; vitest dashboard + tsc
 
 ## PR4 — Frontend: deudas (abonar)
 
