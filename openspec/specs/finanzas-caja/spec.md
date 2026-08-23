@@ -6,6 +6,7 @@ Daily cash control per salon: one caja per salon per Colombia business day, open
 
 ## Requirements
 
+
 ### Requirement: POST Abrir Caja
 
 The system MUST create a caja when `POST /api/salones/:salonId/caja/abrir` is called with `montoInicial`. Only SUPERADMIN, DUEÑA, ADMINISTRADOR, and RECEPCIONISTA MAY open. The caja MUST be created with `fechaCaja = getColombiaDateString()`, `estado = ABIERTA`, and `aperturaPor = req.user.id`. `montoInicial` MUST be required and non-negative. At most one caja per salon and Colombia business day.
@@ -348,3 +349,32 @@ The any-open rule MUST remain unchanged: opening a past caja requires closing an
 - GIVEN an ABIERTA caja (id=9) with `fechaCaja=2026-08-16` and registros/gastos by cajaId
 - WHEN POST /caja/cerrar with {montoRealEfectivo}
 - THEN the caja MUST be CERRADA with the arqueo computed from its registros/gastos AND `cierreEn` = now (the physical close happens today)
+### Requirement: Arqueo incluye pagos por su caja (abonos)
+
+El sistema MUST computar el arqueo de una caja con TODOS los pagos recibidos ese día, identificados por su `pago.cajaId`: (a) pagos de registros de la caja (`pago.cajaId = C`, o `NULL` con fallback `registro.cajaId = C` para legacy) y (b) abonos posteriores (`pago.cajaId = C` sobre registros de OTRA caja). Cada pago SHALL contar en UNA sola caja (la suya; fallback la del registro) — sin doble conteo. `montoEsperado = montoInicial + Σ pagos EFECTIVO de la caja − Σ gastos EFECTIVO` se mantiene; el desglose por método de pago SHALL incluir los abonos.
+
+#### Scenario: Abono de hoy en registro de ayer
+
+- GIVEN caja de ayer CERRADA con registro montoPendiente=40000 y caja de HOY ABIERTA
+- WHEN abono de 25000 EFECTIVO hoy (pago.cajaId = caja de hoy) y luego se cierra la caja de hoy
+- THEN el arqueo de HOY incluye 25000 en EFECTIVO AND el arqueo de AYER no lo incluye
+
+#### Scenario: Sin doble conteo entre cajas
+
+- GIVEN pago con `pago.cajaId = C` y `registro.cajaId = A` (A ≠ C)
+- WHEN se calcula el arqueo de C y el de A
+- THEN el pago cuenta SOLO en C
+
+#### Scenario: Pago legacy sin cajaId
+
+- GIVEN pago con `cajaId = NULL` y `registro.cajaId = A`
+- WHEN se calcula el arqueo de A
+- THEN el pago cuenta en A (fallback por registro.cajaId)
+
+#### Scenario: Abono bloqueado sobre registro anulado
+
+- GIVEN registro ANULADO
+- WHEN POST /registros/:id/pagos
+- THEN 422 `REGISTRO_ANULADO` AND ningún pago ingresa a ninguna caja (el guard del abono impide pagos de registros anulados)
+
+## MODIFIED Requirements

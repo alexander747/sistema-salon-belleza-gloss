@@ -6,6 +6,7 @@ Visibilidad financiera read-only: deuda pendiente de clientes (por cobrar) agreg
 
 ## Requirements
 
+
 ### Requirement: GET Cuentas por Cobrar
 
 El sistema MUST devolver, para `GET /salones/:salonId/finanzas/cuentas/cobrar`, una agregación paginada por cliente. Solo registros con `estado != 'ANULADO'` y `montoPendiente > 0` SHALL contar. Cada fila MUST incluir `clienteId`, `nombre`, `deudaTotal` (suma computada de `montoPendiente`), `cantidadRegistros`, `antiguedadDias` (días desde el `creadoEn` más antiguo, timezone Colombia) y `antiguedadBucket` (`0-30` | `31-60` | `61-90` | `90+`). El resultado MUST ordenarse por `deudaTotal` DESC y paginarse como `{ data, meta }`.
@@ -105,3 +106,31 @@ La sub-vista Pagar del tab Cuentas MUST mostrar un badge "Al día" (verde) en la
 - GIVEN `GET /finanzas/cuentas/pagar` retorna solo empleadas con `pendienteActual=0`
 - WHEN se renderiza la sub-vista Pagar
 - THEN todas las filas muestran badge "Al día" en orden por empleadaId
+### Requirement: Abonar deuda desde el tab Cuentas
+
+El dashboard MUST ofrecer una acción "Cobrar/Abonar" por fila de tipo CLIENTE en la sub-vista Por cobrar. El modal SHALL permitir elegir un registro del cliente (desglose), ingresar `monto` y `metodoPago`, y confirmar → `POST /salones/:salonId/registros/:id/pagos`; al éxito la lista SHALL refrescarse sin recargar la página. Las filas de tipo PRESTAMO SHALL permanecer read-only (sin botón; su flujo vive en Préstamos). Errores del backend (409 `MONTO_EXCEDE_PENDIENTE`, 422 `REGISTRO_ANULADO`/`CAJA_CERRADA`) SHALL mostrarse en el modal sin refrescar.
+
+#### Scenario: Abonar y refrescar
+
+- GIVEN cliente con 2 registros pendientes en Por cobrar
+- WHEN se abona 20000 EFECTIVO a uno de sus registros
+- THEN el modal se cierra, la fila refleja la deuda reducida y la lista se refresca
+
+#### Scenario: Préstamos sin acción
+
+- GIVEN fila tipo PRESTAMO
+- THEN la fila NO muestra botón Cobrar/Abonar
+
+#### Scenario: Monto excede el pendiente
+
+- GIVEN modal con monto > montoPendiente del registro elegido
+- WHEN submit
+- THEN el modal muestra el error 409 del backend y la lista NO se refresca
+
+#### Scenario: Sin caja abierta
+
+- GIVEN no hay caja ABIERTA hoy
+- WHEN submit de abono
+- THEN el modal muestra 422 `CAJA_CERRADA` y la lista NO se refresca
+
+## MODIFIED Requirements
