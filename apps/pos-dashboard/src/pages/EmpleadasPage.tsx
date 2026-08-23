@@ -158,6 +158,8 @@ const EmpleadasPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  // Filtro por estado: default Activos al ingresar a la plataforma
+  const [filtroEstado, setFiltroEstado] = useState<'ACTIVOS' | 'INACTIVOS' | 'TODOS'>('ACTIVOS');
 
   /* ── Modal state ── */
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -211,16 +213,19 @@ const EmpleadasPage: React.FC = () => {
     }
   }, [authLoading, salonId, fetchEmpleadas]);
 
-  /* ── Search filter ── */
+  /* ── Search + estado filter ── */
   const filteredEmpleadas = useMemo(() => {
-    if (!search.trim()) return empleadas;
+    const estadoOk = (e: Empleada) =>
+      filtroEstado === 'TODOS' ? true : filtroEstado === 'ACTIVOS' ? !!e.activo : !e.activo;
+    if (!search.trim()) return empleadas.filter(estadoOk);
     const q = search.toLowerCase();
     return empleadas.filter(
       (e) =>
-        e.nombre.toLowerCase().includes(q) ||
-        (e.email && e.email.toLowerCase().includes(q)),
+        estadoOk(e) &&
+        (e.nombre.toLowerCase().includes(q) ||
+          (e.email && e.email.toLowerCase().includes(q))),
     );
-  }, [empleadas, search]);
+  }, [empleadas, search, filtroEstado]);
 
   /* ── Client-side pagination ── */
   const totalPages = useMemo(
@@ -434,6 +439,23 @@ const EmpleadasPage: React.FC = () => {
               />
             </motion.div>
 
+            <motion.div variants={itemVariants}>
+              <select
+                aria-label="Filtrar por estado"
+                className={styles.formSelect}
+                style={{ minWidth: '150px' }}
+                value={filtroEstado}
+                onChange={(e) => {
+                  setFiltroEstado(e.target.value as 'ACTIVOS' | 'INACTIVOS' | 'TODOS');
+                  setPage(1);
+                }}
+              >
+                <option value="ACTIVOS">Activos</option>
+                <option value="INACTIVOS">Inactivos</option>
+                <option value="TODOS">Todos</option>
+              </select>
+            </motion.div>
+
             <motion.div
               variants={itemVariants}
               whileHover={{ scale: 1.03 }}
@@ -477,7 +499,7 @@ const EmpleadasPage: React.FC = () => {
           ) : error ? (
             <RenderError error={error} onRetry={fetchEmpleadas} />
           ) : filteredEmpleadas.length === 0 ? (
-            <RenderEmpty search={search} onCreate={openCreate} />
+            <RenderEmpty search={search} filtroEstado={filtroEstado} onCreate={openCreate} />
           ) : (
             <>
               <RenderTable
@@ -574,10 +596,11 @@ const RenderError: React.FC<RenderErrorProps> = ({ error, onRetry }) => (
 
 interface RenderEmptyProps {
   search: string;
+  filtroEstado: 'ACTIVOS' | 'INACTIVOS' | 'TODOS';
   onCreate: () => void;
 }
 
-const RenderEmpty: React.FC<RenderEmptyProps> = ({ search, onCreate }) => (
+const RenderEmpty: React.FC<RenderEmptyProps> = ({ search, filtroEstado, onCreate }) => (
   <div className={styles.tableWrapper}>
     {search.trim() ? (
       <div className={styles.emptyState}>
@@ -590,6 +613,16 @@ const RenderEmpty: React.FC<RenderEmptyProps> = ({ search, onCreate }) => (
           }}
         >
           No se encontraron empleados para «{search}»
+        </p>
+      </div>
+    ) : filtroEstado !== 'TODOS' ? (
+      <div className={styles.emptyState}>
+        <span className={styles.emptyIcon}>👩‍💼</span>
+        <h3 className={styles.emptyTitle}>
+          No hay empleados {filtroEstado === 'ACTIVOS' ? 'activos' : 'inactivos'}
+        </h3>
+        <p className={styles.emptySubtitle}>
+          Cambiá el filtro a «Todos» para ver el listado completo.
         </p>
       </div>
     ) : (

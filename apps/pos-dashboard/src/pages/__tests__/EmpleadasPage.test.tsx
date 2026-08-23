@@ -291,7 +291,10 @@ describe('EmpleadasPage — errores de mutación visibles en la UI', () => {
       expect(confirmSpy).toHaveBeenCalled();
       expect(mockPatch).toHaveBeenCalledWith('/salones/1/empleadas/1/desactivar');
     });
-    // El toggle refleja el nuevo estado (inactiva → "Activar")
+    // Con el filtro default (Activos), la empleada recién desactivada desaparece de la lista.
+    expect(screen.queryByRole('button', { name: 'Activar empleado' })).toBeNull();
+    // Cambiando a Todos, la empleada inactiva aparece con el botón "Activar"
+    fireEvent.change(screen.getByLabelText('Filtrar por estado'), { target: { value: 'TODOS' } });
     expect(await screen.findByRole('button', { name: 'Activar empleado' })).toBeInTheDocument();
   }, 20000);
 
@@ -313,6 +316,11 @@ describe('EmpleadasPage — errores de mutación visibles en la UI', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     renderPage();
+
+    // La empleada es inactiva: con el filtro default (Activos) no se ve → cambiar a Todos
+    fireEvent.change(await screen.findByLabelText('Filtrar por estado'), {
+      target: { value: 'TODOS' },
+    });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Activar empleado' }));
 
@@ -645,5 +653,50 @@ describe('EmpleadasPage — móvil (cards ≤600px)', () => {
     expect(panel).not.toBeNull();
     // El panel con la clase bottom-sheet es el modal real, con su título
     expect(within(panel as HTMLElement).getByText('Nuevo empleado')).toBeInTheDocument();
+  });
+
+  it('el filtro por estado arranca en Activos y oculta inactivos; Todos los muestra', async () => {
+    defaultApiMock([
+      {
+        id: 1,
+        nombre: 'Ana',
+        email: 'ana@test.com',
+        numeroWhatsApp: '3000000000',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: true,
+      },
+      {
+        id: 2,
+        nombre: 'Rosa',
+        email: 'rosa@test.com',
+        numeroWhatsApp: '3000000001',
+        rol: Rol.MANICURISTA,
+        porcentajeComisionServicio: 30,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        activo: false,
+      },
+    ]);
+
+    renderPage();
+
+    // Default: Activos → solo Ana visible, Rosa oculta
+    const select = await screen.findByLabelText('Filtrar por estado');
+    expect(select).toHaveValue('ACTIVOS');
+    await screen.findByText('Ana');
+    expect(screen.queryByText('Rosa')).toBeNull();
+
+    // Cambiar a Todos → Rosa aparece
+    fireEvent.change(select, { target: { value: 'TODOS' } });
+    expect(await screen.findByText('Rosa')).toBeInTheDocument();
+    expect(screen.getByText('Ana')).toBeInTheDocument();
+
+    // Cambiar a Inactivos → solo Rosa
+    fireEvent.change(screen.getByLabelText('Filtrar por estado'), { target: { value: 'INACTIVOS' } });
+    expect(await screen.findByText('Rosa')).toBeInTheDocument();
+    expect(screen.queryByText('Ana')).toBeNull();
   });
 });
