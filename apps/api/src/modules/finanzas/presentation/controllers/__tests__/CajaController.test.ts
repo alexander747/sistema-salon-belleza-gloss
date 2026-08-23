@@ -65,6 +65,40 @@ describe('CajaController', () => {
       expect(mockAbrir.execute).toHaveBeenCalledWith({ salonId: 3, montoInicial: 10000, aperturaPorId: null });
       expect(res.status).toHaveBeenCalledWith(201);
     });
+
+    it('should pasar fechaCaja del body al use case (backfill)', async () => {
+      mockAbrir.execute.mockResolvedValue({ id: 7, salonId: 3, estado: 'ABIERTA' });
+
+      const req = {
+        salonId: 3,
+        user: { id: 9 },
+        body: { montoInicial: 50000, fechaCaja: '2026-08-16' },
+      } as unknown as Request;
+      const res = makeRes();
+
+      await controller.abrir(req, res, next);
+
+      expect(mockAbrir.execute).toHaveBeenCalledWith({
+        salonId: 3,
+        montoInicial: 50000,
+        aperturaPorId: 9,
+        fechaCaja: '2026-08-16',
+      });
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    it('should NO incluir fechaCaja cuando no viene en el body (default hoy en el use case)', async () => {
+      mockAbrir.execute.mockResolvedValue({ id: 7 });
+
+      const req = { salonId: 3, body: { montoInicial: 10000 } } as unknown as Request;
+      const res = makeRes();
+
+      await controller.abrir(req, res, next);
+
+      expect(mockAbrir.execute).toHaveBeenCalledWith(
+        expect.not.objectContaining({ fechaCaja: expect.anything() }),
+      );
+    });
   });
 
   describe('cerrar', () => {

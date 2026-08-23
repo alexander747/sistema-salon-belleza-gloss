@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 export const abrirCajaSchema = z.object({
   montoInicial: z.number().min(0, 'El monto inicial debe ser mayor o igual a 0'),
+  // Opcional: backfill de cajas históricas. Ausente → hoy (Colombia) en el use case.
+  fechaCaja: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD requerido').optional(),
 });
 
 export type AbrirCajaInput = z.infer<typeof abrirCajaSchema>;

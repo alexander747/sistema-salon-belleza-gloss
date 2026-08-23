@@ -29,6 +29,8 @@ export class CajaController {
         salonId: req.salonId!,
         montoInicial: req.body.montoInicial,
         aperturaPorId: req.user?.id ?? null,
+        // fechaCaja opcional (backfill): ausente → hoy Colombia en el use case
+        ...(req.body.fechaCaja !== undefined ? { fechaCaja: req.body.fechaCaja } : {}),
       });
       res.status(201).json({ ok: true, data: result });
     } catch (error) {

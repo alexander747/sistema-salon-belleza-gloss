@@ -15,6 +15,21 @@ describe('abrirCajaSchema', () => {
   it('should reject montoInicial negativo', () => {
     expect(() => abrirCajaSchema.parse({ montoInicial: -1 })).toThrow();
   });
+
+  it('should accept fechaCaja opcional en formato YYYY-MM-DD y preservarlo (backfill)', () => {
+    const result = abrirCajaSchema.parse({ montoInicial: 50000, fechaCaja: '2026-08-16' });
+    expect(result.fechaCaja).toBe('2026-08-16');
+  });
+
+  it('should aceptar sin fechaCaja (default hoy en el use case)', () => {
+    const result = abrirCajaSchema.parse({ montoInicial: 50000 });
+    expect(result.fechaCaja).toBeUndefined();
+  });
+
+  it('should rechazar fechaCaja que no es YYYY-MM-DD', () => {
+    expect(() => abrirCajaSchema.parse({ montoInicial: 50000, fechaCaja: '16/08/2026' })).toThrow();
+    expect(() => abrirCajaSchema.parse({ montoInicial: 50000, fechaCaja: '2026-08' })).toThrow();
+  });
 });
 
 describe('cerrarCajaSchema', () => {

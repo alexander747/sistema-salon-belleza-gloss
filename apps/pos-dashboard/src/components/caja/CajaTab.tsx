@@ -206,6 +206,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
   /* ── Modal Abrir ── */
   const [abrirOpen, setAbrirOpen] = useState(false);
   const [montoInicial, setMontoInicial] = useState('');
+  const [fechaCaja, setFechaCaja] = useState(getColombiaDateString());
   const [abrirSubmitting, setAbrirSubmitting] = useState(false);
 
   /* ── Modal Cerrar (arqueo) ── */
@@ -357,6 +358,8 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
     try {
       const { data } = await api.post(`/salones/${salonId}/caja/abrir`, {
         montoInicial: Number(montoInicial),
+        // Backfill: fecha de negocio seleccionable (default hoy Colombia)
+        fechaCaja,
       });
       setCaja(data?.data ?? null);
       setAbrirOpen(false);
@@ -419,6 +422,8 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
 
   const abrirModal = () => {
     setMontoInicial('');
+    // Default hoy (Colombia): el backfill cambia la fecha solo si hace falta
+    setFechaCaja(getColombiaDateString());
     setAbrirOpen(true);
   };
 
@@ -783,6 +788,17 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                   value={Number(montoInicial) || 0}
                   onChange={(n) => setMontoInicial(n === 0 ? '' : String(n))}
                   placeholder="0"
+                  style={inputStyle}
+                />
+                <label htmlFor="fechaCaja" style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '1rem', marginBottom: '0.35rem' }}>
+                  Fecha de apertura
+                </label>
+                <input
+                  id="fechaCaja"
+                  type="date"
+                  aria-label="Fecha de apertura"
+                  value={fechaCaja}
+                  onChange={(e) => setFechaCaja(e.target.value)}
                   style={inputStyle}
                 />
               </div>

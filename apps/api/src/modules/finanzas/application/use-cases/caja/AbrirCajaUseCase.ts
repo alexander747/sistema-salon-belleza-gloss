@@ -9,6 +9,8 @@ export interface AbrirCajaInput {
   salonId: number;
   montoInicial: number;
   aperturaPorId?: number | null;
+  /** Opcional (backfill): día comercial YYYY-MM-DD. Ausente → hoy Colombia. */
+  fechaCaja?: string;
 }
 
 @injectable()
@@ -19,7 +21,7 @@ export class AbrirCajaUseCase {
   ) {}
 
   async execute(input: AbrirCajaInput): Promise<CajaDTO> {
-    const fechaCaja = getColombiaDateString();
+    const fechaCaja = input.fechaCaja ?? getColombiaDateString();
 
     // Cualquier caja ABIERTA del salón (cualquier fecha, incluidas huérfanas de días
     // anteriores) bloquea la apertura: el negocio debe cerrar la pendiente primero.
@@ -33,7 +35,7 @@ export class AbrirCajaUseCase {
     const existente = await this.cajaRepo.findBySalonYFecha(input.salonId, fechaCaja);
     if (existente) {
       // Una caja por día comercial; no se reabre
-      throw new CajaYaCerradaError('La caja de hoy ya está cerrada');
+      throw new CajaYaCerradaError(`La caja de la fecha ${fechaCaja} ya está cerrada`);
     }
 
     try {
@@ -51,9 +53,9 @@ export class AbrirCajaUseCase {
       if ((error as { code?: string })?.code === 'ER_DUP_ENTRY') {
         const actual = await this.cajaRepo.findBySalonYFecha(input.salonId, fechaCaja);
         if (actual?.estado === 'ABIERTA') {
-          throw new CajaYaAbiertaError('Ya existe una caja abierta para hoy');
+          throw new CajaYaAbiertaError(`Ya existe una caja abierta para la fecha ${fechaCaja}`);
         }
-        throw new CajaYaCerradaError('La caja de hoy ya está cerrada');
+        throw new CajaYaCerradaError(`La caja de la fecha ${fechaCaja} ya está cerrada`);
       }
       throw error;
     }

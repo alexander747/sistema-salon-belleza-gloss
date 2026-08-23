@@ -199,10 +199,62 @@ describe('CajaTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirmar/i }));
 
     await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/salones/1/caja/abrir', { montoInicial: 50000 });
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/caja/abrir', {
+        montoInicial: 50000,
+        fechaCaja: getColombiaDateString(),
+      });
     });
     expect(await screen.findByText('ABIERTA')).toBeInTheDocument();
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'caja-refresh' }));
+  });
+
+  it('abre caja de fecha pasada: date input default hoy, seleccionar 16/08 → POST con fechaCaja', async () => {
+    // La caja pasa de cerrada → abierta tras el POST (refleja el backend real)
+    let abierta = false;
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) {
+        return abierta
+          ? Promise.resolve({ data: { ok: true, data: cajaAbierta } })
+          : Promise.reject(error404);
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+    mockPost.mockImplementation((url: string) => {
+      if (url.includes('/caja/abrir')) {
+        abierta = true;
+        return Promise.resolve({ data: { ok: true, data: cajaAbierta } });
+      }
+      return Promise.resolve({ data: { ok: true, data: {} } });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir' }));
+
+    // El date input del modal Abrir tiene default = hoy (Colombia)
+    const fechaInput = await screen.findByLabelText(/fecha de apertura/i);
+    expect(fechaInput).toHaveValue(getColombiaDateString());
+
+    fireEvent.change(screen.getByLabelText(/monto inicial/i), { target: { value: '50000' } });
+    fireEvent.change(fechaInput, { target: { value: '2026-08-16' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirmar/i }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/caja/abrir', {
+        montoInicial: 50000,
+        fechaCaja: '2026-08-16',
+      });
+    });
+    expect(await screen.findByText('ABIERTA')).toBeInTheDocument();
   });
 
   it('cierra la caja: modal arqueo con esperado, input montoReal, diferencia en vivo y POST /caja/cerrar', async () => {
