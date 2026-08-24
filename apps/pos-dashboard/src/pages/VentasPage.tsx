@@ -1399,13 +1399,13 @@ const VentasPage: React.FC = () => {
                       <MoneyInput
                         value={totalPersonalizado ?? 0}
                         onChange={(n) => {
-                          setTotalPersonalizado(n === 0 ? null : n);
-                          // Ajustar el total (arriba o abajo) con efectivo y sin
-                          // fiado: el monto recibido acompaña el nuevo total para
-                          // que el cobro no quede bloqueado.
-                          if (!esFiado && paymentMethod === 'EFECTIVO') {
-                            setMontoRecibido(n);
+                          // Regla del dueño: el ajuste de valor SOLO puede ser
+                          // hacia ABAJO (descuento), nunca por encima del precio
+                          // del servicio. Si se ingresa un valor mayor, se ignora.
+                          if (n > calculatedTotal) {
+                            return;
                           }
+                          setTotalPersonalizado(n === 0 ? null : n);
                         }}
                         placeholder={formatCurrency(calculatedTotal)}
                         ariaLabel="Valor total ajustado"

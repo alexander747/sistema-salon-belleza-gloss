@@ -408,7 +408,7 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     });
   });
 
-  it('ajustar el total POR ENCIMA del precio del servicio: 40.000 → 50.000, monto recibido acompaña y guarda', async () => {
+  it('bloquea ajustar el total POR ENCIMA del precio (regla dueño): 40.000 no puede subir a 50.000', async () => {
     apiMockServicio(40000, 'Corte Premium');
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
@@ -416,20 +416,33 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     fireEvent.click(await screen.findByText('Corte Premium'));
     llenarClienteYEmpleada();
 
-    // Activar "Ajustar valor total" y poner 50.000 (mayor al precio de 40.000)
+    // Activar "Ajustar valor total" e intentar poner 50.000 (mayor al precio)
     fireEvent.click(screen.getByLabelText(/ajustar valor total/i));
     fireEvent.change(screen.getByLabelText('Valor total ajustado'), { target: { value: '50000' } });
 
-    // El ajuste exige nota obligatoria (textarea por placeholder)
+    // El ajuste hacia arriba se IGNORA → no se aplica (no hay nota obligatoria,
+    // que solo aparece cuando hay un ajuste real hacia abajo)
+    expect(screen.queryByPlaceholderText(/Indicá el motivo del ajuste/i)).not.toBeInTheDocument();
+  });
+
+  it('permite ajustar el total hacia ABAJO (descuento): 40.000 → 35.000 y guarda', async () => {
+    apiMockServicio(40000, 'Corte Premium');
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte Premium'));
+    llenarClienteYEmpleada();
+
+    fireEvent.click(screen.getByLabelText(/ajustar valor total/i));
+    fireEvent.change(screen.getByLabelText('Valor total ajustado'), { target: { value: '35000' } });
+
+    // El ajuste hacia abajo exige nota
     fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo del ajuste/i), {
-      target: { value: 'Servicio premium cobrado arriba del tarifario' },
+      target: { value: 'Descuento a clienta conocida' },
     });
 
-    // El monto recibido acompaña el nuevo total → el botón no queda bloqueado
-    // (MoneyInput muestra el monto con separador de miles)
-    await waitFor(() => {
-      expect(screen.getByLabelText('Monto recibido')).toHaveValue('50.000');
-    });
+    // En efectivo el monto recibido es manual: la clienta pagó 35.000
+    fireEvent.change(screen.getByLabelText('Monto recibido'), { target: { value: '35000' } });
 
     fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
 
@@ -437,10 +450,10 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
       expect(mockPost).toHaveBeenCalledWith(
         '/salones/1/registros',
         expect.objectContaining({
-          valorFinal: 50000,
+          valorFinal: 35000,
           valorOriginal: 40000,
           precioAjustado: true,
-          pagos: [{ monto: 50000, metodoPago: 'EFECTIVO' }],
+          pagos: [{ monto: 35000, metodoPago: 'EFECTIVO' }],
         }),
       );
     });
