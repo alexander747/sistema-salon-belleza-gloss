@@ -1398,8 +1398,17 @@ const VentasPage: React.FC = () => {
                     <div style={{ marginTop: '0.5rem' }}>
                       <MoneyInput
                         value={totalPersonalizado ?? 0}
-                        onChange={(n) => setTotalPersonalizado(n === 0 ? null : n)}
+                        onChange={(n) => {
+                          setTotalPersonalizado(n === 0 ? null : n);
+                          // Ajustar el total (arriba o abajo) con efectivo y sin
+                          // fiado: el monto recibido acompaña el nuevo total para
+                          // que el cobro no quede bloqueado.
+                          if (!esFiado && paymentMethod === 'EFECTIVO') {
+                            setMontoRecibido(n);
+                          }
+                        }}
                         placeholder={formatCurrency(calculatedTotal)}
+                        ariaLabel="Valor total ajustado"
                         style={{
                           ...searchInputStyle,
                           maxWidth: '100%',

@@ -407,4 +407,42 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
       );
     });
   });
+
+  it('ajustar el total POR ENCIMA del precio del servicio: 40.000 → 50.000, monto recibido acompaña y guarda', async () => {
+    apiMockServicio(40000, 'Corte Premium');
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte Premium'));
+    llenarClienteYEmpleada();
+
+    // Activar "Ajustar valor total" y poner 50.000 (mayor al precio de 40.000)
+    fireEvent.click(screen.getByLabelText(/ajustar valor total/i));
+    fireEvent.change(screen.getByLabelText('Valor total ajustado'), { target: { value: '50000' } });
+
+    // El ajuste exige nota obligatoria (textarea por placeholder)
+    fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo del ajuste/i), {
+      target: { value: 'Servicio premium cobrado arriba del tarifario' },
+    });
+
+    // El monto recibido acompaña el nuevo total → el botón no queda bloqueado
+    // (MoneyInput muestra el monto con separador de miles)
+    await waitFor(() => {
+      expect(screen.getByLabelText('Monto recibido')).toHaveValue('50.000');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          valorFinal: 50000,
+          valorOriginal: 40000,
+          precioAjustado: true,
+          pagos: [{ monto: 50000, metodoPago: 'EFECTIVO' }],
+        }),
+      );
+    });
+  });
 });

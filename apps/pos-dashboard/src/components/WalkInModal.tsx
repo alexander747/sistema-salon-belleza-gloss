@@ -1204,8 +1204,18 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                       <div style={{ marginTop: '0.5rem' }}>
                         <MoneyInput
                           value={totalPersonalizado ?? 0}
-                          onChange={(n) => setTotalPersonalizado(n === 0 ? null : n)}
+                          onChange={(n) => {
+                            setTotalPersonalizado(n === 0 ? null : n);
+                            // Ajustar el total (arriba o abajo) con efectivo y sin
+                            // fiado: el monto recibido acompaña el nuevo total para
+                            // que el guardado no quede bloqueado (p.ej. servicio de
+                            // 40.000 ajustado a 50.000).
+                            if (!esFiado && paymentMethod === 'EFECTIVO') {
+                              setMontoRecibido(n);
+                            }
+                          }}
                           placeholder={formatCurrency(calculatedTotal)}
+                          ariaLabel="Valor total ajustado"
                           className={styles.noSpinner}
                           style={inputStyle}
                           onFocus={(e) => {
