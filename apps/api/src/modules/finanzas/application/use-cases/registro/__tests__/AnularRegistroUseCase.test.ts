@@ -44,6 +44,9 @@ const mockClienteRepo = {
 const mockProductoRepo = {
   incrementStock: vi.fn(),
 };
+const mockCajaRepo = {
+  findById: vi.fn(),
+};
 
 describe('AnularRegistroUseCase', () => {
   let useCase: AnularRegistroUseCase;
@@ -54,6 +57,7 @@ describe('AnularRegistroUseCase', () => {
       mockRegistroRepo as never,
       mockClienteRepo as never,
       mockProductoRepo as never,
+      mockCajaRepo as never,
     );
   });
 
@@ -110,5 +114,77 @@ describe('AnularRegistroUseCase', () => {
 
     await expect(useCase.execute({ id: 999, salonId: 1 })).rejects.toThrow(NotFoundError);
     expect(mockRegistroRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('should throw UnprocessableEntityError cuando la caja del día del registro ya está CERRADA (regla dueño)', async () => {
+    mockRegistroRepo.findById.mockResolvedValue({
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      montoPendiente: 50000,
+      estaPagadaEmpleada: false,
+      productosVendidos: [],
+      notas: null,
+      cajaId: 7,
+    });
+    mockCajaRepo.findById.mockResolvedValue({
+      id: 7,
+      salonId: 1,
+      fechaCaja: '2026-08-18',
+      estado: 'CERRADA',
+    });
+
+    await expect(useCase.execute({ id: 1, salonId: 1 })).rejects.toThrow(UnprocessableEntityError);
+    expect(mockRegistroRepo.update).not.toHaveBeenCalled();
+    expect(mockClienteRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('permite anular cuando la caja del día del registro está ABIERTA', async () => {
+    mockRegistroRepo.findById.mockResolvedValue({
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      montoPendiente: 30000,
+      estaPagadaEmpleada: false,
+      productosVendidos: [],
+      notas: null,
+      cajaId: 7,
+    });
+    mockCajaRepo.findById.mockResolvedValue({
+      id: 7,
+      salonId: 1,
+      fechaCaja: '2026-08-18',
+      estado: 'ABIERTA',
+    });
+    mockRegistroRepo.update.mockResolvedValue({});
+    mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, deudaTotal: 50000 });
+    mockClienteRepo.update.mockResolvedValue({});
+
+    await useCase.execute({ id: 1, salonId: 1 });
+
+    expect(mockRegistroRepo.update).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ estado: 'ANULADO' }),
+    );
+    expect(mockClienteRepo.update).toHaveBeenCalledWith(1, { deudaTotal: 20000 });
+  });
+
+  it('no bloquea la anulación de registros legacy sin caja (cajaId null)', async () => {
+    mockRegistroRepo.findById.mockResolvedValue({
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      montoPendiente: 0,
+      estaPagadaEmpleada: false,
+      productosVendidos: [],
+      notas: null,
+      cajaId: null,
+    });
+    mockRegistroRepo.update.mockResolvedValue({});
+
+    await useCase.execute({ id: 1, salonId: 1 });
+
+    expect(mockCajaRepo.findById).not.toHaveBeenCalled();
+    expect(mockRegistroRepo.update).toHaveBeenCalled();
   });
 });

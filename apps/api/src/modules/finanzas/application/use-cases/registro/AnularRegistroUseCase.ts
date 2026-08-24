@@ -4,6 +4,7 @@ import { RegistroProductoEntity } from '../../../../../infrastructure/persistenc
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IClienteRepository } from '../../../../personas/domain/ports/IClienteRepository';
 import type { IProductoRepository } from '../../../../catalogo/domain/ports/IProductoRepository';
+import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
 
 export interface AnularRegistroInput {
@@ -20,6 +21,8 @@ export class AnularRegistroUseCase {
     private readonly clienteRepo: IClienteRepository,
     @inject('IProductoRepository')
     private readonly productoRepo: IProductoRepository,
+    @inject('ICajaRepository')
+    private readonly cajaRepo: ICajaRepository,
   ) {}
 
   async execute(input: AnularRegistroInput): Promise<void> {
@@ -33,6 +36,20 @@ export class AnularRegistroUseCase {
     // pagado a la empleada — el frontend lo bloquea, el backend ahora también.
     if (registro.estaPagadaEmpleada) {
       throw new UnprocessableEntityError('No se puede anular un registro ya liquidado');
+    }
+
+    // Guard (regla del dueño): solo se puede anular un registro si la caja de
+    // su día comercial sigue ABIERTA. Si la caja ya se cerró, el arqueo quedó
+    // contabilizado y anular después rompería la conciliación del día.
+    // Registros legacy sin caja (cajaId NULL) no se bloquean: no hay caja que
+    // verificar (preexistentes al modelo de caja).
+    if (registro.cajaId != null) {
+      const caja = await this.cajaRepo.findById(registro.cajaId);
+      if (caja && caja.estado !== 'ABIERTA') {
+        throw new UnprocessableEntityError(
+          `No se puede anular el registro: la caja del ${caja.fechaCaja} ya está cerrada. Reabrí la caja de ese día para anular la venta.`,
+        );
+      }
     }
 
     // --- Stock restoration from product lines ---
