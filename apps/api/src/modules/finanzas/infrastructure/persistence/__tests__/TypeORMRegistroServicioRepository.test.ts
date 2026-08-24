@@ -6,6 +6,7 @@ const mockGetRawOne = vi.fn();
 interface MockQueryBuilder {
   select: ReturnType<typeof vi.fn>;
   innerJoin: ReturnType<typeof vi.fn>;
+  leftJoin: ReturnType<typeof vi.fn>;
   where: ReturnType<typeof vi.fn>;
   andWhere: ReturnType<typeof vi.fn>;
   getRawOne: ReturnType<typeof vi.fn>;
@@ -14,6 +15,7 @@ interface MockQueryBuilder {
 const mockQueryBuilder = {
   select: vi.fn(() => mockQueryBuilder),
   innerJoin: vi.fn(() => mockQueryBuilder),
+  leftJoin: vi.fn(() => mockQueryBuilder),
   where: vi.fn(() => mockQueryBuilder),
   andWhere: vi.fn(() => mockQueryBuilder),
   getRawOne: mockGetRawOne,
@@ -42,11 +44,12 @@ describe('TypeORMRegistroServicioRepository.sumPagosPorPeriodo', () => {
     mockGetRawOne.mockReset();
     mockQueryBuilder.select.mockClear();
     mockQueryBuilder.innerJoin.mockClear();
+    mockQueryBuilder.leftJoin.mockClear();
     mockQueryBuilder.where.mockClear();
     mockQueryBuilder.andWhere.mockClear();
   });
 
-  it('suma los pagos recibidos en el período, solo de registros NO ANULADO del salón (fecha de recepción = pago.creadoEn)', async () => {
+  it('suma los pagos recibidos en el período, solo de registros NO ANULADO del salón (fecha de negocio = caja del pago)', async () => {
     mockGetRawOne.mockResolvedValue({ total: '350000.00' });
 
     const inicio = new Date('2026-05-01T05:00:00.000Z');
@@ -55,20 +58,26 @@ describe('TypeORMRegistroServicioRepository.sumPagosPorPeriodo', () => {
     const result = await repo.sumPagosPorPeriodo(1, inicio, fin);
 
     expect(result).toBe(350000);
-    // SQL: SUM(p.monto) con alias 'total', unión a pagos_transaccion
+    // SQL: SUM(p.monto) con alias 'total', unión a pagos_transaccion + caja del pago
     expect(mockQueryBuilder.select).toHaveBeenCalledWith('COALESCE(SUM(p.monto), 0)', 'total');
     expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith('r.pagos', 'p');
+    expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith('p.caja', 'pc');
     expect(mockQueryBuilder.where).toHaveBeenCalledWith('r.salonId = :salonId', { salonId: 1 });
     expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('r.estado != :anulado', {
       anulado: 'ANULADO',
     });
-    // La fecha de recepción del dinero es p.creadoEn (abono = momento del abono)
-    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('p.creadoEn >= :fechaInicio', {
-      fechaInicio: inicio,
-    });
-    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('p.creadoEn < :fechaFin', {
-      fechaFin: fin,
-    });
+    // La fecha de negocio del pago es la de su CAJA (pago.cajaId → caja.fechaCaja,
+    // DATE puro); p.creadoEn es el momento de carga (backfill: hoy ≠ fecha real).
+    // Legacy sin caja cae al registro (COALESCE fechaHora, creadoEn). El rango se
+    // compara como fecha Colombia pura para evitar el desfase de las 05:00 UTC.
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+      "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d')) >= :fechaInicioStr",
+      { fechaInicioStr: '2026-05-01' },
+    );
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+      "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d')) < :fechaFinStr",
+      { fechaFinStr: '2026-06-01' },
+    );
   });
 
   it('filtra por empleada (r.usuarioId) cuando se pasa usuarioId', async () => {

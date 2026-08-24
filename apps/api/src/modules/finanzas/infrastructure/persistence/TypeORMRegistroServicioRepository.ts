@@ -1,8 +1,14 @@
 import { injectable } from 'tsyringe';
 import type { QueryRunner } from 'typeorm';
 import { AppDataSource } from '../../../../shared/database';
+import { getColombiaDateString } from '../../../../shared/colombia-date';
 import { RegistroServicioEntity, EstadoRegistro } from '../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import type { IRegistroServicioRepository } from '../../domain/ports/IRegistroServicioRepository';
+
+/** Fecha Colombia pura (YYYY-MM-DD) de un Date de rango (borde 05:00 UTC). */
+function fechaColombiaStr(d: Date): string {
+  return getColombiaDateString(d);
+}
 
 @injectable()
 export class TypeORMRegistroServicioRepository implements IRegistroServicioRepository {
@@ -178,10 +184,22 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .createQueryBuilder('r')
       .select('COALESCE(SUM(p.monto), 0)', 'total')
       .innerJoin('r.pagos', 'p')
+      .leftJoin('p.caja', 'pc')
       .where('r.salonId = :salonId', { salonId })
       .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
-      .andWhere('p.creadoEn >= :fechaInicio', { fechaInicio })
-      .andWhere('p.creadoEn < :fechaFin', { fechaFin });
+      // La fecha de negocio del pago es la de su CAJA (pago.cajaId → caja.fechaCaja,
+      // DATE puro sin hora); p.creadoEn es el momento de carga (backfill: hoy ≠ fecha
+      // real). Legacy sin caja cae al registro (COALESCE fechaHora, creadoEn).
+      // El rango se convierte a fecha Colombia pura (YYYY-MM-DD) para comparar con
+      // el DATE de la caja sin el desfase de las 05:00 UTC.
+      .andWhere(
+        "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d')) >= :fechaInicioStr",
+        { fechaInicioStr: fechaColombiaStr(fechaInicio) },
+      )
+      .andWhere(
+        "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d')) < :fechaFinStr",
+        { fechaFinStr: fechaColombiaStr(fechaFin) },
+      );
 
     if (usuarioId !== undefined) {
       query.andWhere('r.usuarioId = :usuarioId', { usuarioId });
