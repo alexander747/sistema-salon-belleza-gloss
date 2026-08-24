@@ -98,6 +98,7 @@ export class ExcelExportService {
       ['Período', `${pyl.desde} a ${pyl.hasta}`],
       ['Ingresos brutos', pyl.ingresosBrutos],
       ['Descuentos', pyl.descuentos],
+      ['Incrementos', pyl.incrementos ?? 0],
       ['Ingresos netos', pyl.ingresosNetos],
       ['Total servicios', pyl.totalServicios],
       ['Total productos', pyl.totalProductos],

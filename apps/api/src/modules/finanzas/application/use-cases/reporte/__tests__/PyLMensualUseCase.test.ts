@@ -149,6 +149,29 @@ describe('PyLMensualUseCase', () => {
     expect(result.hasta).toBe('2026-05-31');
   });
 
+  it('ajuste de valor hacia ARRIBA: no reporta descuento, expone incrementos (bug dueño)', async () => {
+    mockRegistroRepo.search.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 40000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 40000,
+        valorFinal: 50000, // cobró 50.000 un servicio de 40.000
+      }),
+    ]);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.ingresosBrutos).toBe(40000); // precio del servicio (bruto)
+    expect(result.ingresosNetos).toBe(50000); // lo realmente cobrado
+    expect(result.descuentos).toBe(0); // NO fue un descuento
+    expect(result.incrementos).toBe(10000); // fue un incremento de 10.000
+  });
+
   it('período vacío devuelve todos los totales en cero', async () => {
     const result = await useCase.execute({
       salonId: 1,

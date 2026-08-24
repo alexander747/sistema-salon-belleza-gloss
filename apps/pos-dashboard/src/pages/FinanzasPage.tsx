@@ -173,6 +173,8 @@ interface PyLData {
   cantidadAtenciones: number;
   ingresosBrutos: number;
   descuentos: number;
+  /** Ajustes de valor hacia ARRIBA (cobrar más que el precio del servicio). */
+  incrementos?: number;
   ingresosNetos: number;
   totalServicios: number;
   totalProductos: number;
@@ -4415,6 +4417,12 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
               <span className={styles.summaryLabel}>🏷️ Descuentos</span>
               <span className={styles.summaryValue}>{formatCurrency(pyl.descuentos)}</span>
             </div>
+            {pyl.incrementos ? (
+              <div className={styles.summaryCard}>
+                <span className={styles.summaryLabel}>📈 Incrementos</span>
+                <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>{formatCurrency(pyl.incrementos)}</span>
+              </div>
+            ) : null}
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
               <span className={styles.summaryLabel}>💵 Ingresos netos</span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.ingresosNetos)}</span>

@@ -23,6 +23,8 @@ export interface PyLMensualOutput {
   cantidadAtenciones: number;
   ingresosBrutos: number;
   descuentos: number;
+  /** Ajustes de valor hacia ARRIBA (cobrar más que el precio del servicio). */
+  incrementos: number;
   ingresosNetos: number;
   totalServicios: number;
   totalProductos: number;
@@ -169,12 +171,21 @@ export class PyLMensualUseCase {
       cobrado - costoBaseInsumosRounded - comisiones - totalGastos - devoluciones,
     );
 
+    // Semántica: el ajuste de valor puede ser hacia ABAJO (descuento real) o
+    // hacia ARRIBA (incremento — p.ej. cobrar 50.000 un servicio de 40.000).
+    // Un incremento NUNCA debe reportarse como descuento (bug reportado por el
+    // dueño): descuentos queda ≥ 0 e incrementos captura la diferencia opuesta.
+    const diferencia = ingresosBrutos - ingresosNetos;
+    const descuentos = Math.max(0, diferencia);
+    const incrementos = Math.max(0, -diferencia);
+
     return {
       desde,
       hasta,
       cantidadAtenciones,
       ingresosBrutos: round2(ingresosBrutos),
-      descuentos: round2(ingresosBrutos - ingresosNetos),
+      descuentos: round2(descuentos),
+      incrementos: round2(incrementos),
       ingresosNetos: round2(ingresosNetos),
       totalServicios: round2(totalServicios),
       totalProductos: round2(totalProductos),
