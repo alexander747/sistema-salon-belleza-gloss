@@ -47,6 +47,10 @@ export interface RegistroServicioDTO {
   fechaHora: Date;
   creadoEn: Date;
   actualizadoEn: Date;
+  // Caja del día del registro: id + si sigue abierta (regla de anulación).
+  // NULL para registros legacy anteriores al modelo de cajas.
+  cajaId: number | null;
+  cajaAbierta: boolean | null;
 }
 
 export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroServicioDTO {
@@ -88,5 +92,7 @@ export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroS
     fechaHora: entity.fechaHora ?? entity.creadoEn,
     creadoEn: entity.creadoEn,
     actualizadoEn: entity.actualizadoEn,
+    cajaId: entity.cajaId ?? null,
+    cajaAbierta: entity.caja ? entity.caja.estado === 'ABIERTA' : null,
   };
 }

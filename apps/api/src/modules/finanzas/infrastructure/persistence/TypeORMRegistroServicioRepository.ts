@@ -97,6 +97,7 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.productosVendidos', 'rp')
       .leftJoinAndSelect('rp.producto', 'p')
       .leftJoinAndSelect('r.serviciosItems', 'si')
+      .leftJoinAndSelect('r.caja', 'rcaja')
       .where('r.salonId = :salonId', { salonId: params.salonId });
 
     if (params.desde) {

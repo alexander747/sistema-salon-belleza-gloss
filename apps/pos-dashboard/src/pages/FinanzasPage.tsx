@@ -94,6 +94,9 @@ interface Registro {
   fechaHora?: string;
   creadoEn: string;
   actualizadoEn: string;
+  /** Caja del día del registro: id + si sigue abierta (regla de anulación). */
+  cajaId?: number | null;
+  cajaAbierta?: boolean | null;
   pagos: Pago[];
   divisiones: Division[];
   productosVendidos?: ProductoVendido[];
@@ -593,6 +596,13 @@ interface RegistrosTabProps {
   user: IUser | null;
   /** CAJA_CERRADA en WalkInModal: cambia al tab Caja de FinanzasPage */
   onNavigateToCaja?: () => void;
+}
+
+/** Regla del dueño: no se puede anular un registro si la caja de su día está
+ *  CERRADA (cajaAbierta === false explícito). Registros legacy sin caja
+ *  (cajaId/cajaAbierta null) y cajas abiertas permiten anular. */
+function cajaCerradaAnular(reg: Registro): boolean {
+  return reg.cajaAbierta === false;
 }
 
 const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateToCaja }) => {
@@ -1240,9 +1250,15 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                       {reg.estado !== 'ANULADO' && !reg.estaPagadaEmpleada ? (
                         <button
                           className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                          onClick={() => openAnular(reg)}
-                          title="Anular"
-                          aria-label="Anular"
+                          onClick={() => !cajaCerradaAnular(reg) && openAnular(reg)}
+                          disabled={cajaCerradaAnular(reg)}
+                          title={
+                            cajaCerradaAnular(reg)
+                              ? 'No se puede anular: la caja de ese día ya está cerrada'
+                              : 'Anular'
+                          }
+                          aria-label={cajaCerradaAnular(reg) ? 'Anular bloqueado (caja cerrada)' : 'Anular'}
+                          style={cajaCerradaAnular(reg) ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
                         >
                           🚫
                         </button>

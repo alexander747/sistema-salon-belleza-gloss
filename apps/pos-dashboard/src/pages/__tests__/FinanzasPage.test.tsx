@@ -1733,4 +1733,55 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
     expect(await screen.findByText('Ana Gómez')).toBeInTheDocument();
     expect(screen.getByText('Rosa Anulada')).toBeInTheDocument();
   });
+
+  it('deshabilita Anular cuando la caja del día del registro está CERRADA (regla dueño)', async () => {
+    const conCajaCerrada = {
+      ...registroFila,
+      id: 90,
+      cajaId: 12,
+      cajaAbierta: false,
+      _clienteNombre: 'Caja Cerrada',
+    };
+    const conCajaAbierta = {
+      ...registroFila2,
+      id: 91,
+      cajaId: 13,
+      cajaAbierta: true,
+      _clienteNombre: 'Caja Abierta',
+    };
+    const mockConCajas = (url: string): Promise<unknown> => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [conCajaCerrada, conCajaAbierta], meta: { page: 1, limit: 12, total: 2, totalPages: 1 } } });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    };
+
+    mockGet.mockImplementation(mockConCajas);
+    render(
+      <MemoryRouter initialEntries={['/finanzas']}>
+        <FinanzasPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Caja Cerrada');
+    await screen.findByText('Caja Abierta');
+
+    // La fila con caja cerrada tiene el botón deshabilitado con aria-label de bloqueo
+    const bloqueado = await screen.findByLabelText('Anular bloqueado (caja cerrada)');
+    expect(bloqueado).toBeDisabled();
+
+    // La fila con caja abierta mantiene el botón Anular habilitado
+    const habilitado = screen.getByLabelText('Anular');
+    expect(habilitado).not.toBeDisabled();
+  });
 });
