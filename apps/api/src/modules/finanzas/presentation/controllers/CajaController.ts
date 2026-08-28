@@ -57,10 +57,17 @@ export class CajaController {
     }
   };
 
-  /** POST /salones/:salonId/caja/reabrir — reabre la caja CERRADA de hoy (misma fila). */
+  /** POST /salones/:salonId/caja/reabrir — reabre una caja CERRADA (misma fila).
+   *  fechaCaja opcional (YYYY-MM-DD): default hoy (flujo legacy). */
   reabrir = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.reabrirUseCase.execute({ salonId: req.salonId! });
+      const fechaCaja =
+        (req.body?.fechaCaja as string | undefined) ??
+        (req.query?.fechaCaja as string | undefined);
+      const result = await this.reabrirUseCase.execute({
+        salonId: req.salonId!,
+        ...(fechaCaja ? { fechaCaja } : {}),
+      });
       res.status(200).json({ ok: true, data: result });
     } catch (error) {
       next(error);

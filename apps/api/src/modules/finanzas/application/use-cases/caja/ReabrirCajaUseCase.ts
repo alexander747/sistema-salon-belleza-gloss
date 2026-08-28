@@ -7,13 +7,16 @@ import { cajaToDTO } from '../../dtos/CajaDTO';
 
 export interface ReabrirCajaInput {
   salonId: number;
+  /** Fecha de la caja a reabrir (YYYY-MM-DD). Default: hoy (flujo legacy). */
+  fechaCaja?: string;
 }
 
 /**
- * Reabre la caja del día comercial actual si ya fue cerrada (p. ej. cerrada para
- * almorzar y reabierta a la tarde). NO crea una fila nueva: se reabre la MISMA caja
- * (UNIQUE salonId+fechaCaja se preserva) y se limpian los datos del cierre intermedio:
- * el cierre final de fin de día los reemplaza.
+ * Reabre la caja del día comercial indicado (default: hoy) si ya fue cerrada
+ * (p. ej. cerrada para almorzar y reabierta a la tarde, o reabrir un día pasado
+ * para corregir movimientos). NO crea una fila nueva: se reabre la MISMA caja
+ * (UNIQUE salonId+fechaCaja se preserva) y se limpian los datos del cierre
+ * intermedio: el cierre final de fin de día los reemplaza.
  */
 @injectable()
 export class ReabrirCajaUseCase {
@@ -23,7 +26,7 @@ export class ReabrirCajaUseCase {
   ) {}
 
   async execute(input: ReabrirCajaInput): Promise<CajaDTO> {
-    const fechaCaja = getColombiaDateString();
+    const fechaCaja = input.fechaCaja ?? getColombiaDateString();
     const caja = await this.cajaRepo.findBySalonYFecha(input.salonId, fechaCaja);
 
     if (!caja) {

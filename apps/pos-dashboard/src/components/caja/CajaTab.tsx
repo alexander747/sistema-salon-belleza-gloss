@@ -420,6 +420,35 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
     }
   };
 
+  /** Reabre una caja CERRADA de un día específico (historial) — misma fila. */
+  const handleReabrirPorFecha = async (c: CajaDTO) => {
+    if (!salonId) return;
+    if (!confirm(`¿Reabrir la caja del ${formatFechaCaja(c.fechaCaja)}? Se descarta el cierre anterior y podés agregar/corregir movimientos.`)) return;
+    setReabrirError(null);
+    setReabrirSubmitting(true);
+    try {
+      const { data } = await api.post(`/salones/${salonId}/caja/reabrir`, {
+        fechaCaja: c.fechaCaja,
+      });
+      setCaja(data?.data ?? null);
+      dispatchCajaRefresh();
+      fetchCierres(1);
+    } catch (err) {
+      const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data
+        ?.error?.code;
+      if (code === 'CAJA_YA_ABIERTA') {
+        setReabrirError('La caja ya está abierta (se actualizó el estado).');
+        fetchCaja();
+      } else if (code === 'CAJA_NO_ABIERTA') {
+        setReabrirError('No existe una caja para esa fecha.');
+      } else {
+        setReabrirError('No se pudo reabrir la caja. Intentá de nuevo.');
+      }
+    } finally {
+      setReabrirSubmitting(false);
+    }
+  };
+
   const abrirModal = () => {
     setMontoInicial('');
     // Default hoy (Colombia): el backfill cambia la fecha solo si hace falta
@@ -710,6 +739,28 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                           >
                             Ver
                           </button>
+                          {c.estado === 'CERRADA' && canManage && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReabrirPorFecha(c);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: '1px solid rgba(212,168,83,0.4)',
+                                borderRadius: 'var(--radius-sm)',
+                                color: 'var(--accent)',
+                                padding: '0.25rem 0.6rem',
+                                fontFamily: "'DM Sans', sans-serif",
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Reabrir
+                            </button>
+                          )}
                           {c.estado === 'ABIERTA' && canManage && (
                             <button
                               onClick={(e) => {

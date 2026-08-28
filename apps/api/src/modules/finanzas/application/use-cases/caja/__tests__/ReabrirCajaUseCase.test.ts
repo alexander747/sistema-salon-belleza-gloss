@@ -77,4 +77,17 @@ describe('ReabrirCajaUseCase', () => {
 
     await expect(useCase.execute({ salonId: 1 })).rejects.toThrow(CajaYaAbiertaError);
   });
+
+  it('reabre la caja CERRADA de una fecha pasada cuando se pasa fechaCaja (historial)', async () => {
+    mockCajaRepo.findBySalonYFecha.mockResolvedValue({ ...cajaCerrada, id: 16, fechaCaja: '2026-08-21' });
+    mockCajaRepo.reabrir.mockResolvedValue(true);
+
+    const result = await useCase.execute({ salonId: 1, fechaCaja: '2026-08-21' });
+
+    expect(mockCajaRepo.findBySalonYFecha).toHaveBeenCalledWith(1, '2026-08-21');
+    expect(mockCajaRepo.reabrir).toHaveBeenCalledWith(16);
+    expect(result.id).toBe(16);
+    expect(result.estado).toBe('ABIERTA');
+    expect(result.fechaCaja).toBe('2026-08-21');
+  });
 });
