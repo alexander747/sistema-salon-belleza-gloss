@@ -2907,7 +2907,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
             }}>
               {pendientesFiltrados.map((emp) => (
                 <motion.div
-                  key={emp.empleadaId}
+                  key={`${emp.empleadaId}-${emp.periodoInicio}`}
                   variants={itemVariants}
                   initial="hidden"
                   animate="show"

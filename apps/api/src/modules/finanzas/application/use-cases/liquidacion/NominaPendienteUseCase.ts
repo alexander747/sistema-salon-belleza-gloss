@@ -92,51 +92,112 @@ export function calcularPeriodo(
 }
 
 /**
- * Períodos de pago VENCIDOS sin liquidar, contados desde el fin de la última
- * liquidación hasta hoy (regla del dueño: el sueldo fijo también se acumula,
- * como lo hacen los sistemas de nómina estándar).
- *
- * - Sin liquidación previa → 1 (solo el período vigente; no se inventa deuda
- *   vieja porque no hay registro de cuándo empezó a acumular).
- * - Con liquidación → cuenta los períodos completos desde su fin + el vigente.
- *   Ej: última liq pagada hasta 31/07, hoy 28/08, MENSUAL → 2 (agosto vigente
- *   + el siguiente no arrancó) → en realidad 1... el cálculo real: inicio de
- *   acumulación = 01/08, cursor 01/08 ≤ 28/08 → 1 período. Correcto.
+ * Período COMPLETO de una fecha (inicio + fin NATURAL del período), a diferencia
+ * de `calcularPeriodo` cuyo fin es "hoy" para MENSUAL. Se usa para enumerar
+ * períodos vencidos históricos (ej. la fila de junio termina el 30/06, no hoy).
  */
-export function periodosVencidos(
+export function calcularPeriodoCompleto(
+  frecuenciaPago: FrecuenciaPago,
+  fecha: string,
+): { inicio: Date; fin: Date } {
+  const [y, m] = fecha.split('-');
+
+  if (frecuenciaPago === 'SEMANAL') {
+    const ancla = new Date(`${fecha}T12:00:00Z`);
+    const diasDesdeLunes = (ancla.getUTCDay() + 6) % 7;
+    const lunes = addDays(fecha, -diasDesdeLunes);
+    const domingo = addDays(fecha, 6 - diasDesdeLunes);
+    return {
+      inicio: colombiaDayStartUTC(lunes),
+      fin: colombiaDayEndUTC(domingo),
+    };
+  }
+
+  if (frecuenciaPago === 'QUINCENAL') {
+    const dia = Number(fecha.slice(8, 10));
+    if (dia <= 15) {
+      return {
+        inicio: colombiaDayStartUTC(`${y}-${m}-01`),
+        fin: colombiaDayEndUTC(`${y}-${m}-15`),
+      };
+    }
+    const ultimoDia = new Date(Date.UTC(Number(y), Number(m), 0)).getUTCDate();
+    return {
+      inicio: colombiaDayStartUTC(`${y}-${m}-16`),
+      fin: colombiaDayEndUTC(`${y}-${m}-${ultimoDia}`),
+    };
+  }
+
+  const ultimoDia = new Date(Date.UTC(Number(y), Number(m), 0)).getUTCDate();
+  return {
+    inicio: colombiaDayStartUTC(`${y}-${m}-01`),
+    fin: colombiaDayEndUTC(`${y}-${m}-${ultimoDia}`),
+  };
+}
+
+/**
+ * Períodos de pago VENCIDOS sin liquidar, desde el fin de la última liquidación
+ * hasta hoy (regla del dueño: el sueldo fijo se acumula por período, como en los
+ * sistemas de nómina estándar). Devuelve la LISTA de períodos [{inicio, fin}]
+ * para que la nómina muestre una fila por período (ej. junio, julio).
+ *
+ * - Sin liquidación previa → períodos de los registros pendientes (si los hay);
+ *   si no hay registros → solo el período vigente.
+ * - Con liquidación → períodos desde el fin de la última hasta hoy (inclusive).
+ */
+export function periodosVencidosLista(
   frecuenciaPago: FrecuenciaPago,
   finUltimaLiquidacion: Date | null,
   hoy: string,
-): number {
-  // Sin historial de pagos → solo el período vigente
-  if (!finUltimaLiquidacion) return 1;
-
+  fechasRegistrosPendientes?: Array<Date | string>,
+): Array<{ inicio: Date; fin: Date }> {
   const hoyDate = new Date(`${hoy}T12:00:00Z`);
-  const fin = new Date(finUltimaLiquidacion);
+  const fin = finUltimaLiquidacion ? new Date(finUltimaLiquidacion) : null;
 
-  // Primer día del período siguiente al pagado (exclusivo del pagado)
-  let inicioAcumulacion: Date;
-  if (frecuenciaPago === 'SEMANAL') {
-    // Día siguiente al fin de la última liq
-    inicioAcumulacion = new Date(fin.getTime() + 86_400_000);
-  } else if (frecuenciaPago === 'QUINCENAL') {
-    inicioAcumulacion = new Date(fin.getTime() + 86_400_000);
-  } else {
-    // MENSUAL: primer día del mes siguiente al fin de la última liq
-    inicioAcumulacion = new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth() + 1, 1));
+  // Sin historial → los períodos de los registros pendientes (pueden ser de
+  // semanas/meses anteriores sin liquidar); si no hay registros → el vigente.
+  if (!fin) {
+    if (fechasRegistrosPendientes && fechasRegistrosPendientes.length > 0) {
+      const periodos = new Map<string, { inicio: Date; fin: Date }>();
+      for (const f of fechasRegistrosPendientes) {
+        const d = new Date(f);
+        const fechaStr = getColombiaDateString(new Date(d.getTime() + 12 * 3_600_000));
+        const p = calcularPeriodoCompleto(frecuenciaPago, fechaStr);
+        const key = p.inicio.toISOString();
+        if (!periodos.has(key)) {
+          periodos.set(key, { inicio: p.inicio, fin: p.fin });
+        }
+      }
+      // Ordenar cronológicamente
+      return Array.from(periodos.values()).sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
+    }
+    const vigente = calcularPeriodo(frecuenciaPago, hoy);
+    return [{ inicio: vigente.periodoInicio, fin: vigente.periodoFin }];
   }
 
-  if (inicioAcumulacion > hoyDate) return 1; // la liq cubre hasta hoy (o el futuro)
+  // Primer día del período siguiente al pagado (exclusivo del pagado)
+  let cursor: Date;
+  if (frecuenciaPago === 'SEMANAL' || frecuenciaPago === 'QUINCENAL') {
+    cursor = new Date(fin.getTime() + 86_400_000);
+  } else {
+    cursor = new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth() + 1, 1));
+  }
 
-  // Contar períodos desde inicioAcumulacion hasta hoy
-  let periodos = 0;
-  let cursor = new Date(inicioAcumulacion);
+  if (cursor > hoyDate) return [];
+
+  const periodos: Array<{ inicio: Date; fin: Date }> = [];
   while (cursor <= hoyDate) {
-    periodos++;
+    // Anclar a mediodía UTC para que la conversión a Colombia no retroceda al
+    // día anterior (00:00 UTC − 5h = día previo en COT).
+    const cursorAncla = new Date(cursor.getTime() + 12 * 3_600_000);
+    const fechaCursor = getColombiaDateString(cursorAncla);
+    // El período COMPLETO del cursor (no "hasta hoy"): para períodos vencidos
+    // históricos el fin es el fin natural del período, no la fecha actual.
+    const periodoCursor = calcularPeriodoCompleto(frecuenciaPago, fechaCursor);
+    periodos.push({ inicio: periodoCursor.inicio, fin: periodoCursor.fin });
     if (frecuenciaPago === 'SEMANAL') {
       cursor = new Date(cursor.getTime() + 7 * 86_400_000);
     } else if (frecuenciaPago === 'QUINCENAL') {
-      // Avanzar 15 días (aprox; la quincena es 1-15 / 16-fin de mes)
       const dia = cursor.getUTCDate();
       if (dia <= 15) {
         cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 16));
@@ -147,7 +208,19 @@ export function periodosVencidos(
       cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
     }
   }
-  return Math.max(1, periodos);
+  return periodos;
+}
+
+/**
+ * Períodos de pago VENCIDOS sin liquidar, contados desde el fin de la última
+ * liquidación hasta hoy. Mantiene compatibilidad con el conteo simple.
+ */
+export function periodosVencidos(
+  frecuenciaPago: FrecuenciaPago,
+  finUltimaLiquidacion: Date | null,
+  hoy: string,
+): number {
+  return periodosVencidosLista(frecuenciaPago, finUltimaLiquidacion, hoy).length || 1;
 }
 
 @injectable()
@@ -181,136 +254,98 @@ export class NominaPendienteUseCase {
         continue;
       }
 
-      // Calculate the employee's period based on her payment frequency
-      // (Colombia timezone; MENSUAL keeps the current month semantics)
       const frecuenciaPago: FrecuenciaPago = empleada.frecuenciaPago ?? 'MENSUAL';
-      const { periodoInicio, periodoFin } = calcularPeriodo(frecuenciaPago, getColombiaDateString());
 
-    // Get pending (unpaid) non-anulled registros for this employee
-    let pendingRegistros = allRegistros.filter(
-      (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada && r.estado !== EstadoRegistro.ANULADO,
-    );
-
-    // QUINCENAL/SEMANAL: solo cuentan los registros del período por FECHA DE
-    // NEGOCIO (fechaHora ?? creadoEn para legacy). MENSUAL: comportamiento
-    // actual — todos los no pagados, sin filtro de período.
-    let periodoMostradoInicio = periodoInicio;
-    let periodoMostradoFin = periodoFin;
-    if (frecuenciaPago === 'QUINCENAL' || frecuenciaPago === 'SEMANAL') {
-      const delPeriodo = pendingRegistros.filter((r) => {
-        const fechaNegocio = new Date(r.fechaHora ?? r.creadoEn);
-        return fechaNegocio >= periodoInicio && fechaNegocio <= periodoFin;
-      });
-
-      if (delPeriodo.length > 0) {
-        pendingRegistros = delPeriodo;
-      } else if (pendingRegistros.length > 0) {
-        // NO hay registros en el período vigente, pero la empleada tiene
-        // registros PENDIENTES de períodos anteriores sin liquidar (ej. semana
-        // pasada). Regla del dueño: deben aparecer porque son servicios que
-        // todavía no se liquidan. Se muestra el rango real de esos registros
-        // con bordes de día Colombia (consistentes con el resto del sistema).
-        const fechas = pendingRegistros.map((r) => new Date(r.fechaHora ?? r.creadoEn).getTime());
-        const desde = new Date(Math.min(...fechas));
-        const hasta = new Date(Math.max(...fechas));
-        periodoMostradoInicio = colombiaDayStartUTC(getColombiaDateString(desde));
-        periodoMostradoFin = colombiaDayEndUTC(getColombiaDateString(hasta));
-      } else {
-        pendingRegistros = [];
-      }
-    }
-
-    // Skip only when there is NOTHING liquidable: no pending registros
-    // AND no fixed compensation (sueldoFijo / bonoHorario)
-    if (
-      pendingRegistros.length === 0 &&
-      Number(empleada.sueldoFijo) <= 0 &&
-      Number(empleada.bonoHorario) <= 0
-    ) {
-      continue;
-    }
-
-    // If already liquidated this period, only include registros created AFTER the last liquidation
-    const liquidaciones = await this.liquidacionRepo.findBySalonEmpleadaAndPeriodo(
-      input.salonId,
-      empleada.id,
-      periodoMostradoInicio,
-      periodoMostradoFin,
-    );
-    if (liquidaciones.length > 0) {
-      const ultimaLiq = liquidaciones.sort(
-        (a, b) => new Date(b.creadoEn).getTime() - new Date(a.creadoEn).getTime(),
-      )[0];
-      pendingRegistros = pendingRegistros.filter(
-        (r) => new Date(r.creadoEn) > new Date(ultimaLiq.creadoEn),
+      // Get pending (unpaid) non-anulled registros for this employee
+      let pendingRegistros = allRegistros.filter(
+        (r) => r.usuarioId === empleada.id && !r.estaPagadaEmpleada && r.estado !== EstadoRegistro.ANULADO,
       );
-      if (pendingRegistros.length === 0) {
-        continue; // No new registros since last liquidation
+
+      // Skip only when there is NOTHING liquidable: no pending registros
+      // AND no fixed compensation (sueldoFijo / bonoHorario)
+      if (
+        pendingRegistros.length === 0 &&
+        Number(empleada.sueldoFijo) <= 0 &&
+        Number(empleada.bonoHorario) <= 0
+      ) {
+        continue;
       }
-    }
 
-    const totalComisionesPendientes = pendingRegistros.reduce(
-      (sum, r) => sum + Number(r.comisionCalculada),
-      0,
-    );
-    const totalPropinas = pendingRegistros.reduce(
-      (sum, r) => sum + Number(r.propina),
-      0,
-    );
+      // Última liquidación de la empleada → desde cuándo se debe
+      const liquidacionesHistorial = await this.liquidacionRepo.findBySalonAndEmpleada(
+        input.salonId,
+        empleada.id,
+      );
+      let finUltimaLiquidacion: Date | null = null;
+      if (liquidacionesHistorial.length > 0) {
+        const ultima = liquidacionesHistorial.sort(
+          (a, b) =>
+            new Date(b.fechaHasta ?? b.creadoEn).getTime() -
+            new Date(a.fechaHasta ?? a.creadoEn).getTime(),
+        )[0];
+        finUltimaLiquidacion = ultima.fechaHasta ?? ultima.creadoEn;
+      }
 
-    // Fixed comp: 100% MENSUAL, 50% QUINCENAL, 25% SEMANAL (same factor as LiquidarEmpleada)
-    const factor =
-      frecuenciaPago === 'QUINCENAL'
-        ? FACTOR_FIJO_QUINCENAL
-        : frecuenciaPago === 'SEMANAL'
-          ? FACTOR_FIJO_SEMANAL
-          : FACTOR_FIJO_MENSUAL;
+      // Lista de períodos vencidos (ej. junio, julio, agosto) — UNA FILA POR PERÍODO
+      const periodos = periodosVencidosLista(
+        frecuenciaPago,
+        finUltimaLiquidacion,
+        getColombiaDateString(),
+        pendingRegistros.map((r) => r.fechaHora ?? r.creadoEn),
+      );
 
-    // Regla del dueño: el sueldo fijo SE ACUMULA por períodos vencidos sin
-    // liquidar (como los sistemas de nómina estándar). Se toma la última
-    // liquidación de la empleada (por fin de período) para contar cuántos
-    // períodos pasaron sin pago. Sin historial → solo el vigente.
-    const liquidacionesHistorial = await this.liquidacionRepo.findBySalonAndEmpleada(
-      input.salonId,
-      empleada.id,
-    );
-    let finUltimaLiquidacion: Date | null = null;
-    if (liquidacionesHistorial.length > 0) {
-      const ultima = liquidacionesHistorial.sort(
-        (a, b) =>
-          new Date(b.fechaHasta ?? b.creadoEn).getTime() -
-          new Date(a.fechaHasta ?? a.creadoEn).getTime(),
-      )[0];
-      finUltimaLiquidacion = ultima.fechaHasta ?? ultima.creadoEn;
-    }
-    const periodosVencidosCalc = periodosVencidos(
-      frecuenciaPago,
-      finUltimaLiquidacion,
-      getColombiaDateString(),
-    );
+      // Factor del comp fijo por período (100% MENSUAL, 50% QUINCENAL, 25% SEMANAL)
+      const factor =
+        frecuenciaPago === 'QUINCENAL'
+          ? FACTOR_FIJO_QUINCENAL
+          : frecuenciaPago === 'SEMANAL'
+            ? FACTOR_FIJO_SEMANAL
+            : FACTOR_FIJO_MENSUAL;
 
-    const bonoHorarioPeriodo = Number(empleada.bonoHorario) * factor * periodosVencidosCalc;
-    const sueldoFijoPeriodo = Number(empleada.sueldoFijo) * factor * periodosVencidosCalc;
+      // Filtra registros ya cubiertos por una liquidación posterior (guard anti-doble-pago)
+      if (finUltimaLiquidacion) {
+        pendingRegistros = pendingRegistros.filter(
+          (r) => new Date(r.creadoEn) > new Date(finUltimaLiquidacion),
+        );
+      }
 
-    result.push({
-      empleadaId: empleada.id,
-      nombre: empleada.nombre,
-      totalComisionesPendientes,
-      totalPropinas,
-      bonoHorario: bonoHorarioPeriodo,
-      sueldoFijo: sueldoFijoPeriodo,
-      sueldoFijoMensual: Number(empleada.sueldoFijo),
-      porcentajeComisionServicio: Number(empleada.porcentajeComisionServicio),
-      totalAPagar:
-        totalComisionesPendientes +
-        totalPropinas +
-        bonoHorarioPeriodo +
-        sueldoFijoPeriodo,
-      cantidadRegistros: pendingRegistros.length,
-      periodoInicio: periodoMostradoInicio,
-      periodoFin: periodoMostradoFin,
-      frecuenciaPago,
-    });
+      // Agrupar registros por período y emitir una fila por período
+      for (const periodo of periodos) {
+        const delPeriodo = pendingRegistros.filter((r) => {
+          const fechaNegocio = new Date(r.fechaHora ?? r.creadoEn);
+          return fechaNegocio >= periodo.inicio && fechaNegocio <= periodo.fin;
+        });
+
+        const bonoHorarioPeriodo = Number(empleada.bonoHorario) * factor;
+        const sueldoFijoPeriodo = Number(empleada.sueldoFijo) * factor;
+        const totalComisiones = delPeriodo.reduce((sum, r) => sum + Number(r.comisionCalculada), 0);
+        const totalPropinas = delPeriodo.reduce((sum, r) => sum + Number(r.propina), 0);
+
+        // Una fila solo si el período tiene algo liquidable: registros o comp fijo
+        if (
+          delPeriodo.length === 0 &&
+          Number(empleada.sueldoFijo) <= 0 &&
+          Number(empleada.bonoHorario) <= 0
+        ) {
+          continue;
+        }
+
+        result.push({
+          empleadaId: empleada.id,
+          nombre: empleada.nombre,
+          totalComisionesPendientes: totalComisiones,
+          totalPropinas,
+          bonoHorario: bonoHorarioPeriodo,
+          sueldoFijo: sueldoFijoPeriodo,
+          sueldoFijoMensual: Number(empleada.sueldoFijo),
+          porcentajeComisionServicio: Number(empleada.porcentajeComisionServicio),
+          totalAPagar: totalComisiones + totalPropinas + bonoHorarioPeriodo + sueldoFijoPeriodo,
+          cantidadRegistros: delPeriodo.length,
+          periodoInicio: periodo.inicio,
+          periodoFin: periodo.fin,
+          frecuenciaPago,
+        });
+      }
     }
 
     return result;

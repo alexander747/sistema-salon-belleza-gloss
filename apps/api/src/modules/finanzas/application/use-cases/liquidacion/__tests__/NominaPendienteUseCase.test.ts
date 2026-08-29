@@ -186,8 +186,9 @@ describe('NominaPendienteUseCase', () => {
     mockRegistroRepo.findBySalon.mockResolvedValue([
       makeRegistro({ id: 1, usuarioId: 8, comisionCalculada: 30000, creadoEn: new Date('2026-08-01T10:00:00') }),
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
-      { id: 10, creadoEn: new Date('2026-08-10T10:00:00') },
+    // Última liquidación cubre todo el período → no quedan registros nuevos
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([
+      { id: 10, fechaHasta: new Date('2026-08-31T05:00:00.000Z'), creadoEn: new Date('2026-08-10T10:00:00') },
     ]);
 
     const result = await useCase.execute({ salonId: 1 });
@@ -202,8 +203,9 @@ describe('NominaPendienteUseCase', () => {
     mockRegistroRepo.findBySalon.mockResolvedValue([
       makeRegistro({ id: 1, usuarioId: 9, comisionCalculada: 30000, creadoEn: new Date('2026-08-15T10:00:00') }),
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
-      { id: 11, creadoEn: new Date('2026-08-10T10:00:00') },
+    // Última liquidación cubre hasta fin de julio → el registro del 15/08 (agosto) es nuevo
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([
+      { id: 11, fechaHasta: new Date('2026-07-31T05:00:00.000Z'), creadoEn: new Date('2026-07-31T12:00:00') },
     ]);
 
     const result = await useCase.execute({ salonId: 1 });
@@ -232,7 +234,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
     vi.useRealTimers();
   });
 
-  it('QUINCENAL día 10: período [1,15], comp fijo al 50% y registros filtrados por quincena', async () => {    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08
+  it('QUINCENAL: una fila por quincena — el registro del 20/08 cae en su propia fila (16-31)', async () => {    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({
         id: 1,
@@ -246,32 +248,33 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
       makeRegistro({ id: 1, usuarioId: 1, comisionCalculada: 10000, propina: 2000, creadoEn: new Date('2026-08-05T10:00:00') }),
       makeRegistro({ id: 2, usuarioId: 1, comisionCalculada: 30000, creadoEn: new Date('2026-08-20T10:00:00') }),
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
-    expect(result).toHaveLength(1);
+    // Una fila por quincena: 1-15 (registro 05/08) y 16-31 (registro 20/08)
+    expect(result).toHaveLength(2);
     expect(result[0]).toEqual(
       expect.objectContaining({
         nombre: 'Q1',
-        totalComisionesPendientes: 10000, // el registro del 20/08 queda fuera de la quincena 1-15
+        totalComisionesPendientes: 10000,
         totalPropinas: 2000,
-        sueldoFijo: 100000, // 50% de 200000
-        sueldoFijoMensual: 200000,
-        bonoHorario: 25000, // 50% de 50000
-        totalAPagar: 137000, // 10000 + 2000 + 100000 + 25000
+        sueldoFijo: 100000, // 50% de 200000 en esta quincena
+        bonoHorario: 25000,
         cantidadRegistros: 1,
         periodoInicio: colombiaDayStartUTC('2026-08-01'),
         periodoFin: colombiaDayEndUTC('2026-08-15'),
         frecuenciaPago: 'QUINCENAL',
       }),
     );
-    // El guard anti-doble-pago consulta el período de la empleada, no el mes global
-    expect(mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo).toHaveBeenCalledWith(
-      1,
-      1,
-      colombiaDayStartUTC('2026-08-01'),
-      colombiaDayEndUTC('2026-08-15'),
+    expect(result[1]).toEqual(
+      expect.objectContaining({
+        nombre: 'Q1',
+        totalComisionesPendientes: 30000,
+        cantidadRegistros: 1,
+        periodoInicio: colombiaDayStartUTC('2026-08-16'),
+        frecuenciaPago: 'QUINCENAL',
+      }),
     );
   });
 
@@ -391,7 +394,6 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
     mockRegistroRepo.findBySalon.mockResolvedValue([
       makeRegistro({ id: 3, usuarioId: 2, comisionCalculada: 40000, creadoEn: new Date('2026-08-18T10:00:00') }),
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
@@ -408,15 +410,9 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         frecuenciaPago: 'QUINCENAL',
       }),
     );
-    expect(mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo).toHaveBeenCalledWith(
-      1,
-      2,
-      colombiaDayStartUTC('2026-08-16'),
-      colombiaDayEndUTC('2026-08-31'),
-    );
   });
 
-  it('MENSUAL día 10: período [1, hoy], comp fijo al 100% y registros NO filtrados por período', async () => {
+  it('MENSUAL: registros de períodos anteriores sin liquidar aparecen en su propia fila', async () => {
     vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({
@@ -427,11 +423,11 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         bonoHorario: 50000,
       }),
     ]);
-    // Registro del mes ANTERIOR: para MENSUAL sigue contando (comportamiento actual)
+    // Registro del mes ANTERIOR (julio) sin liquidar → fila de julio
     mockRegistroRepo.findBySalon.mockResolvedValue([
       makeRegistro({ id: 4, usuarioId: 3, comisionCalculada: 15000, creadoEn: new Date('2026-07-25T10:00:00') }),
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
@@ -440,13 +436,13 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
       expect.objectContaining({
         nombre: 'M1',
         totalComisionesPendientes: 15000,
-        sueldoFijo: 200000, // 100% — sin cambios
+        sueldoFijo: 200000, // 100%
         sueldoFijoMensual: 200000,
         bonoHorario: 50000,
-        totalAPagar: 265000, // 15000 + 200000 + 50000
-        cantidadRegistros: 1, // el registro viejo NO se filtra
-        periodoInicio: colombiaDayStartUTC('2026-08-01'),
-        periodoFin: colombiaDayEndUTC('2026-08-10'),
+        totalAPagar: 265000,
+        cantidadRegistros: 1,
+        // El registro es de julio → su fila es el período de julio
+        periodoInicio: colombiaDayStartUTC('2026-07-01'),
         frecuenciaPago: 'MENSUAL',
       }),
     );
@@ -504,7 +500,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
     );
   });
 
-  it('SEMANAL filtra registros fuera de la semana y el guard consulta la semana actual', async () => {
+  it('SEMANAL: una fila por semana — el registro del 19/08 cae en su propia semana', async () => {
     vi.setSystemTime(new Date('2026-08-13T12:00:00Z')); // 07:00 COT = jueves 13/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({
@@ -516,28 +512,31 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       }),
     ]);
     mockRegistroRepo.findBySalon.mockResolvedValue([
-      makeRegistro({ id: 1, usuarioId: 10, comisionCalculada: 30000, propina: 5000, creadoEn: new Date('2026-08-11T10:00:00') }), // lunes, dentro
-      makeRegistro({ id: 2, usuarioId: 10, comisionCalculada: 20000, creadoEn: new Date('2026-08-19T10:00:00') }), // miércoles siguiente, fuera
+      makeRegistro({ id: 1, usuarioId: 10, comisionCalculada: 30000, propina: 5000, creadoEn: new Date('2026-08-11T10:00:00') }), // lunes 10-16
+      makeRegistro({ id: 2, usuarioId: 10, comisionCalculada: 20000, creadoEn: new Date('2026-08-19T10:00:00') }), // semana 17-23
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
-    expect(result).toHaveLength(1);
+    // Una fila por semana: 10-16 (reg 1) y 17-23 (reg 2)
+    expect(result).toHaveLength(2);
     expect(result[0]).toEqual(
       expect.objectContaining({
-        totalComisionesPendientes: 30000, // el registro del 19/08 queda fuera de la semana
+        totalComisionesPendientes: 30000,
         totalPropinas: 5000,
-        sueldoFijoMensual: 200000,
         cantidadRegistros: 1,
-        totalAPagar: 97500, // 30000 + 5000 + 50000 + 12500
+        periodoInicio: colombiaDayStartUTC('2026-08-10'),
+        periodoFin: colombiaDayEndUTC('2026-08-16'),
       }),
     );
-    expect(mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo).toHaveBeenCalledWith(
-      1,
-      10,
-      colombiaDayStartUTC('2026-08-10'),
-      colombiaDayEndUTC('2026-08-16'),
+    expect(result[1]).toEqual(
+      expect.objectContaining({
+        totalComisionesPendientes: 20000,
+        cantidadRegistros: 1,
+        periodoInicio: colombiaDayStartUTC('2026-08-17'),
+        periodoFin: colombiaDayEndUTC('2026-08-23'),
+      }),
     );
   });
 
@@ -581,20 +580,14 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       }),
     ]);
     mockRegistroRepo.findBySalon.mockResolvedValue([]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
-      { id: 30, creadoEn: new Date('2026-08-12T10:00:00') },
+    // Última liquidación cubre toda la semana actual → nada pendiente
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([
+      { id: 30, fechaHasta: new Date('2026-08-16T05:00:00.000Z'), creadoEn: new Date('2026-08-12T10:00:00') },
     ]);
 
     const result = await useCase.execute({ salonId: 1 });
 
     expect(result).toHaveLength(0);
-    // El guard anti-doble-pago consulta la SEMANA actual, no el mes global
-    expect(mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo).toHaveBeenCalledWith(
-      1,
-      12,
-      colombiaDayStartUTC('2026-08-10'),
-      colombiaDayEndUTC('2026-08-16'),
-    );
   });
 
   it('SEMANAL con registros pendientes de la semana ANTERIOR (sin liquidar): aparece con el rango real (regla dueño)', async () => {
@@ -611,7 +604,6 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       makeRegistro({ id: 1, usuarioId: 13, comisionCalculada: 422500, creadoEn: new Date('2026-08-18T10:00:00'), fechaHora: new Date('2026-08-18T10:00:00') }),
       makeRegistro({ id: 2, usuarioId: 13, comisionCalculada: 50000, creadoEn: new Date('2026-08-22T10:00:00'), fechaHora: new Date('2026-08-22T10:00:00') }),
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
@@ -621,10 +613,9 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
         nombre: 'S4',
         totalComisionesPendientes: 472500, // 422500 + 50000 — los registros atrasados SÍ aparecen
         cantidadRegistros: 2,
-        // El período mostrado es el rango real de los registros (semana pasada),
-        // no la semana vigente vacía
-        periodoInicio: colombiaDayStartUTC('2026-08-18'),
-        periodoFin: colombiaDayEndUTC('2026-08-22'),
+        // Ambos registros caen en la misma semana 17-23 → una sola fila con ese período
+        periodoInicio: colombiaDayStartUTC('2026-08-17'),
+        periodoFin: colombiaDayEndUTC('2026-08-23'),
       }),
     );
   });
@@ -661,12 +652,13 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
 
     const result = await useCase.execute({ salonId: 1 });
 
-    expect(result[0]).toEqual(
-      expect.objectContaining({
-        nombre: 'M2',
-        sueldoFijo: 1800000, // 600000 × 3 (junio + julio + agosto)
-        sueldoFijoMensual: 600000,
-      }),
-    );
+    // UNA FILA POR MES: junio, julio y agosto, cada uno con su sueldo de 600.000
+    expect(result).toHaveLength(3);
+    result.forEach((fila) => {
+      expect(fila.nombre).toBe('M2');
+      expect(fila.sueldoFijo).toBe(600000); // cada mes su propio sueldo
+      expect(fila.sueldoFijoMensual).toBe(600000);
+    });
+    expect(result.map((f) => f.periodoInicio.getUTCMonth())).toEqual([5, 6, 7]); // jun, jul, ago
   });
 });
