@@ -91,6 +91,65 @@ export function calcularPeriodo(
   };
 }
 
+/**
+ * Períodos de pago VENCIDOS sin liquidar, contados desde el fin de la última
+ * liquidación hasta hoy (regla del dueño: el sueldo fijo también se acumula,
+ * como lo hacen los sistemas de nómina estándar).
+ *
+ * - Sin liquidación previa → 1 (solo el período vigente; no se inventa deuda
+ *   vieja porque no hay registro de cuándo empezó a acumular).
+ * - Con liquidación → cuenta los períodos completos desde su fin + el vigente.
+ *   Ej: última liq pagada hasta 31/07, hoy 28/08, MENSUAL → 2 (agosto vigente
+ *   + el siguiente no arrancó) → en realidad 1... el cálculo real: inicio de
+ *   acumulación = 01/08, cursor 01/08 ≤ 28/08 → 1 período. Correcto.
+ */
+export function periodosVencidos(
+  frecuenciaPago: FrecuenciaPago,
+  finUltimaLiquidacion: Date | null,
+  hoy: string,
+): number {
+  // Sin historial de pagos → solo el período vigente
+  if (!finUltimaLiquidacion) return 1;
+
+  const hoyDate = new Date(`${hoy}T12:00:00Z`);
+  const fin = new Date(finUltimaLiquidacion);
+
+  // Primer día del período siguiente al pagado (exclusivo del pagado)
+  let inicioAcumulacion: Date;
+  if (frecuenciaPago === 'SEMANAL') {
+    // Día siguiente al fin de la última liq
+    inicioAcumulacion = new Date(fin.getTime() + 86_400_000);
+  } else if (frecuenciaPago === 'QUINCENAL') {
+    inicioAcumulacion = new Date(fin.getTime() + 86_400_000);
+  } else {
+    // MENSUAL: primer día del mes siguiente al fin de la última liq
+    inicioAcumulacion = new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth() + 1, 1));
+  }
+
+  if (inicioAcumulacion > hoyDate) return 1; // la liq cubre hasta hoy (o el futuro)
+
+  // Contar períodos desde inicioAcumulacion hasta hoy
+  let periodos = 0;
+  let cursor = new Date(inicioAcumulacion);
+  while (cursor <= hoyDate) {
+    periodos++;
+    if (frecuenciaPago === 'SEMANAL') {
+      cursor = new Date(cursor.getTime() + 7 * 86_400_000);
+    } else if (frecuenciaPago === 'QUINCENAL') {
+      // Avanzar 15 días (aprox; la quincena es 1-15 / 16-fin de mes)
+      const dia = cursor.getUTCDate();
+      if (dia <= 15) {
+        cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 16));
+      } else {
+        cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+      }
+    } else {
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    }
+  }
+  return Math.max(1, periodos);
+}
+
 @injectable()
 export class NominaPendienteUseCase {
   constructor(
@@ -206,8 +265,32 @@ export class NominaPendienteUseCase {
         : frecuenciaPago === 'SEMANAL'
           ? FACTOR_FIJO_SEMANAL
           : FACTOR_FIJO_MENSUAL;
-    const bonoHorarioPeriodo = Number(empleada.bonoHorario) * factor;
-    const sueldoFijoPeriodo = Number(empleada.sueldoFijo) * factor;
+
+    // Regla del dueño: el sueldo fijo SE ACUMULA por períodos vencidos sin
+    // liquidar (como los sistemas de nómina estándar). Se toma la última
+    // liquidación de la empleada (por fin de período) para contar cuántos
+    // períodos pasaron sin pago. Sin historial → solo el vigente.
+    const liquidacionesHistorial = await this.liquidacionRepo.findBySalonAndEmpleada(
+      input.salonId,
+      empleada.id,
+    );
+    let finUltimaLiquidacion: Date | null = null;
+    if (liquidacionesHistorial.length > 0) {
+      const ultima = liquidacionesHistorial.sort(
+        (a, b) =>
+          new Date(b.fechaHasta ?? b.creadoEn).getTime() -
+          new Date(a.fechaHasta ?? a.creadoEn).getTime(),
+      )[0];
+      finUltimaLiquidacion = ultima.fechaHasta ?? ultima.creadoEn;
+    }
+    const periodosVencidosCalc = periodosVencidos(
+      frecuenciaPago,
+      finUltimaLiquidacion,
+      getColombiaDateString(),
+    );
+
+    const bonoHorarioPeriodo = Number(empleada.bonoHorario) * factor * periodosVencidosCalc;
+    const sueldoFijoPeriodo = Number(empleada.sueldoFijo) * factor * periodosVencidosCalc;
 
     result.push({
       empleadaId: empleada.id,

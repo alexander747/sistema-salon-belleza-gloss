@@ -16,6 +16,7 @@ const mockRegistroRepo = {
 };
 const mockLiquidacionRepo = {
   findBySalonEmpleadaAndPeriodo: vi.fn(),
+  findBySalonAndEmpleada: vi.fn(),
 };
 
 const makeEmpleada = (overrides: Record<string, unknown> = {}) => ({
@@ -55,6 +56,8 @@ describe('NominaPendienteUseCase', () => {
       mockRegistroRepo as never,
       mockLiquidacionRepo as never,
     );
+    // Default: sin historial de liquidaciones → el sueldo fijo cuenta 1 período
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
   });
 
   it('busca todos los roles activos del salón (rol omitido en findBySalon)', async () => {
@@ -622,6 +625,47 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
         // no la semana vigente vacía
         periodoInicio: colombiaDayStartUTC('2026-08-18'),
         periodoFin: colombiaDayEndUTC('2026-08-22'),
+      }),
+    );
+  });
+
+  it('MENSUAL sin historial de pagos: sueldo fijo cuenta 1 período (no inventa deuda vieja)', async () => {
+    vi.setSystemTime(new Date('2026-08-28T12:00:00Z')); // 07:00 COT = 28/08
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({ id: 14, nombre: 'M1', frecuenciaPago: 'MENSUAL', sueldoFijo: 600000 }),
+    ]);
+    mockRegistroRepo.findBySalon.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        nombre: 'M1',
+        sueldoFijo: 600000, // 1 período (sin historial)
+        sueldoFijoMensual: 600000,
+      }),
+    );
+  });
+
+  it('MENSUAL con última liquidación hace 2 meses: sueldo fijo se ACUMULA × 3 (regla dueño)', async () => {
+    vi.setSystemTime(new Date('2026-08-28T12:00:00Z')); // 07:00 COT = 28/08
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({ id: 15, nombre: 'M2', frecuenciaPago: 'MENSUAL', sueldoFijo: 600000 }),
+    ]);
+    mockRegistroRepo.findBySalon.mockResolvedValue([]);
+    // Última liquidación pagada hasta 31/05 → junio, julio y agosto vencidos
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([
+      { id: 40, fechaHasta: new Date('2026-05-31T05:00:00.000Z'), creadoEn: new Date('2026-05-31T12:00:00') },
+    ]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        nombre: 'M2',
+        sueldoFijo: 1800000, // 600000 × 3 (junio + julio + agosto)
+        sueldoFijoMensual: 600000,
       }),
     );
   });

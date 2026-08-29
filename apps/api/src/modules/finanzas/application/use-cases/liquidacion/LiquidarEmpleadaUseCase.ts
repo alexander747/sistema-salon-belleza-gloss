@@ -111,6 +111,9 @@ export class LiquidarEmpleadaUseCase {
     );
     // Fixed comp: 100% for MENSUAL, 50% for QUINCENAL, 25% for SEMANAL.
     // MUST match NominaPendienteUseCase so the historial never drifts from the UI.
+    // NOTA: al liquidar se paga SOLO el período elegido (factor simple). La
+    // acumulación de períodos vencidos la muestra la nómina pendiente (UI); el
+    // dueño elige el rango a liquidar en el modal.
     const frecuencia = empleada.frecuenciaPago as FrecuenciaPago | undefined;
     const factorFijo =
       frecuencia === 'QUINCENAL' ? 0.5 : frecuencia === 'SEMANAL' ? 0.25 : 1;
