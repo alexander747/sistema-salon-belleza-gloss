@@ -593,4 +593,36 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       colombiaDayEndUTC('2026-08-16'),
     );
   });
+
+  it('SEMANAL con registros pendientes de la semana ANTERIOR (sin liquidar): aparece con el rango real (regla dueño)', async () => {
+    vi.setSystemTime(new Date('2026-08-28T12:00:00Z')); // 07:00 COT = viernes 28/08
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({
+        id: 13,
+        nombre: 'S4',
+        frecuenciaPago: 'SEMANAL',
+      }),
+    ]);
+    // Registros de la semana pasada 17-23/08, NO liquidados; la semana vigente es 24-30/08
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      makeRegistro({ id: 1, usuarioId: 13, comisionCalculada: 422500, creadoEn: new Date('2026-08-18T10:00:00'), fechaHora: new Date('2026-08-18T10:00:00') }),
+      makeRegistro({ id: 2, usuarioId: 13, comisionCalculada: 50000, creadoEn: new Date('2026-08-22T10:00:00'), fechaHora: new Date('2026-08-22T10:00:00') }),
+    ]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        nombre: 'S4',
+        totalComisionesPendientes: 472500, // 422500 + 50000 — los registros atrasados SÍ aparecen
+        cantidadRegistros: 2,
+        // El período mostrado es el rango real de los registros (semana pasada),
+        // no la semana vigente vacía
+        periodoInicio: colombiaDayStartUTC('2026-08-18'),
+        periodoFin: colombiaDayEndUTC('2026-08-22'),
+      }),
+    );
+  });
 });

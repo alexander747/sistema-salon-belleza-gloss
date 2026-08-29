@@ -135,13 +135,30 @@ export class NominaPendienteUseCase {
     // QUINCENAL/SEMANAL: solo cuentan los registros del período por FECHA DE
     // NEGOCIO (fechaHora ?? creadoEn para legacy). MENSUAL: comportamiento
     // actual — todos los no pagados, sin filtro de período.
+    let periodoMostradoInicio = periodoInicio;
+    let periodoMostradoFin = periodoFin;
     if (frecuenciaPago === 'QUINCENAL' || frecuenciaPago === 'SEMANAL') {
-      pendingRegistros = pendingRegistros.filter(
-        (r) => {
-          const fechaNegocio = new Date(r.fechaHora ?? r.creadoEn);
-          return fechaNegocio >= periodoInicio && fechaNegocio <= periodoFin;
-        },
-      );
+      const delPeriodo = pendingRegistros.filter((r) => {
+        const fechaNegocio = new Date(r.fechaHora ?? r.creadoEn);
+        return fechaNegocio >= periodoInicio && fechaNegocio <= periodoFin;
+      });
+
+      if (delPeriodo.length > 0) {
+        pendingRegistros = delPeriodo;
+      } else if (pendingRegistros.length > 0) {
+        // NO hay registros en el período vigente, pero la empleada tiene
+        // registros PENDIENTES de períodos anteriores sin liquidar (ej. semana
+        // pasada). Regla del dueño: deben aparecer porque son servicios que
+        // todavía no se liquidan. Se muestra el rango real de esos registros
+        // con bordes de día Colombia (consistentes con el resto del sistema).
+        const fechas = pendingRegistros.map((r) => new Date(r.fechaHora ?? r.creadoEn).getTime());
+        const desde = new Date(Math.min(...fechas));
+        const hasta = new Date(Math.max(...fechas));
+        periodoMostradoInicio = colombiaDayStartUTC(getColombiaDateString(desde));
+        periodoMostradoFin = colombiaDayEndUTC(getColombiaDateString(hasta));
+      } else {
+        pendingRegistros = [];
+      }
     }
 
     // Skip only when there is NOTHING liquidable: no pending registros
@@ -158,8 +175,8 @@ export class NominaPendienteUseCase {
     const liquidaciones = await this.liquidacionRepo.findBySalonEmpleadaAndPeriodo(
       input.salonId,
       empleada.id,
-      periodoInicio,
-      periodoFin,
+      periodoMostradoInicio,
+      periodoMostradoFin,
     );
     if (liquidaciones.length > 0) {
       const ultimaLiq = liquidaciones.sort(
@@ -207,8 +224,8 @@ export class NominaPendienteUseCase {
         bonoHorarioPeriodo +
         sueldoFijoPeriodo,
       cantidadRegistros: pendingRegistros.length,
-      periodoInicio,
-      periodoFin,
+      periodoInicio: periodoMostradoInicio,
+      periodoFin: periodoMostradoFin,
       frecuenciaPago,
     });
     }
