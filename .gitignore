@@ -15,3 +15,4 @@ apps/api/coverage/
 # Playwright E2E artifacts
 apps/pos-dashboard/test-results/
 apps/pos-dashboard/playwright-report/
+backups/
