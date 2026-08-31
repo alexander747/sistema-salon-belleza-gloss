@@ -259,8 +259,9 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         nombre: 'Q1',
         totalComisionesPendientes: 10000,
         totalPropinas: 2000,
-        sueldoFijo: 100000, // 50% de 200000 en esta quincena
-        bonoHorario: 25000,
+        // Prorrateo por días: 200.000 × 15/31 (agosto tiene 31 días)
+        sueldoFijo: 96774,
+        bonoHorario: 24194,
         cantidadRegistros: 1,
         periodoInicio: colombiaDayStartUTC('2026-08-01'),
         periodoFin: colombiaDayEndUTC('2026-08-15'),
@@ -278,7 +279,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
     );
   });
 
-  it('QUINCENAL sin registros: paga el 50% del comp fijo (totalAPagar=125000)', async () => {
+  it('QUINCENAL sin registros: paga el comp fijo prorrateado por días (quincena 15/31)', async () => {
     vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({
@@ -290,7 +291,7 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
       }),
     ]);
     mockRegistroRepo.findBySalon.mockResolvedValue([]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
@@ -300,10 +301,11 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
         nombre: 'Q0',
         totalComisionesPendientes: 0,
         totalPropinas: 0,
-        sueldoFijo: 100000, // 50% de 200000
+        // Prorrateo por días: 200.000 × 15/31 = 96.774
+        sueldoFijo: 96774,
         sueldoFijoMensual: 200000,
-        bonoHorario: 25000, // 50% de 50000
-        totalAPagar: 125000,
+        bonoHorario: 24194, // 50.000 × 15/31
+        totalAPagar: 120968,
         cantidadRegistros: 0,
         frecuenciaPago: 'QUINCENAL',
       }),
@@ -402,9 +404,10 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
       expect.objectContaining({
         nombre: 'Q2',
         totalComisionesPendientes: 40000,
-        sueldoFijo: 100000, // 50% de 200000
+        // Prorrateo por días: 200.000 × 16/31 (quincena 16-31 de agosto, 31 días)
+        sueldoFijo: 103226,
         sueldoFijoMensual: 200000,
-        totalAPagar: 140000,
+        totalAPagar: 143226,
         periodoInicio: colombiaDayStartUTC('2026-08-16'),
         periodoFin: colombiaDayEndUTC('2026-08-31'),
         frecuenciaPago: 'QUINCENAL',
@@ -466,7 +469,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
     vi.useRealTimers();
   });
 
-  it('SEMANAL jueves 13/08: período [lunes 10, domingo 16] y comp fijo al 25% (totalAPagar=62500)', async () => {
+  it('SEMANAL jueves 13/08: período [lunes 10, domingo 16] y comp fijo prorrateado por días', async () => {
     vi.setSystemTime(new Date('2026-08-13T12:00:00Z')); // 07:00 COT = jueves 13/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({
@@ -478,7 +481,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       }),
     ]);
     mockRegistroRepo.findBySalon.mockResolvedValue([]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
@@ -488,10 +491,11 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
         nombre: 'S1',
         totalComisionesPendientes: 0,
         totalPropinas: 0,
-        sueldoFijo: 50000, // 25% de 200000
+        // Prorrateo por días: 200.000 × 7/31 (semana 10-16 de agosto, 31 días)
+        sueldoFijo: 45161,
         sueldoFijoMensual: 200000,
-        bonoHorario: 12500, // 25% de 50000
-        totalAPagar: 62500,
+        bonoHorario: 11290, // 50.000 × 7/31
+        totalAPagar: 56451,
         cantidadRegistros: 0,
         periodoInicio: colombiaDayStartUTC('2026-08-10'),
         periodoFin: colombiaDayEndUTC('2026-08-16'),
@@ -551,7 +555,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
       }),
     ]);
     mockRegistroRepo.findBySalon.mockResolvedValue([]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
 
     const result = await useCase.execute({ salonId: 1 });
 
@@ -559,9 +563,10 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
     expect(result[0]).toEqual(
       expect.objectContaining({
         nombre: 'S2',
-        sueldoFijo: 50000, // 25% de 200000
+        // Prorrateo por días: 200.000 × 7/31
+        sueldoFijo: 45161,
         sueldoFijoMensual: 200000,
-        totalAPagar: 50000,
+        totalAPagar: 45161,
         periodoInicio: colombiaDayStartUTC('2026-08-17'),
         periodoFin: colombiaDayEndUTC('2026-08-23'),
         frecuenciaPago: 'SEMANAL',
@@ -620,7 +625,7 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
     );
   });
 
-  it('MENSUAL sin historial de pagos: sueldo fijo cuenta 1 período (no inventa deuda vieja)', async () => {
+  it('MENSUAL sin historial de pagos: sueldo fijo del período vigente prorrateado por días', async () => {
     vi.setSystemTime(new Date('2026-08-28T12:00:00Z')); // 07:00 COT = 28/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({ id: 14, nombre: 'M1', frecuenciaPago: 'MENSUAL', sueldoFijo: 600000 }),
@@ -633,7 +638,8 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
     expect(result[0]).toEqual(
       expect.objectContaining({
         nombre: 'M1',
-        sueldoFijo: 600000, // 1 período (sin historial)
+        // Período vigente [01/08, hoy 28/08] = 28 días de 31 → 600.000 × 28/31
+        sueldoFijo: 541935,
         sueldoFijoMensual: 600000,
       }),
     );

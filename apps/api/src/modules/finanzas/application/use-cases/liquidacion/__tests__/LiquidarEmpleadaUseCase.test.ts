@@ -76,8 +76,8 @@ const makeRegistro = (overrides: Record<string, unknown> = {}) => ({
 const baseInput = {
   salonId: 1,
   usuarioId: 2,
-  periodoInicio: new Date('2026-08-01'),
-  periodoFin: new Date('2026-08-31'),
+  periodoInicio: new Date('2026-08-01T05:00:00.000Z'), // borde Colombia: 1° de agosto
+  periodoFin: new Date('2026-09-01T05:00:00.000Z'), // borde Colombia: fin agosto (exclusivo) = 31 días
 };
 
 describe('LiquidarEmpleadaUseCase', () => {
@@ -420,54 +420,66 @@ describe('LiquidarEmpleadaUseCase', () => {
     expect(result).toEqual(expect.objectContaining({ id: 14, totalPagado: 230000 }));
   });
 
-  it('liquida a empleada QUINCENAL registrando el 50% del comp fijo (coherente con NominaPendiente)', async () => {
+  it('liquida a empleada QUINCENAL prorrateando el comp fijo por días del período (coherente con NominaPendiente)', async () => {
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, frecuenciaPago: 'QUINCENAL', sueldoFijo: 200000, bonoHorario: 50000 }),
     );
     mockRegistroRepo.search.mockResolvedValue([]);
     mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
     mockLiquidacionRepo.create.mockResolvedValue({ id: 20 });
-    mockLiquidacionRepo.findById.mockResolvedValue({ id: 20, totalPagado: 125000 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 20, totalPagado: 120968 });
 
-    const result = await useCase.execute(baseInput);
+    // Quincena 1-15 de agosto (15 días de 31) — bordes Colombia (05:00 UTC)
+    const result = await useCase.execute({
+      ...baseInput,
+      periodoInicio: new Date('2026-08-01T05:00:00.000Z'),
+      periodoFin: new Date('2026-08-16T05:00:00.000Z'),
+    });
 
     expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         totalComisiones: 0,
         totalPropinas: 0,
-        sueldoFijo: 100000, // 50% de 200000
-        bonoHorario: 25000, // 50% de 50000
-        totalPagado: 125000,
+        // 200.000 × 15/31 = 96.774; 50.000 × 15/31 = 24.194
+        sueldoFijo: 96774,
+        bonoHorario: 24194,
+        totalPagado: 120968,
         estado: 'PAGADA',
       }),
       expect.anything(),
     );
-    expect(result).toEqual(expect.objectContaining({ id: 20, totalPagado: 125000 }));
+    expect(result).toEqual(expect.objectContaining({ id: 20, totalPagado: 120968 }));
   });
 
-  it('liquida a empleada SEMANAL registrando el 25% del comp fijo (coherente con NominaPendiente)', async () => {
+  it('liquida a empleada SEMANAL prorrateando el comp fijo por días del período (coherente con NominaPendiente)', async () => {
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, frecuenciaPago: 'SEMANAL', sueldoFijo: 200000, bonoHorario: 50000 }),
     );
     mockRegistroRepo.search.mockResolvedValue([]);
     mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
     mockLiquidacionRepo.create.mockResolvedValue({ id: 30 });
-    mockLiquidacionRepo.findById.mockResolvedValue({ id: 30, totalPagado: 62500 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 30, totalPagado: 56451 });
 
-    const result = await useCase.execute(baseInput);
+    // Semana 10-16 de agosto (7 días de 31) — bordes Colombia (05:00 UTC)
+    const result = await useCase.execute({
+      ...baseInput,
+      periodoInicio: new Date('2026-08-10T05:00:00.000Z'),
+      periodoFin: new Date('2026-08-17T05:00:00.000Z'),
+    });
 
     expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         totalComisiones: 0,
         totalPropinas: 0,
-        sueldoFijo: 50000, // 25% de 200000
-        bonoHorario: 12500, // 25% de 50000
-        totalPagado: 62500,
+        // 200.000 × 7/31 = 45.161; 50.000 × 7/31 = 11.290
+        sueldoFijo: 45161,
+        bonoHorario: 11290,
+        totalPagado: 56451,
         estado: 'PAGADA',
       }),
       expect.anything(),
     );
-    expect(result).toEqual(expect.objectContaining({ id: 30, totalPagado: 62500 }));
+    expect(result).toEqual(expect.objectContaining({ id: 30, totalPagado: 56451 }));
   });
 
   it('hace rollback y re-lanza el error cuando falla la creación dentro de la transacción', async () => {

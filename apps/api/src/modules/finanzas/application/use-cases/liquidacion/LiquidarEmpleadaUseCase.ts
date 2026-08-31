@@ -1,5 +1,4 @@
 import { injectable, inject } from 'tsyringe';
-import { type FrecuenciaPago } from '@pos-final/types';
 import { AppDataSource } from '../../../../../shared/database';
 import { UnprocessableEntityError, ValidationError } from '../../../../../shared/errors';
 import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
@@ -109,16 +108,20 @@ export class LiquidarEmpleadaUseCase {
       (sum, r) => sum + Number(r.propina),
       0,
     );
-    // Fixed comp: 100% for MENSUAL, 50% for QUINCENAL, 25% for SEMANAL.
-    // MUST match NominaPendienteUseCase so the historial never drifts from the UI.
-    // NOTA: al liquidar se paga SOLO el período elegido (factor simple). La
-    // acumulación de períodos vencidos la muestra la nómina pendiente (UI); el
-    // dueño elige el rango a liquidar en el modal.
-    const frecuencia = empleada.frecuenciaPago as FrecuenciaPago | undefined;
-    const factorFijo =
-      frecuencia === 'QUINCENAL' ? 0.5 : frecuencia === 'SEMANAL' ? 0.25 : 1;
-    const bonoHorario = Number(empleada.bonoHorario) * factorFijo;
-    const sueldoFijo = Number(empleada.sueldoFijo) * factorFijo;
+    // Comp fijo PRORRATEADO POR DÍAS (estándar industria, divisor días del mes):
+    // salario diario = mensual ÷ días del mes; el período paga salario diario ×
+    // días del período. MUST match NominaPendienteUseCase so the historial never
+    // drifts from the UI. El dueño elige el rango a liquidar en el modal.
+    const MS_DIA = 86_400_000;
+    const diasPeriodo = Math.max(
+      1,
+      Math.round((input.periodoFin.getTime() - input.periodoInicio.getTime()) / MS_DIA),
+    );
+    const y = input.periodoInicio.getUTCFullYear();
+    const m = input.periodoInicio.getUTCMonth(); // 0-based
+    const diasMes = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    const bonoHorario = diasMes > 0 ? Math.round((Number(empleada.bonoHorario) * diasPeriodo) / diasMes) : 0;
+    const sueldoFijo = diasMes > 0 ? Math.round((Number(empleada.sueldoFijo) * diasPeriodo) / diasMes) : 0;
     const calculatedTotal = totalComisiones + totalPropinas + bonoHorario + sueldoFijo;
 
     // 4. Validate descuentos por préstamos

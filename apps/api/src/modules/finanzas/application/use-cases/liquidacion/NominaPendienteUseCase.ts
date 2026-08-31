@@ -30,10 +30,6 @@ export interface NominaPendienteInput {
   salonId: number;
 }
 
-const FACTOR_FIJO_MENSUAL = 1;
-const FACTOR_FIJO_QUINCENAL = 0.5;
-const FACTOR_FIJO_SEMANAL = 0.25;
-
 /** Suma/resta días a una fecha 'YYYY-MM-DD' (maneja cruce de mes/año). */
 function addDays(fecha: string, delta: number): string {
   const [year, month, day] = fecha.split('-').map(Number);
@@ -294,14 +290,6 @@ export class NominaPendienteUseCase {
         pendingRegistros.map((r) => r.fechaHora ?? r.creadoEn),
       );
 
-      // Factor del comp fijo por período (100% MENSUAL, 50% QUINCENAL, 25% SEMANAL)
-      const factor =
-        frecuenciaPago === 'QUINCENAL'
-          ? FACTOR_FIJO_QUINCENAL
-          : frecuenciaPago === 'SEMANAL'
-            ? FACTOR_FIJO_SEMANAL
-            : FACTOR_FIJO_MENSUAL;
-
       // Filtra registros ya cubiertos por una liquidación posterior (guard anti-doble-pago)
       if (finUltimaLiquidacion) {
         pendingRegistros = pendingRegistros.filter(
@@ -316,8 +304,15 @@ export class NominaPendienteUseCase {
           return fechaNegocio >= periodo.inicio && fechaNegocio <= periodo.fin;
         });
 
-        const bonoHorarioPeriodo = Number(empleada.bonoHorario) * factor;
-        const sueldoFijoPeriodo = Number(empleada.sueldoFijo) * factor;
+        // Comp fijo PRORRATEADO POR DÍAS (estándar industria, divisor días del mes):
+        // salario diario = mensual ÷ días del mes; el tramo paga salario diario × días
+        // del tramo. Así el total mensual nunca varía y el tramo parcial (ej. 3 días
+        // de una semana en mes de 31) paga lo justo, no un factor fijo inflado.
+        const { diasTramo, diasMes } = diasDelPeriodo(periodo.inicio, periodo.fin);
+        const bonoHorarioPeriodo =
+          diasMes > 0 ? Math.round((Number(empleada.bonoHorario) * diasTramo) / diasMes) : 0;
+        const sueldoFijoPeriodo =
+          diasMes > 0 ? Math.round((Number(empleada.sueldoFijo) * diasTramo) / diasMes) : 0;
         const totalComisiones = delPeriodo.reduce((sum, r) => sum + Number(r.comisionCalculada), 0);
         const totalPropinas = delPeriodo.reduce((sum, r) => sum + Number(r.propina), 0);
 
@@ -350,4 +345,18 @@ export class NominaPendienteUseCase {
 
     return result;
   }
+}
+
+/**
+ * Días del tramo (inicio→fin, bordes Colombia) y días del mes del tramo.
+ * El fin es EXCLUSIVO (colombiaDayEndUTC = 05:00 UTC del día siguiente), por eso
+ * la diferencia en ms / día = cantidad de días del tramo.
+ */
+function diasDelPeriodo(inicio: Date, fin: Date): { diasTramo: number; diasMes: number } {
+  const MS_DIA = 86_400_000;
+  const diasTramo = Math.max(1, Math.round((fin.getTime() - inicio.getTime()) / MS_DIA));
+  const y = inicio.getUTCFullYear();
+  const m = inicio.getUTCMonth(); // 0-based
+  const diasMes = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return { diasTramo, diasMes };
 }
