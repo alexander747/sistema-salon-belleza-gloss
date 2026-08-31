@@ -3560,7 +3560,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                         {/* Table header */}
                         <div style={{
                           display: 'grid',
-                          gridTemplateColumns: '0.5fr 1.5fr 0.9fr 0.8fr 1fr 1fr 1fr 1fr',
+                          gridTemplateColumns: '0.5fr 1.5fr 0.9fr 0.8fr 1fr 1fr 1fr 1fr 1fr',
                           gap: '0.5rem',
                           padding: '0.5rem 0.75rem',
                           background: 'var(--bg-elevated)',
@@ -3580,6 +3580,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                           <span style={{ textAlign: 'right' }}>Costo base</span>
                           <span style={{ textAlign: 'right' }}>Base neta</span>
                           <span style={{ textAlign: 'right' }}>Comisión</span>
+                          <span style={{ textAlign: 'right' }}>Ganancia local</span>
                         </div>
 
                         {/* Table rows */}
@@ -3593,6 +3594,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                             costoBase: number;
                             baseNeta: number;
                             comision: number;
+                            gananciaLocal: number;
                             vendioProductos: boolean;
                           }> = [];
 
@@ -3628,6 +3630,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                                 costoBase: si.costoBaseInsumos ?? 0,
                                 baseNeta,
                                 comision: Math.round(comisionTotal * proporcion),
+                                gananciaLocal: Math.max(0, precio - (si.costoBaseInsumos ?? 0) - Math.round(comisionTotal * proporcion)),
                                 vendioProductos: (reg.productosVendidos ?? []).length > 0,
                               });
                             }
@@ -3650,6 +3653,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                             costoBase: filas.reduce((s, f) => s + f.costoBase, 0),
                             baseNeta: filas.reduce((s, f) => s + f.baseNeta, 0),
                             comision: filas.reduce((s, f) => s + f.comision, 0),
+                            gananciaLocal: filas.reduce((s, f) => s + f.gananciaLocal, 0),
                           };
 
                           return (
@@ -3670,7 +3674,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                                   title="Ver detalle del registro"
                                   style={{
                                     display: 'grid',
-                                    gridTemplateColumns: '0.5fr 1.5fr 0.9fr 0.8fr 1fr 1fr 1fr 1fr',
+                                    gridTemplateColumns: '0.5fr 1.5fr 0.9fr 0.8fr 1fr 1fr 1fr 1fr 1fr',
                                     gap: '0.5rem',
                                     padding: '0.5rem 0.75rem',
                                     borderBottom: '1px solid var(--border)',
@@ -3708,12 +3712,13 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                                   <span style={{ textAlign: 'right', color: '#fb923c' }}>{formatCurrency(fila.costoBase)}</span>
                                   <span style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatCurrency(fila.baseNeta)}</span>
                                   <span style={{ textAlign: 'right', color: 'var(--accent)', fontWeight: 600 }}>{formatCurrency(fila.comision)}</span>
+                                  <span style={{ textAlign: 'right', color: '#34d399', fontWeight: 700 }}>{formatCurrency(fila.gananciaLocal)}</span>
                                 </motion.div>
                               ))}
                               {/* Totals row */}
                               <div style={{
                                 display: 'grid',
-                                gridTemplateColumns: '0.5fr 1.5fr 0.9fr 0.8fr 1fr 1fr 1fr 1fr',
+                                gridTemplateColumns: '0.5fr 1.5fr 0.9fr 0.8fr 1fr 1fr 1fr 1fr 1fr',
                                 gap: '0.5rem',
                                 padding: '0.5rem 0.75rem',
                                 background: 'var(--bg-elevated)',
@@ -3730,6 +3735,7 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                                 <span style={{ textAlign: 'right', color: '#fb923c' }}>{formatCurrency(totales.costoBase)}</span>
                                 <span style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{formatCurrency(totales.baseNeta)}</span>
                                 <span style={{ textAlign: 'right', color: 'var(--accent)' }}>{formatCurrency(totales.comision)}</span>
+                                <span style={{ textAlign: 'right', color: '#34d399' }}>{formatCurrency(totales.gananciaLocal)}</span>
                               </div>
                             </>
                           );
