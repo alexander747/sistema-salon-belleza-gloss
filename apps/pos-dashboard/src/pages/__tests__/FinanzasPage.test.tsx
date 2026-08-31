@@ -1095,33 +1095,36 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     await screen.findByText('Auditoría pre-liquidación');
   }
 
-  it('precarga Desde/Hasta con el período de la fila pendiente (lunes→domingo inclusive)', async () => {
+  it('precarga Desde/Hasta con el MES COMPLETO (1° → último día) aunque la fila sea semanal', async () => {
     auditApiMock();
     await openAuditModal();
 
-    expect(screen.getByLabelText('Período desde')).toHaveValue('2026-08-10');
-    expect(screen.getByLabelText('Período hasta')).toHaveValue('2026-08-16');
+    // El default es el mes completo del período de la fila, no la semana
+    expect(screen.getByLabelText('Período desde')).toHaveValue('2026-08-01');
+    expect(screen.getByLabelText('Período hasta')).toHaveValue('2026-08-31');
 
     // El sueldo fijo mensual se muestra como aclaración (prorrateado por frecuencia SEMANAL)
     expect(screen.getByText(/sueldo fijo se guarda como valor mensual/i)).toBeInTheDocument();
   });
 
-  it('muestra solo los registros del período por defecto y re-filtra al editar Hasta', async () => {
+  it('con el mes completo por defecto muestra todos los registros del mes; editar Hasta re-filtra', async () => {
     auditApiMock();
     await openAuditModal();
 
-    // Solo el registro del 11/08 (dentro de la semana) aparece en el detalle
+    // Default = mes completo → ambos registros (11 y 20/08) están dentro
     expect(await screen.findByText('Manicure Básico')).toBeInTheDocument();
-    expect(screen.queryByText('Manicure Avanzado')).toBeNull();
-    expect(screen.getByText('1 registros')).toBeInTheDocument();
+    expect(screen.getByText('Manicure Avanzado')).toBeInTheDocument();
+    expect(screen.getByText('2 registros')).toBeInTheDocument();
 
-    // Extender Hasta → el registro del 20/08 entra al detalle
+    // Acotar Hasta al 15/08 → el registro del 20/08 sale del detalle
     fireEvent.change(screen.getByLabelText('Período hasta'), {
-      target: { value: '2026-08-20' },
+      target: { value: '2026-08-15' },
     });
 
-    expect(await screen.findByText('Manicure Avanzado')).toBeInTheDocument();
-    expect(screen.getByText('2 registros')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('Manicure Avanzado')).toBeNull();
+    });
+    expect(screen.getByText('1 registros')).toBeInTheDocument();
   });
 
   it('confirmar la liquidación envía el período EDITADO en bordes Colombia (T05:00:00.000Z)', async () => {
@@ -1149,7 +1152,7 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     });
   });
 
-  it('avisa si el período editado se solapa con una liquidación previa del historial', async () => {
+  it('avisa si el período (mes completo por defecto) se solapa con una liquidación previa del historial', async () => {
     auditApiMock({
       historial: [
         {
@@ -1164,17 +1167,19 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     });
     await openAuditModal();
 
-    // Período por defecto (10→16) NO solapa la liquidación 01→09
-    expect(screen.queryByText(/se solapa con la liquidación/i)).toBeNull();
-
-    // Editar Desde al 05/08 → el rango 05→16 solapa la liquidación 01→09
-    fireEvent.change(screen.getByLabelText('Período desde'), {
-      target: { value: '2026-08-05' },
-    });
-
+    // El default es el mes completo (01→31/08) → SOLAPA la liquidación 01→09
     const alerta = await screen.findByRole('alert');
     expect(within(alerta).getByText(/#5/i)).toBeInTheDocument();
     expect(alerta).toHaveTextContent(/comp fijo podría pagarse nuevamente/i);
+
+    // Acotar Desde al 10/08 → el rango 10→31 ya no solapa la liquidación 01→09
+    fireEvent.change(screen.getByLabelText('Período desde'), {
+      target: { value: '2026-08-10' },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 
   it('liquidación: saldo del préstamo con formatCurrency y descuento con MoneyInput (COP entero)', async () => {

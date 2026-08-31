@@ -2710,10 +2710,17 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const handleAuditar = async (emp: NominaEmpleado) => {
     setSelectedEmpleada(emp);
-    // Default del período editable = período calculado por la frecuencia (fila pendiente).
-    // El usuario MAY cambiarlo: pago fuera de ciclo / adelantado / semanal.
-    setAuditDesde(periodoDayInput(emp.periodoInicio));
-    setAuditHasta(periodoDayInput(emp.periodoFin, true));
+    // Default del período editable = MES COMPLETO (1° → último día del mes de la
+    // fila pendiente), sin importar la frecuencia (semanal/quincenal/mensual).
+    // El usuario MAY cambiarlo: pago fuera de ciclo / adelantado.
+    const mesInicio = periodoDayInput(emp.periodoInicio);
+    const primerDia = mesInicio ? firstOfMonthISO(new Date(`${mesInicio}T12:00:00Z`)) : '';
+    // Último día del mes: día 0 del mes siguiente (Date.UTC normaliza).
+    const anio = Number(primerDia.slice(0, 4));
+    const mes = Number(primerDia.slice(5, 7));
+    const ultimoDiaMes = String(new Date(Date.UTC(anio, mes, 0)).getUTCDate()).padStart(2, '0');
+    setAuditDesde(primerDia);
+    setAuditHasta(`${primerDia.slice(0, 8)}${ultimoDiaMes}`);
     setPagoAjustado(emp.totalAPagar);
     setAjustarPago(false);
     setMotivoAjuste('');
