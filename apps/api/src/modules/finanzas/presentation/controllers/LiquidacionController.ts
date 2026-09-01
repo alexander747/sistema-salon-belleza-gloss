@@ -32,15 +32,13 @@ export class LiquidacionController {
         throw new Error('fechaDesde/periodoInicio y fechaHasta/periodoFin son requeridos');
       }
       
-      // Asegurar que hasta incluya todo el día (fin de jornada 23:59:59)
-      const hasta = new Date(fechaHasta);
-      hasta.setHours(23, 59, 59, 999);
-      
+      // El frontend manda bordes Colombia (colombiaDayStartUTC / colombiaDayEndUTC,
+      // 05:00 UTC) — se pasan tal cual para que el prorrateo por días sea exacto.
       const result = await this.liquidarUseCase.execute({
         salonId: req.salonId!,
         usuarioId: req.body.usuarioId,
         periodoInicio: new Date(fechaDesde),
-        periodoFin: hasta,
+        periodoFin: new Date(fechaHasta),
         totalPagado: req.body.totalPagado ? Number(req.body.totalPagado) : undefined,
         descuentosPrestamos: req.body.descuentosPrestamos,
       });
