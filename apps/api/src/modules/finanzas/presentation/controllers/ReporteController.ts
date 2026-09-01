@@ -77,9 +77,13 @@ export class ReporteController {
 
   roiMensual = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Anclar a mediodía UTC: '2026-09-01' a medianoche UTC con TZ Colombia
+      // retrocede al 31/08 19:00 (getMonth da agosto). Con mediodía UTC el mes
+      // se interpreta correctamente en cualquier zona. El default usa la fecha
+      // Colombia (UTC-5) para que el mes no se adelante antes de medianoche.
       const mes = req.query.mes
-        ? new Date(req.query.mes as string + '-01')
-        : new Date();
+        ? new Date(`${req.query.mes}-01T12:00:00Z`)
+        : new Date(Date.now() - 5 * 3_600_000);
 
       const result = await this.roiMensualUseCase.execute({
         salonId: req.salonId!,
@@ -94,9 +98,11 @@ export class ReporteController {
   cierreTurno = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const usuarioId = Number(req.params.id);
+      // Ancla a mediodía UTC: 'YYYY-MM-DD' a medianoche UTC retrocede un día
+      // en Colombia (UTC-5). Con mediodía la fecha se interpreta correcta.
       const fecha = req.query.fecha
-        ? new Date(req.query.fecha as string)
-        : new Date();
+        ? new Date(`${req.query.fecha}T12:00:00Z`)
+        : new Date(Date.now() - 5 * 3_600_000);
 
       const result = await this.cierreTurnoUseCase.execute({
         salonId: req.salonId!,

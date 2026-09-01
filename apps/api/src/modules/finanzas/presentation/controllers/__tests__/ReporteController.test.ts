@@ -207,7 +207,7 @@ describe('ReporteController', () => {
       expect(res.json).toHaveBeenCalledWith(expected);
       expect(mockROIMensualUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
-        mes: new Date('2026-05-01'),
+        mes: new Date('2026-05-01T12:00:00Z'),
       });
     });
 
@@ -260,7 +260,7 @@ describe('ReporteController', () => {
       expect(mockCierreTurnoUseCase.execute).toHaveBeenCalledWith({
         salonId: 1,
         usuarioId: 3,
-        fecha: new Date('2026-05-30'),
+        fecha: new Date('2026-05-30T12:00:00Z'),
       });
     });
 
