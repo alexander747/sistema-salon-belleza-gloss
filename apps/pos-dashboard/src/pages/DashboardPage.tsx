@@ -3,9 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
+  Legend,
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
@@ -71,9 +77,19 @@ interface EmpleadaSimple {
   activo: boolean;
 }
 
+interface MensualItem {
+  mes: string;
+  ingresos: number;
+  gastos: number;
+  nomina: number;
+  ganancia: number;
+}
+
 /* ── Constants ── */
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 const STATUS_CFG: Record<string, { color: 'warning' | 'info' | 'success' | 'error'; label: string }> = {
   PENDIENTE: { color: 'warning', label: 'Pendiente' },
@@ -91,6 +107,14 @@ const QUICK_ACTIONS = [
 
 /* ── Helpers ── */
 
+/** Fecha de HOY en Colombia (UTC-5) como 'YYYY-MM-DD'. */
+function colombiaNow(): string {
+  const d = new Date(Date.now() - 5 * 3_600_000);
+  return toISODate(d);
+}
+
+/** Fecha (UTC) de un Date, como 'YYYY-MM-DD'. Los helpers de semana ya corrigen
+ *  la entrada a Colombia; las fechas del backend vienen como instantes UTC. */
 function toISODate(d: Date): string {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
@@ -98,15 +122,15 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-
-
 function getMonday(d: Date): Date {
-  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = date.getUTCDay();
-  const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1);
-  date.setUTCDate(diff);
-  date.setUTCHours(0, 0, 0, 0);
-  return date;
+  // Trabajar con la fecha Colombia (restar 5h) para que el lunes corresponda
+  // al día de negocio real, no al UTC (que se adelanta antes de medianoche).
+  const fechaCol = new Date(d.getTime() - 5 * 3_600_000);
+  const day = fechaCol.getUTCDay();
+  const diff = fechaCol.getUTCDate() - day + (day === 0 ? -6 : 1);
+  fechaCol.setUTCDate(diff);
+  fechaCol.setUTCHours(0, 0, 0, 0);
+  return fechaCol;
 }
 
 function getWeekDays(monday: Date): Date[] {
@@ -118,8 +142,21 @@ function getWeekDays(monday: Date): Date[] {
 }
 
 function isCurrentMonth(d: Date): boolean {
-  const now = new Date();
-  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  const now = new Date(Date.now() - 5 * 3_600_000); // mes en Colombia
+  return d.getUTCMonth() === now.getUTCMonth() && d.getUTCFullYear() === now.getUTCFullYear();
+}
+
+/** '2026-08' → 'Ago' (mes corto en español). */
+function mesLabel(mes: string): string {
+  const m = Number(mes.slice(5, 7));
+  return m >= 1 && m <= 12 ? MESES_CORTOS[m - 1] : mes;
+}
+
+/** Monto compacto para los ejes (2.3M / 350k). */
+function formatCompact(n: number): string {
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace('.0', '')}M`;
+  if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
 }
 
 /* ── Chart Tooltip ── */
@@ -161,6 +198,33 @@ const ChartTooltipContent: React.FC<ChartTooltipProps> = ({
       <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
         {val} {val === 1 ? 'cita' : 'citas'}
       </Typography>
+    </Box>
+  );
+};
+
+/** Tooltip de las gráficas mensuales: formatea cada serie como moneda. */
+const MoneyTooltipContent: React.FC<ChartTooltipProps> = ({ active, payload, label }) => {
+  if (!active || !payload || payload.length === 0) return null;
+  return (
+    <Box
+      sx={{
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 2,
+        px: 1.5,
+        py: 1,
+        boxShadow: 4,
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+        {label}
+      </Typography>
+      {payload.map((item) => (
+        <Typography key={item.name} variant="body2" sx={{ fontWeight: 600, color: item.color }}>
+          {item.name}: {formatCurrency(item.value)}
+        </Typography>
+      ))}
     </Box>
   );
 };
@@ -303,6 +367,7 @@ const DashboardPage: React.FC = () => {
   const [citas, setCitas] = useState<CitaDashboard[]>([]);
   const [clientes, setClientes] = useState<ClienteSimple[]>([]);
   const [empleadas, setEmpleadas] = useState<EmpleadaSimple[]>([]);
+  const [mensualData, setMensualData] = useState<MensualItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const clientesMapRef = useRef<Record<number, string>>({});
@@ -327,6 +392,11 @@ const DashboardPage: React.FC = () => {
     const weekDesde = new Date(`${toISODate(weekDays[0])}T00:00:00`).toISOString();
     const weekHasta = new Date(`${toISODate(weekDays[5])}T23:59:59.999`).toISOString();
 
+    // Resumen del MES ACTUAL en Colombia (1° del mes → hoy): sin rango el backend
+    // usa solo el día de hoy y el dashboard mostraría $0 fuera de la fecha actual.
+    const hoyColombia = colombiaNow();
+    const mesDesde = `${hoyColombia.slice(0, 8)}01`;
+
     try {
       if (salonId == null) {
         setDataError('Error al cargar datos del dashboard');
@@ -334,18 +404,28 @@ const DashboardPage: React.FC = () => {
       }
 
       const results = await Promise.allSettled([
-        api.get(`/salones/${salonId}/finanzas/resumen`),
+        api.get(`/salones/${salonId}/finanzas/resumen`, {
+          params: { desde: mesDesde, hasta: hoyColombia },
+        }),
         api.get(`/salones/${salonId}/agenda/citas`, { params: { desde: weekDesde, hasta: weekHasta } }),
         api.get(`/salones/${salonId}/clientes`),
         api.get(`/salones/${salonId}/empleadas`),
+        api.get(`/salones/${salonId}/finanzas/mensual`, { params: { meses: 6 } }),
       ]);
 
-      const [resumenRes, citasRes, clientesRes, empleadasRes] = results;
+      const [resumenRes, citasRes, clientesRes, empleadasRes, mensualRes] = results;
 
       if (resumenRes.status === 'fulfilled') {
         setResumen(resumenRes.value.data);
       } else {
         setResumen(null);
+      }
+
+      if (mensualRes.status === 'fulfilled') {
+        const raw = mensualRes.value.data;
+        setMensualData(Array.isArray(raw) ? raw : []);
+      } else {
+        setMensualData([]);
       }
 
       if (clientesRes.status === 'fulfilled') {
@@ -407,7 +487,7 @@ const DashboardPage: React.FC = () => {
 
   const isLoading = authLoading || dataLoading;
 
-  const todayStr = useMemo(() => toISODate(new Date()), []);
+  const todayStr = useMemo(() => colombiaNow(), []);
 
   const todayCitas = useMemo(
     () =>
@@ -450,6 +530,24 @@ const DashboardPage: React.FC = () => {
     const noEmpleadas = empleadas.length === 0;
     return noIngresos && noClientes && noEmpleadas;
   }, [resumen, clientes, empleadas]);
+
+  /** Último mes de la serie (el más reciente) — el que muestra el pastel. */
+  const ultimoMes = useMemo(
+    () => (mensualData.length > 0 ? mensualData[mensualData.length - 1] : null),
+    [mensualData],
+  );
+
+  /** Pastel: ingresos vs gastos vs nómina del último mes. null si todo es 0. */
+  const pieData = useMemo(() => {
+    if (!ultimoMes) return null;
+    const { ingresos, gastos, nomina } = ultimoMes;
+    if (ingresos === 0 && gastos === 0 && nomina === 0) return null;
+    return [
+      { name: 'Ingresos', value: ingresos, color: '#D4A853' },
+      { name: 'Gastos', value: gastos, color: '#ef4444' },
+      { name: 'Nómina', value: nomina, color: '#3b82f6' },
+    ];
+  }, [ultimoMes]);
 
   const clientesMap = useMemo(
     () => Object.fromEntries(clientes.map((c) => [c.id, c.nombre])),
@@ -733,6 +831,146 @@ const DashboardPage: React.FC = () => {
           </CardContent>
         </Card>
       </Box>
+
+      {/* ── Resumen mensual (gráficas de 6 meses) ── */}
+      <Card
+        sx={{
+          borderRadius: 3,
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          mb: 3,
+        }}
+      >
+        <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+          <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>
+            📈 Resumen de los últimos 6 meses
+          </Typography>
+          {mensualData.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No hay datos mensuales todavía.
+            </Typography>
+          ) : (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: 'repeat(3, 1fr)' },
+                gap: 2,
+              }}
+            >
+              {/* Línea: ingresos y ganancia por mes */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                  Ingresos y ganancia por mes
+                </Typography>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={mensualData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                    <XAxis
+                      dataKey="mes"
+                      tickFormatter={mesLabel}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#9E9E9E', fontSize: 11 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#9E9E9E', fontSize: 11 }}
+                      tickFormatter={formatCompact}
+                    />
+                    <Tooltip content={<MoneyTooltipContent />} cursor={{ stroke: 'rgba(255,255,255,0.15)' }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line
+                      type="monotone"
+                      dataKey="ingresos"
+                      name="Ingresos"
+                      stroke="#D4A853"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: '#D4A853' }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="ganancia"
+                      name="Ganancia"
+                      stroke="#22c55e"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: '#22c55e' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+
+              {/* Barras: ingresos por mes */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                  Ingresos por mes
+                </Typography>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={mensualData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                    <XAxis
+                      dataKey="mes"
+                      tickFormatter={mesLabel}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#9E9E9E', fontSize: 11 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#9E9E9E', fontSize: 11 }}
+                      tickFormatter={formatCompact}
+                    />
+                    <Tooltip content={<MoneyTooltipContent />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                    <Bar dataKey="ingresos" name="Ingresos" fill="#D4A853" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+
+              {/* Pastel: distribución del último mes */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                  Distribución del mes{ultimoMes ? `: ${mesLabel(ultimoMes.mes)}` : ''}
+                </Typography>
+                {pieData ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={45}
+                        outerRadius={80}
+                        paddingAngle={2}
+                      >
+                        {pieData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<MoneyTooltipContent />} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: 220,
+                    }}
+                  >
+                    <Typography variant="body2" color="text.secondary">
+                      Sin datos para este mes
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Quick Actions ── */}
       <Box
