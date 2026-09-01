@@ -338,11 +338,11 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
       return Promise.resolve({ data: {} });
     });
 
-    // Desde arranca en el 1° del mes actual y Hasta en hoy
+    // Desde arranca en el 1° del mes actual y Hasta en hoy (pueden coincidir
+    // si hoy es el 1° del mes → ambos inputs tienen el mismo display value).
     const dateInputs = await screen.findAllByDisplayValue(firstOfMonthStr);
-    const hastaInput = await screen.findByDisplayValue(todayStr);
     fireEvent.change(dateInputs[0], { target: { value: '2026-05-01' } });
-    fireEvent.change(hastaInput, { target: { value: '2026-05-31' } });
+    fireEvent.change(dateInputs[1], { target: { value: '2026-05-31' } });
 
     await waitFor(() => {
       const calls = mockGet.mock.calls.filter(([url]) =>
