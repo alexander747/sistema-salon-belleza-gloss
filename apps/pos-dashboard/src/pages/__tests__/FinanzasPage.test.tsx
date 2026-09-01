@@ -140,7 +140,7 @@ describe('FinanzasPage — tab Caja', () => {
 });
 
 describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10); // fecha Colombia (UTC-5)
   const firstOfMonthStr = todayStr.slice(0, 8) + '01';
 
   const pylData = {
@@ -396,7 +396,7 @@ describe('FinanzasPage — resumen cash del día (Cobrado / Fiado del período, 
 });
 
 describe('FinanzasPage — Exportar Excel', () => {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10); // fecha Colombia (UTC-5)
   const firstOfMonthStr = todayStr.slice(0, 8) + '01';
 
   const pylData = {

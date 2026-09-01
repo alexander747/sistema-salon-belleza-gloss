@@ -371,7 +371,8 @@ function formatDateTimeAMPM(dateStr: string): string {
 }
 
 function toISODate(d: Date): string {
-  // Usar UTC para coincidir con el backend que opera en UTC
+  // Usar UTC para coincidir con el backend que opera en UTC (bordes Colombia ya
+  // vienen como instantes UTC; addDaysInput/periodoDayInput los manejan).
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
   const day = String(d.getUTCDate()).padStart(2, '0');
@@ -382,6 +383,22 @@ function toISODate(d: Date): string {
 function firstOfMonthISO(d: Date): string {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+}
+
+/**
+ * Fecha de HOY en Colombia (UTC-5) como 'YYYY-MM-DD'. A las 23:30 COT del 31/08,
+ * UTC ya es 01/09 — la UI debe mostrar el 31/08 (día de negocio Colombia).
+ */
+function colombiaTodayISO(): string {
+  return toISODate(new Date(Date.now() - 5 * 3_600_000));
+}
+
+/** Primer día del mes ACTUAL en Colombia (UTC-5). */
+function firstOfMonthColombiaISO(): string {
+  const hoy = new Date(Date.now() - 5 * 3_600_000);
+  const y = hoy.getUTCFullYear();
+  const m = String(hoy.getUTCMonth() + 1).padStart(2, '0');
   return `${y}-${m}-01`;
 }
 
@@ -627,11 +644,11 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
     user.rol === Rol.CONTADOR
   );
 
-  const todayStr = useMemo(() => toISODate(new Date()), []);
+  const todayStr = useMemo(() => colombiaTodayISO(), []);
   // Default del rango: mes actual (1° del mes → hoy), consistente con Reportes.
   // Con filtros vacíos el resumen devuelve 0 aunque la tabla tenga registros.
-  const [registroDesde, setRegistroDesde] = useState(firstOfMonthISO(new Date()));
-  const [registroHasta, setRegistroHasta] = useState(toISODate(new Date()));
+  const [registroDesde, setRegistroDesde] = useState(firstOfMonthColombiaISO());
+  const [registroHasta, setRegistroHasta] = useState(colombiaTodayISO());
   const [registroFilter, setRegistroFilter] = useState<'TODOS' | 'SERVICIOS' | 'PRODUCTOS'>('TODOS');
   // Filtro por estado: default Activos al ingresar a la página (los anulados se ocultan)
   const [registroEstadoFilter, setRegistroEstadoFilter] = useState<'ACTIVOS' | 'ANULADOS' | 'TODOS'>('ACTIVOS');
@@ -4114,8 +4131,10 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
   user,
 }) => {
   const today = useMemo(() => new Date(), []);
-  const [reporteDesde, setReporteDesde] = useState(firstOfMonthISO(today));
-  const [reporteHasta, setReporteHasta] = useState(toISODate(today));
+  // Default del rango: mes actual en Colombia (1° del mes → hoy). A las 23:30 COT
+  // del 31/08, UTC ya es 01/09 — se usa la fecha de negocio Colombia.
+  const [reporteDesde, setReporteDesde] = useState(firstOfMonthColombiaISO());
+  const [reporteHasta, setReporteHasta] = useState(colombiaTodayISO());
   const [mes, setMes] = useState(getMonthISO(today));
 
   const [pyl, setPyl] = useState<PyLData | null>(null);
