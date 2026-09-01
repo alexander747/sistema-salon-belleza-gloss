@@ -4138,7 +4138,6 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
   const [mes, setMes] = useState(getMonthISO(today));
 
   const [pyl, setPyl] = useState<PyLData | null>(null);
-  const [resumen, setResumen] = useState<FinanzasResumen | null>(null);
   const [roi, setRoi] = useState<ROIData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -4155,7 +4154,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
     user.rol === Rol.CONTADOR
   );
 
-  // Params compartidos P&L + resumen: desde + hasta + usuarioId role-scoped.
+  // Params compartidos P&L + export: desde + hasta + usuarioId role-scoped.
   // Los roles restringidos son forzados a su propio usuarioId.
   const buildReportParams = useCallback((): Record<string, string> => {
     const params: Record<string, string> = { desde: reporteDesde, hasta: reporteHasta };
@@ -4183,22 +4182,6 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
     }
   }, [salonId, buildReportParams]);
 
-  const fetchResumen = useCallback(async () => {
-    if (!salonId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const { data } = await api.get(`/salones/${salonId}/finanzas/resumen`, {
-        params: buildReportParams(),
-      });
-      setResumen(data);
-    } catch {
-      setResumen(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [salonId, buildReportParams]);
-
   const fetchROI = useCallback(async () => {
     if (!salonId) return;
     setLoading(true);
@@ -4215,8 +4198,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
 
   useEffect(() => {
     fetchPyl();
-    fetchResumen();
-  }, [fetchPyl, fetchResumen]);
+  }, [fetchPyl]);
 
   useEffect(() => {
     fetchROI();
@@ -4237,7 +4219,6 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
 
   const generarReportes = () => {
     fetchPyl();
-    fetchResumen();
   };
 
   // Descarga el xlsx del período. Los errores de axios con responseType blob
@@ -4284,7 +4265,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
     }
   }, [salonId, exportando, buildReportParams, reporteDesde, reporteHasta]);
 
-  if (loading && !pyl && !resumen && !roi) {
+  if (loading && !pyl && !roi) {
     return (
       <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <Skeleton height="60px" variant="rect" style={{ marginBottom: '1rem' }} />
@@ -4293,7 +4274,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
     );
   }
 
-  if (error && !pyl && !resumen && !roi) {
+  if (error && !pyl && !roi) {
     return (
       <motion.div key="error" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={styles.emptyState}>
         <span className={styles.emptyIcon}>⚠️</span>
@@ -4306,7 +4287,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
   return (
     <motion.div key="reportes" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
       {/* ── Filters ── */}
-      <div className={styles.reporteCard}>
+      <div className={styles.reporteCard} style={{ position: 'relative', zIndex: 5 }}>
         <h4 className={styles.reporteCardTitle}>📊 Resumen del período</h4>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <label style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
@@ -4339,6 +4320,10 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
               flexDirection: 'column',
               gap: '0.3rem',
               minWidth: '180px',
+              // El dropdown del select debe quedar por ENCIMA de las tarjetas del P&L
+              // (backdrop-filter crea stacking context que lo taparía).
+              position: 'relative',
+              zIndex: 10,
             }}>
               <EmpleadaSearchableSelect
                 salonId={salonId}
@@ -4419,10 +4404,12 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
               ({pyl.cantidadAtenciones} atenciones)
             </span>
           </h4>
+
+          {/* SECCIÓN 1 — Caja: lo que realmente entró/saldrá (decisión owner: ingreso = cuando se cobra) */}
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', marginTop: '0.5rem' }}>
+            💵 Dinero de caja
+          </div>
           <div className={styles.summaryGrid}>
-            {/* PR2 cash-basis (decisión owner: ingreso = cuando se cobra). Las
-                líneas devengadas (brutos/netos/servicios/productos) siguen abajo
-                como informativas. */}
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
               <span className={styles.summaryLabel}>💰 Cobrado</span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>
@@ -4441,6 +4428,13 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
                 {pyl.deudasPorCobrar != null ? formatCurrency(pyl.deudasPorCobrar) : '$0'}
               </span>
             </div>
+          </div>
+
+          {/* SECCIÓN 2 — Ventas: lo facturado en el período (informativo) */}
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', marginTop: '1rem' }}>
+            📈 Ventas del período
+          </div>
+          <div className={styles.summaryGrid}>
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>💰 Ingresos brutos</span>
               <span className={styles.summaryValueAccent}>{formatCurrency(pyl.ingresosBrutos)}</span>
@@ -4460,40 +4454,37 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.ingresosNetos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💇 Total servicios</span>
+              <span className={styles.summaryLabel}>💇 Servicios</span>
               <span className={styles.summaryValue} style={{ color: '#818cf8' }}>{formatCurrency(pyl.totalServicios)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🛒 Total productos</span>
+              <span className={styles.summaryLabel}>🛒 Productos</span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.totalProductos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🎁 Total propinas</span>
+              <span className={styles.summaryLabel}>🎁 Propinas</span>
               <span className={styles.summaryValueSuccess}>{formatCurrency(pyl.propinas)}</span>
             </div>
+          </div>
+
+          {/* SECCIÓN 3 — Costos y resultado */}
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', marginTop: '1rem' }}>
+            📉 Costos y resultado
+          </div>
+          <div className={styles.summaryGrid}>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>📦 Insumos (costo base)</span>
+              <span className={styles.summaryLabel}>📦 Insumos</span>
               <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos)}</span>
-            </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>📊 Margen bruto</span>
-              <span className={styles.summaryValueAccent}>{formatCurrency(pyl.margenBruto)}</span>
             </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>👥 Comisiones</span>
               <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💸 Gastos fijos</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.gastosFijos)}</span>
-            </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>📦 Gastos operativos</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.gastosOperativos)}</span>
-            </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💸 Total gastos</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.totalGastos)}</span>
+              <span className={styles.summaryLabel}>💸 Gastos</span>
+              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>
+                {formatCurrency((pyl.gastosFijos ?? 0) + (pyl.gastosOperativos ?? 0))}
+              </span>
             </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>↩️ Devoluciones</span>
@@ -4504,36 +4495,6 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
               <span className={styles.summaryValue} style={{ color: (pyl.utilidadNeta ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
                 {formatCurrency(pyl.utilidadNeta)}
               </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Resumen del período (desde+hasta; sin ganancia neta client-side) ── */}
-      {resumen && (
-        <div className={styles.reporteCard}>
-          <div className={styles.summaryGrid}>
-            <div className={styles.summaryCard} style={{ borderColor: 'rgba(99,102,241,0.3)' }}>
-              <span className={styles.summaryLabel}>💇 Servicios</span>
-              <span className={styles.summaryValue} style={{ color: '#818cf8' }}>{formatCurrency(resumen.totalServicios)}</span>
-            </div>
-            <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
-              <span className={styles.summaryLabel}>🛒 Productos</span>
-              <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(resumen.totalProductos)}</span>
-            </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💰 Ingresos totales</span>
-              <span className={styles.summaryValueAccent}>{formatCurrency(resumen.totalIngresos)}</span>
-            </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💸 Gastos</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>
-                {resumen.totalGastos != null ? formatCurrency(resumen.totalGastos) : '$0'}
-              </span>
-            </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🎁 Propinas</span>
-              <span className={styles.summaryValueSuccess}>{formatCurrency(resumen.totalPropinas)}</span>
             </div>
           </div>
         </div>
@@ -4581,7 +4542,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
       )}
 
       {/* ── No data state ── */}
-      {!pyl && !resumen && !roi && (
+      {!pyl && !roi && (
         <div className={styles.emptyState}>
           <span className={styles.emptyIcon}>📊</span>
           <h3 className={styles.emptyTitle}>Sin datos disponibles</h3>
