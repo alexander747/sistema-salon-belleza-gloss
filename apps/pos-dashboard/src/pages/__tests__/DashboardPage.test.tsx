@@ -76,9 +76,9 @@ describe('DashboardPage — resumen mensual (gráficas de 6 meses)', () => {
     });
 
     // Los títulos de las tres gráficas se renderizan (el pastel muestra el mes)
-    expect(screen.getByText('Ingresos y ganancia por mes')).toBeInTheDocument();
-    expect(screen.getByText('Ingresos por mes')).toBeInTheDocument();
-    expect(screen.getByText('Distribución del mes: Ago')).toBeInTheDocument();
+    expect(screen.getByText('📉 Ingresos y ganancia')).toBeInTheDocument();
+    expect(screen.getByText('📊 Ingresos por mes')).toBeInTheDocument();
+    expect(screen.getByText('🥧 Distribución del mes: Ago')).toBeInTheDocument();
   });
 
   it('convierte el mes de la serie a etiqueta corta (2026-08 → Ago) en el título del pastel', async () => {
@@ -90,7 +90,7 @@ describe('DashboardPage — resumen mensual (gráficas de 6 meses)', () => {
     renderDashboard();
 
     // El último mes de la serie (2026-08) se muestra como 'Ago' en el pastel
-    expect(await screen.findByText('Distribución del mes: Ago')).toBeInTheDocument();
+    expect(await screen.findByText(/Distribución del mes: Ago/)).toBeInTheDocument();
   });
 
   it('si el último mes está en ceros, el pastel muestra el mes ANTERIOR con datos (julio)', async () => {
@@ -102,7 +102,7 @@ describe('DashboardPage — resumen mensual (gráficas de 6 meses)', () => {
     renderDashboard();
 
     // El pastel NO dice "Sin datos": busca el último mes con movimiento
-    expect(await screen.findByText('Distribución del mes: Jul')).toBeInTheDocument();
+    expect(await screen.findByText(/Distribución del mes: Jul/)).toBeInTheDocument();
     expect(screen.queryByText('Sin datos para este mes')).toBeNull();
   });
 

@@ -841,37 +841,46 @@ const DashboardPage: React.FC = () => {
       </Box>
 
       {/* ── Resumen mensual (gráficas de 6 meses) ── */}
-      <Card
-        sx={{
-          borderRadius: 3,
-          bgcolor: 'background.paper',
-          border: '1px solid',
-          borderColor: 'divider',
-          mb: 3,
-        }}
-      >
-        <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-          <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>
-            📈 Resumen de los últimos 6 meses
-          </Typography>
-          {mensualData.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No hay datos mensuales todavía.
-            </Typography>
-          ) : (
-            <Box
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>
+          📈 Resumen de los últimos 6 meses
+        </Typography>
+        {mensualData.length === 0 ? (
+          <Card sx={{ borderRadius: 3, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">
+                No hay datos mensuales todavía.
+              </Typography>
+            </CardContent>
+          </Card>
+        ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: 'repeat(3, 1fr)' },
+              gap: 2,
+            }}
+          >
+            {/* Línea: ingresos y ganancia por mes */}
+            <Card
               sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: 'repeat(3, 1fr)' },
-                gap: 2,
+                borderRadius: 3,
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderTop: '3px solid #D4A853',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 },
               }}
             >
-              {/* Línea: ingresos y ganancia por mes */}
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                  Ingresos y ganancia por mes
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  📉 Ingresos y ganancia
                 </Typography>
-                <ResponsiveContainer width="100%" height={220}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Evolución mes a mes
+                </Typography>
+                <ResponsiveContainer width="100%" height={200}>
                   <LineChart data={mensualData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                     <XAxis
@@ -907,14 +916,29 @@ const DashboardPage: React.FC = () => {
                     />
                   </LineChart>
                 </ResponsiveContainer>
-              </Box>
+              </CardContent>
+            </Card>
 
-              {/* Barras: ingresos por mes */}
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                  Ingresos por mes
+            {/* Barras: ingresos por mes */}
+            <Card
+              sx={{
+                borderRadius: 3,
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderTop: '3px solid #22c55e',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 },
+              }}
+            >
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  📊 Ingresos por mes
                 </Typography>
-                <ResponsiveContainer width="100%" height={220}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Comparación mensual
+                </Typography>
+                <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={mensualData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                     <XAxis
@@ -934,22 +958,37 @@ const DashboardPage: React.FC = () => {
                     <Bar dataKey="ingresos" name="Ingresos" fill="#D4A853" radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
-              </Box>
+              </CardContent>
+            </Card>
 
-              {/* Pastel: distribución del último mes */}
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                  Distribución del mes{ultimoMes ? `: ${mesLabel(ultimoMes.mes)}` : ''}
+            {/* Pastel: distribución del último mes */}
+            <Card
+              sx={{
+                borderRadius: 3,
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderTop: '3px solid #3b82f6',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 },
+              }}
+            >
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  🥧 Distribución del mes{ultimoMes ? `: ${mesLabel(ultimoMes.mes)}` : ''}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Ingresos · Gastos · Nómina
                 </Typography>
                 {pieData ? (
-                  <ResponsiveContainer width="100%" height={220}>
+                  <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie
                         data={pieData}
                         dataKey="value"
                         nameKey="name"
                         innerRadius={45}
-                        outerRadius={80}
+                        outerRadius={75}
                         paddingAngle={2}
                       >
                         {pieData.map((entry) => (
@@ -966,7 +1005,7 @@ const DashboardPage: React.FC = () => {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      height: 220,
+                      height: 200,
                     }}
                   >
                     <Typography variant="body2" color="text.secondary">
@@ -974,11 +1013,11 @@ const DashboardPage: React.FC = () => {
                     </Typography>
                   </Box>
                 )}
-              </Box>
-            </Box>
-          )}
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          </Box>
+        )}
+      </Box>
 
       {/* ── Quick Actions ── */}
       <Box
