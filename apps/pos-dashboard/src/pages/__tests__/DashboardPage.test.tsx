@@ -93,7 +93,7 @@ describe('DashboardPage — resumen mensual (gráficas de 6 meses)', () => {
     expect(await screen.findByText('Distribución del mes: Ago')).toBeInTheDocument();
   });
 
-  it('si el último mes está en ceros muestra "Sin datos para este mes" en el pastel', async () => {
+  it('si el último mes está en ceros, el pastel muestra el mes ANTERIOR con datos (julio)', async () => {
     apiConDatos([
       { mes: '2026-07', ingresos: 1000000, gastos: 0, nomina: 0, ganancia: 1000000 },
       { mes: '2026-08', ingresos: 0, gastos: 0, nomina: 0, ganancia: 0 },
@@ -101,7 +101,9 @@ describe('DashboardPage — resumen mensual (gráficas de 6 meses)', () => {
 
     renderDashboard();
 
-    expect(await screen.findByText('Sin datos para este mes')).toBeInTheDocument();
+    // El pastel NO dice "Sin datos": busca el último mes con movimiento
+    expect(await screen.findByText('Distribución del mes: Jul')).toBeInTheDocument();
+    expect(screen.queryByText('Sin datos para este mes')).toBeNull();
   });
 
   it('si el último mes tiene datos, el pastel NO muestra el aviso vacío', async () => {

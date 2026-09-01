@@ -531,9 +531,17 @@ const DashboardPage: React.FC = () => {
     return noIngresos && noClientes && noEmpleadas;
   }, [resumen, clientes, empleadas]);
 
-  /** Último mes de la serie (el más reciente) — el que muestra el pastel. */
+  /** Último mes de la serie CON DATOS (ingresos/gastos/nómina no todos 0).
+   *  El pastel muestra ese mes; si el mes más reciente (ej. el actual) está
+   *  vacío, se usa el último que tenga movimiento. */
   const ultimoMes = useMemo(
-    () => (mensualData.length > 0 ? mensualData[mensualData.length - 1] : null),
+    () =>
+      mensualData.length > 0
+        ? [...mensualData]
+            .reverse()
+            .find((m) => m.ingresos !== 0 || m.gastos !== 0 || m.nomina !== 0) ??
+          mensualData[mensualData.length - 1]
+        : null,
     [mensualData],
   );
 
