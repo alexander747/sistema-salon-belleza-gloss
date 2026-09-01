@@ -6,6 +6,7 @@ import { ResumenDiaUseCase, type ResumenDiaInput } from '../../application/use-c
 import { ROIMensualUseCase } from '../../application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../../application/use-cases/reporte/CierreTurnoUseCase';
 import { PyLMensualUseCase } from '../../application/use-cases/reporte/PyLMensualUseCase';
+import { ResumenMensualUseCase } from '../../application/use-cases/reporte/ResumenMensualUseCase';
 import { ExcelExportService } from '../../application/services/ExcelExportService';
 import { ValidationError } from '../../../../shared/errors';
 import { getColombiaDateString } from '../../../../shared/colombia-date';
@@ -30,6 +31,10 @@ const PYL_QUERY_SCHEMA = z.object({
   clienteId: z.coerce.number().int().positive().optional(),
 });
 
+const MENSUAL_QUERY_SCHEMA = z.object({
+  meses: z.coerce.number().int().min(1).max(24).optional(),
+});
+
 @injectable()
 export class ReporteController {
   constructor(
@@ -38,6 +43,7 @@ export class ReporteController {
     @inject(CierreTurnoUseCase) private readonly cierreTurnoUseCase: CierreTurnoUseCase,
     @inject(PyLMensualUseCase) private readonly pylMensualUseCase: PyLMensualUseCase,
     @inject(ExcelExportService) private readonly excelExportService: ExcelExportService,
+    @inject(ResumenMensualUseCase) private readonly resumenMensualUseCase: ResumenMensualUseCase,
   ) {}
 
   resumenDia = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -134,6 +140,23 @@ export class ReporteController {
         ...(parsed.data.hasta ? { hasta: parsed.data.hasta } : {}),
         ...(usuarioId !== undefined ? { usuarioId } : {}),
         ...(clienteId !== undefined ? { clienteId } : {}),
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resumenMensual = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = MENSUAL_QUERY_SCHEMA.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError('Parámetros inválidos', parsed.error.flatten().fieldErrors);
+      }
+
+      const result = await this.resumenMensualUseCase.execute({
+        salonId: req.salonId!,
+        ...(parsed.data.meses !== undefined ? { meses: parsed.data.meses } : {}),
       });
       res.json(result);
     } catch (error) {

@@ -104,6 +104,11 @@ router.get(
 router.get('/finanzas/resumen', reporteController.resumenDia);
 router.get('/finanzas/roi', reporteController.roiMensual);
 router.get('/finanzas/pyl', reporteController.pyl);
+router.get(
+  '/finanzas/mensual',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
+  reporteController.resumenMensual,
+);
 router.get('/finanzas/exportar', reporteController.exportar);
 router.get('/finanzas/turno/:id', reporteController.cierreTurno);
 

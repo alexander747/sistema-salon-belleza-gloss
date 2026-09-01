@@ -13,6 +13,7 @@ describe('ReporteController', () => {
   let mockCierreTurnoUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockPyLMensualUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockExcelExportService: { exportar: ReturnType<typeof vi.fn> };
+  let mockResumenMensualUseCase: { execute: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -21,6 +22,7 @@ describe('ReporteController', () => {
     mockCierreTurnoUseCase = { execute: vi.fn() };
     mockPyLMensualUseCase = { execute: vi.fn() };
     mockExcelExportService = { exportar: vi.fn() };
+    mockResumenMensualUseCase = { execute: vi.fn() };
     next = vi.fn();
     controller = new ReporteController(
       mockResumenDiaUseCase as never,
@@ -28,6 +30,7 @@ describe('ReporteController', () => {
       mockCierreTurnoUseCase as never,
       mockPyLMensualUseCase as never,
       mockExcelExportService as never,
+      mockResumenMensualUseCase as never,
     );
   });
 
@@ -365,6 +368,56 @@ describe('ReporteController', () => {
 
       expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
       expect(mockPyLMensualUseCase.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resumenMensual', () => {
+    it('devuelve el resumen por mes y pasa salonId + meses', async () => {
+      const expected = [
+        { mes: '2026-07', ingresos: 0, gastos: 0, nomina: 0, ganancia: 0 },
+        { mes: '2026-08', ingresos: 2295000, gastos: 350000, nomina: 400000, ganancia: 1545000 },
+      ];
+      mockResumenMensualUseCase.execute.mockResolvedValue(expected);
+
+      const req = {
+        salonId: 1,
+        query: { meses: '2' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenMensual(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expected);
+      expect(mockResumenMensualUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        meses: 2,
+      });
+    });
+
+    it('sin query meses el use case aplica su default (6) — no envía el campo', async () => {
+      mockResumenMensualUseCase.execute.mockResolvedValue([]);
+
+      const req = { salonId: 1, query: {} } as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenMensual(req, res, next);
+
+      expect(mockResumenMensualUseCase.execute).toHaveBeenCalledWith({ salonId: 1 });
+    });
+
+    it('meses inválido lanza ValidationError (400) sin llamar al use case', async () => {
+      const req = {
+        salonId: 1,
+        query: { meses: 'no-numero' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenMensual(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
+      expect(mockResumenMensualUseCase.execute).not.toHaveBeenCalled();
     });
   });
 

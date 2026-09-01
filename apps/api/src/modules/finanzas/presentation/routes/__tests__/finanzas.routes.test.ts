@@ -28,7 +28,7 @@ vi.mock('../../controllers/RegistroController', () => ({ RegistroController: cla
 vi.mock('../../controllers/GastoController', () => ({ GastoController: class { list = stub; create = stub; delete = stub; } }));
 vi.mock('../../controllers/DevolucionController', () => ({ DevolucionController: class { list = stub; create = stub; } }));
 vi.mock('../../controllers/LiquidacionController', () => ({ LiquidacionController: class { nominaPendiente = stub; liquidarEmpleada = stub; historial = stub; } }));
-vi.mock('../../controllers/ReporteController', () => ({ ReporteController: class { resumenDia = stub; roiMensual = stub; pyl = stub; exportar = stub; cierreTurno = stub; } }));
+vi.mock('../../controllers/ReporteController', () => ({ ReporteController: class { resumenDia = stub; roiMensual = stub; pyl = stub; exportar = stub; cierreTurno = stub; resumenMensual = stub; } }));
 vi.mock('../../controllers/CajaController', () => ({ CajaController: class { abrir = stub; cerrar = stub; reabrir = stub; actual = stub; actualEsperado = stub; cierres = stub; detalleCierre = stub; } }));
 vi.mock('../../controllers/CuentasController', () => ({ CuentasController: class { cobrar = stub; pagar = stub; } }));
 
@@ -87,6 +87,10 @@ describe('finanzas.routes — guards de rol en GETs sensibles', () => {
 
   it('GET /finanzas/nomina/historial exige SUPERADMIN/DUEÑA/ADMINISTRADOR/CONTADOR', () => {
     expect(guardsFor('/finanzas/nomina/historial')).toContainEqual(NOMINA_ROLES);
+  });
+
+  it('GET /finanzas/mensual (resumen mensual del dashboard) exige SUPERADMIN/DUEÑA/ADMINISTRADOR/CONTADOR', () => {
+    expect(guardsFor('/finanzas/mensual')).toContainEqual(NOMINA_ROLES);
   });
 
   it('GET /caja/:id/cierre permite también a CONTADOR y RECEPCIONISTA (vista read-only)', () => {
