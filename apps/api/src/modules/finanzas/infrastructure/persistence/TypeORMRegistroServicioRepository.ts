@@ -10,6 +10,15 @@ function fechaColombiaStr(d: Date): string {
   return getColombiaDateString(d);
 }
 
+/**
+ * Fecha de negocio del pago como string YYYY-MM-DD: la de su CAJA
+ * (p.cajaId → caja.fechaCaja, DATE puro); legacy sin caja cae al registro
+ * (COALESCE fechaHora, creadoEn). Se compara como fecha Colombia pura para
+ * evitar el desfase de las 05:00 UTC.
+ */
+const FECHA_NEGOCIO_PAGO_SQL =
+  "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d'))";
+
 @injectable()
 export class TypeORMRegistroServicioRepository implements IRegistroServicioRepository {
   private getRepo(queryRunner?: QueryRunner) {
@@ -193,14 +202,12 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       // real). Legacy sin caja cae al registro (COALESCE fechaHora, creadoEn).
       // El rango se convierte a fecha Colombia pura (YYYY-MM-DD) para comparar con
       // el DATE de la caja sin el desfase de las 05:00 UTC.
-      .andWhere(
-        "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d')) >= :fechaInicioStr",
-        { fechaInicioStr: fechaColombiaStr(fechaInicio) },
-      )
-      .andWhere(
-        "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d')) < :fechaFinStr",
-        { fechaFinStr: fechaColombiaStr(fechaFin) },
-      );
+      .andWhere(`${FECHA_NEGOCIO_PAGO_SQL} >= :fechaInicioStr`, {
+        fechaInicioStr: fechaColombiaStr(fechaInicio),
+      })
+      .andWhere(`${FECHA_NEGOCIO_PAGO_SQL} < :fechaFinStr`, {
+        fechaFinStr: fechaColombiaStr(fechaFin),
+      });
 
     if (usuarioId !== undefined) {
       query.andWhere('r.usuarioId = :usuarioId', { usuarioId });
@@ -213,10 +220,40 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     return Number(result?.total ?? 0);
   }
 
+  /**
+   * Cobrado por mes (cash): igual que sumPagosPorPeriodo pero agrupando por
+   * mes (YYYY-MM) de la fecha de negocio del pago (COALESCE caja del pago,
+   * fechaHora, creadoEn del registro). Devuelve solo los meses con pagos.
+   */
+  async sumPagosPorMes(
+    salonId: number,
+    fechaInicio: Date,
+    fechaFin: Date,
+  ): Promise<Array<{ mes: string; total: number }>> {
+    const query = this.getRepo()
+      .createQueryBuilder('r')
+      .select(`SUBSTRING(${FECHA_NEGOCIO_PAGO_SQL}, 1, 7)`, 'mes')
+      .addSelect('COALESCE(SUM(p.monto), 0)', 'total')
+      .innerJoin('r.pagos', 'p')
+      .leftJoin('p.caja', 'pc')
+      .where('r.salonId = :salonId', { salonId })
+      .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
+      .andWhere(`${FECHA_NEGOCIO_PAGO_SQL} >= :fechaInicioStr`, {
+        fechaInicioStr: fechaColombiaStr(fechaInicio),
+      })
+      .andWhere(`${FECHA_NEGOCIO_PAGO_SQL} < :fechaFinStr`, {
+        fechaFinStr: fechaColombiaStr(fechaFin),
+      })
+      .groupBy(`SUBSTRING(${FECHA_NEGOCIO_PAGO_SQL}, 1, 7)`)
+      .orderBy('mes', 'ASC');
+
+    const rows = await query.getRawMany<{ mes: string; total: string }>();
+    return rows.map((row) => ({ mes: row.mes, total: Number(row.total ?? 0) }));
+  }
+
   /** Fiado originado en el período: Σ montoPendiente de registros NO ANULADO del
    *  salón cuya fecha de negocio (COALESCE(fechaHora, creadoEn)) cae en el rango. */
-  async sumMontoPendientePorPeriodo(
-    salonId: number,
+  async sumMontoPendientePorPeriodo(    salonId: number,
     fechaInicio: Date,
     fechaFin: Date,
     usuarioId?: number,

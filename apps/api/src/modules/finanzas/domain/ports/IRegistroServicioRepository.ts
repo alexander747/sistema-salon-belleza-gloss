@@ -30,6 +30,9 @@ export interface IRegistroServicioRepository {
   /** Σ pagos recibidos en el período por fecha de recepción (pago.creadoEn),
    *  solo de registros NO ANULADO del salón. `usuarioId`/`clienteId` filtran. */
   sumPagosPorPeriodo(salonId: number, fechaInicio: Date, fechaFin: Date, usuarioId?: number, clienteId?: number): Promise<number>;
+  /** Σ pagos agrupados por mes (YYYY-MM, fecha de negocio = caja del pago),
+   *  solo de registros NO ANULADO del salón, en el rango dado (Colombia). */
+  sumPagosPorMes(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<Array<{ mes: string; total: number }>>;
   /** Σ montoPendiente de registros NO ANULADO del salón cuya fecha de negocio
    *  (COALESCE(fechaHora, creadoEn)) cae en el período — fiado originado. */
   sumMontoPendientePorPeriodo(salonId: number, fechaInicio: Date, fechaFin: Date, usuarioId?: number, clienteId?: number): Promise<number>;
