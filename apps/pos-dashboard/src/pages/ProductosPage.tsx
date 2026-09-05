@@ -198,6 +198,7 @@ const ProductosPage: React.FC = () => {
 
   const [form, setForm] = useState({
     nombre: '',
+    codigoBarras: '',
     descripcion: '',
     marca: '',
     precioCompra: 0,
@@ -288,6 +289,7 @@ const ProductosPage: React.FC = () => {
   const resetForm = () => {
     setForm({
       nombre: '',
+      codigoBarras: '',
       descripcion: '',
       marca: '',
       precioCompra: 0,
@@ -306,6 +308,7 @@ const ProductosPage: React.FC = () => {
     setEditing(prod);
     setForm({
       nombre: prod.nombre,
+      codigoBarras: prod.codigoBarras ?? '',
       descripcion: prod.descripcion ?? '',
       marca: prod.marca ?? '',
       precioCompra: prod.precioCompra ?? 0,
@@ -333,6 +336,7 @@ const ProductosPage: React.FC = () => {
     try {
       const payload: Record<string, unknown> = {
         nombre: form.nombre.trim(),
+        codigoBarras: form.codigoBarras.trim() || undefined,
         descripcion: form.descripcion.trim() || undefined,
         marca: form.marca.trim() || undefined,
         precioCompra: form.precioCompra,
@@ -495,7 +499,7 @@ const ProductosPage: React.FC = () => {
             >
               <input
                 type="text"
-                placeholder="Buscar por nombre o marca…"
+                placeholder="Buscar por nombre, marca o código…"
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 style={searchInputStyle}
@@ -563,10 +567,10 @@ const ProductosPage: React.FC = () => {
 
           {/* ── Content area ── */}
           {dataLoading ? (
-            <TableSkeleton
-              columns={['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Margen', 'Precio', 'Tipo', 'Marca', 'Acción']}
-              rows={5}
-            />
+              <TableSkeleton
+                columns={['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Margen', 'Precio', 'Tipo', 'Marca', 'Código', 'Acción']}
+                rows={5}
+              />
           ) : dataError ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -666,6 +670,7 @@ const ProductosPage: React.FC = () => {
                   <span>Precio</span>
                   <span>Tipo</span>
                   <span>Marca</span>
+                  <span>Código</span>
                   <span style={{ textAlign: 'right' }}>Acción</span>
                 </div>
 
@@ -759,6 +764,9 @@ const ProductosPage: React.FC = () => {
                       </span>
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} data-label="Marca">
                         {prod.marca || '—'}
+                      </span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }} data-label="Código">
+                        {prod.codigoBarras || '—'}
                       </span>
                       <span style={{ display: 'flex', gap: '0.15rem', justifyContent: 'flex-end' }} data-label="Acciones">
                         <button
@@ -905,6 +913,17 @@ const ProductosPage: React.FC = () => {
                     style={formFieldStyle}
                     placeholder="Ej: Shampoo profesional"
                     autoFocus
+                  />
+                </div>
+
+                <div style={{ marginBottom: '0.875rem' }}>
+                  <label style={formLabelStyle}>Código de barras</label>
+                  <input
+                    type="text"
+                    value={form.codigoBarras}
+                    onChange={(e) => setForm((prev) => ({ ...prev, codigoBarras: e.target.value }))}
+                    style={formFieldStyle}
+                    placeholder="Escaneá o escribí el código"
                   />
                 </div>
 

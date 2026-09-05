@@ -4,6 +4,7 @@ export interface Producto {
   id: number;
   nombre: string;
   marca: string | null;
+  codigoBarras: string | null;
   color: string | null;
   tamano: string | null;
   descripcion: string | null;
@@ -69,6 +70,7 @@ export async function createProducto(
     nombre: string;
     descripcion?: string;
     marca?: string;
+    codigoBarras?: string;
     precioCompra?: number;
     margenGanancia?: number;
     precioVenta?: number;

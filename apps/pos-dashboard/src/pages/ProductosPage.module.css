@@ -5,7 +5,7 @@
    byte-idéntico). El MQ ≤640px apila el grid como cards. */
 .gridHeader {
   display: grid;
-  grid-template-columns: minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px;
+  grid-template-columns: minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 90px 150px;
   gap: 0.75rem;
   padding: 0.65rem 1rem;
   border-bottom: 1px solid var(--border);
@@ -19,7 +19,7 @@
 
 .gridRow {
   display: grid;
-  grid-template-columns: minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 150px;
+  grid-template-columns: minmax(130px, 1.3fr) 60px 90px 90px 60px 70px 70px 110px 90px 150px;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border);

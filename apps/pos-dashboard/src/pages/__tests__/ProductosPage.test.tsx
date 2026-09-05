@@ -36,6 +36,7 @@ const producto = {
   id: 1,
   nombre: 'Shampoo Profesional',
   marca: 'Loreal',
+  codigoBarras: '7701234567890',
   color: null,
   tamano: null,
   descripcion: null,
@@ -101,6 +102,7 @@ describe('ProductosPage — listado y operaciones', () => {
     expect(screen.getByText('30%')).toBeInTheDocument(); // margen
     expect(screen.getByText('Venta')).toBeInTheDocument(); // tipo RETAIL
     expect(screen.getByText('Loreal')).toBeInTheDocument(); // marca
+    expect(screen.getByText('7701234567890')).toBeInTheDocument(); // código de barras
 
     const productosCall = mockGet.mock.calls.find(([url]) =>
       String(url).includes('/productos') && !String(url).includes('historial-precios'),
@@ -180,6 +182,79 @@ describe('ProductosPage — listado y operaciones', () => {
         }),
       );
     });
+  }, 20000);
+
+  it('crear producto con escáner: envía el codigoBarras en el POST', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo Producto' }, WAIT));
+    expect(await screen.findByText('Nuevo Producto', {}, WAIT)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Ej: Shampoo profesional'), {
+      target: { value: 'Crema de peinar' },
+    });
+    // El campo de código de barras acepta el scan (texto + Enter del lector)
+    fireEvent.change(screen.getByPlaceholderText('Escaneá o escribí el código'), {
+      target: { value: '7709876543210' },
+    });
+    // En modo margen: [0] precio de compra (MoneyInput)
+    const moneyInputs = screen.getAllByPlaceholderText('0');
+    fireEvent.change(moneyInputs[0], { target: { value: '10000' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear producto' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/productos',
+        expect.objectContaining({ codigoBarras: '7709876543210' }),
+      );
+    });
+  }, 20000);
+
+  it('editar producto: precarga el codigoBarras y lo conserva en el PUT', async () => {
+    defaultApiMock();
+    mockPut.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
+
+    // El código escaneado al crear queda precargado en el formulario
+    expect(screen.getByDisplayValue('7701234567890')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith(
+        '/salones/1/productos/1',
+        expect.objectContaining({ codigoBarras: '7701234567890' }),
+      );
+    });
+  }, 20000);
+
+  it('restock por escáner: buscar por código consulta la API con q', async () => {
+    defaultApiMock();
+
+    renderPage();
+
+    expect(await screen.findByText('Shampoo Profesional', {}, WAIT)).toBeInTheDocument();
+
+    // Un lector de código de barras "escribe" los dígitos + Enter en el buscador
+    fireEvent.change(screen.getByPlaceholderText('Buscar por nombre, marca o código…'), {
+      target: { value: '7701234567890' },
+    });
+
+    await waitFor(() => {
+      const productosCalls = mockGet.mock.calls.filter(
+        ([url]) => String(url).includes('/productos') && !String(url).includes('historial-precios'),
+      );
+      const last = productosCalls[productosCalls.length - 1];
+      expect(String(last?.[0])).toContain('q=7701234567890');
+    }, WAIT);
   }, 20000);
 
   it('re-stock: confirma y hace POST al endpoint /restock con cantidad y precio', async () => {
@@ -280,7 +355,7 @@ describe('ProductosPage — móvil (grid apilado ≤640px)', () => {
     setMobileMedia(true);
   });
 
-  const ROW_LABELS = ['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Margen', 'Precio', 'Tipo', 'Marca', 'Acciones'];
+  const ROW_LABELS = ['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Margen', 'Precio', 'Tipo', 'Marca', 'Código', 'Acciones'];
 
   it('cada celda de fila expone su data-label en orden (contrato de grids apilados)', async () => {
     defaultApiMock([
