@@ -24,6 +24,7 @@ export interface RestockInput {
 export interface IProductoRepository {
   findBySalon(salonId: number, tipoInventario?: TipoInventario): Promise<ProductoEntity[]>;
   findBySalonAndId(salonId: number, id: number): Promise<ProductoEntity | null>;
+  findByCodigoBarras(salonId: number, codigoBarras: string): Promise<ProductoEntity | null>;
   search(params: SearchProductosParams): Promise<{ data: ProductoEntity[]; total: number }>;
   create(data: Partial<ProductoEntity>): Promise<ProductoEntity>;
   update(id: number, data: Partial<ProductoEntity>): Promise<ProductoEntity | null>;

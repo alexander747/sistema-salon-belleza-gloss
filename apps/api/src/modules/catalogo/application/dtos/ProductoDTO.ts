@@ -7,6 +7,7 @@ export class ProductoDTO {
   id: number;
   nombre: string;
   marca: string | null;
+  codigoBarras: string | null;
   color: string | null;
   tamano: string | null;
   descripcion: string | null;
@@ -32,6 +33,7 @@ export class ProductoDTO {
     dto.id = entity.id;
     dto.nombre = entity.nombre;
     dto.marca = entity.marca ?? null;
+    dto.codigoBarras = entity.codigoBarras ?? null;
     dto.color = entity.color ?? null;
     dto.tamano = entity.tamano ?? null;
     dto.descripcion = entity.descripcion ?? null;

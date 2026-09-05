@@ -22,6 +22,9 @@ export class ProductoEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 100, nullable: true })
   marca: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  codigoBarras: string | null;
+
   @Column({ type: 'varchar', length: 100, nullable: true })
   color: string;
 

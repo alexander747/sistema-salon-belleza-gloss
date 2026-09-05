@@ -36,6 +36,10 @@ export class TypeORMProductoRepository implements IProductoRepository {
     return this.getRepo().findOneBy({ id, salonId });
   }
 
+  async findByCodigoBarras(salonId: number, codigoBarras: string): Promise<ProductoEntity | null> {
+    return this.getRepo().findOneBy({ salonId, codigoBarras, activo: true });
+  }
+
   async search(params: SearchProductosParams): Promise<{ data: ProductoEntity[]; total: number }> {
     const queryBuilder = this.getRepo().createQueryBuilder('p')
       .where('p.salonId = :salonId', { salonId: params.salonId })
@@ -47,7 +51,7 @@ export class TypeORMProductoRepository implements IProductoRepository {
 
     if (params.q) {
       queryBuilder.andWhere(
-        '(LOWER(p.nombre) LIKE :q OR LOWER(p.marca) LIKE :q)',
+        '(LOWER(p.nombre) LIKE :q OR LOWER(p.marca) LIKE :q OR LOWER(p.codigoBarras) LIKE :q)',
         { q: `%${params.q.toLowerCase()}%` },
       );
     }
