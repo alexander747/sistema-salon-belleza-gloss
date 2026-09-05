@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 import { readFileSync } from 'node:fs';
@@ -816,4 +816,137 @@ describe('AgendaPage — fiado y pago parcial al completar cita (PR3)', () => {
       expect(ultimoCompletarCall()[1].registro.pagos).toEqual([{ monto: 60000, metodoPago: 'EFECTIVO' }]);
     }, WAIT);
   }, 20000);
+});
+
+describe('AgendaPage — escáner de código de barras al completar (PR2)', () => {
+  const productoBarra = {
+    id: 2,
+    nombre: 'Shampoo Barra',
+    marca: null,
+    precioVenta: 15000,
+    cantidadStock: 5,
+    codigoBarras: '7701234567890',
+  };
+
+  function apiMockConProductos() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/agenda/citas')) return Promise.resolve({ data: [citaHoy('CONFIRMADA')] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', telefono: '123456' }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Empleada Test', activo: true }] });
+      }
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', duracionMinutos: 60, precioBase: 30000, costoBaseInsumos: 0, activo: true }],
+        });
+      }
+      if (url.includes('/productos')) return Promise.resolve({ data: [productoBarra] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  /** Abre el modal de completar de la cita CONFIRMADA. */
+  async function abrirCompletar() {
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+  }
+
+  function scanear(codigo: string) {
+    const scan = screen.getByPlaceholderText(/escanear código/i);
+    fireEvent.change(scan, { target: { value: codigo } });
+    fireEvent.keyDown(scan, { key: 'Enter' });
+    return scan as HTMLInputElement;
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('escanear un código existente agrega el producto al carrito del modal', async () => {
+    apiMockConProductos();
+    renderAgenda();
+    await abrirCompletar();
+
+    const scan = scanear('7701234567890');
+
+    // El producto aparece en "En carrito" (además de su card en el catálogo)
+    expect(await screen.findByText(/En carrito \(1\)/)).toBeInTheDocument();
+    expect(screen.getAllByText('Shampoo Barra').length).toBeGreaterThanOrEqual(2);
+    expect(scan.value).toBe('');
+  });
+
+  it('código desconocido muestra "Producto no encontrado"', async () => {
+    apiMockConProductos();
+    renderAgenda();
+    await abrirCompletar();
+
+    scanear('000000');
+
+    expect(await screen.findByText(/Producto no encontrado/)).toBeInTheDocument();
+  });
+});
+
+describe('AgendaPage — recibo tras completar cita (PR2)', () => {
+  function apiMockRecibo() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/agenda/citas')) return Promise.resolve({ data: [citaHoy('CONFIRMADA')] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', telefono: '123456' }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Empleada Test', activo: true }] });
+      }
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', duracionMinutos: 60, precioBase: 30000, costoBaseInsumos: 0, activo: true }],
+        });
+      }
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('tras completar muestra el ReciboModal con cliente, servicio, total y Nº del registro', async () => {
+    apiMockRecibo();
+    mockPost.mockResolvedValue({
+      data: { cita: { id: 1 }, registro: { id: 77, fechaHora: '2026-09-04T12:00:00.000Z' } },
+    });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Recibo de venta' });
+    expect(within(dialog).getByText('Recibo de venta')).toBeInTheDocument();
+    expect(within(dialog).getByText('Cliente Test')).toBeInTheDocument();
+    expect(within(dialog).getByText('Empleada Test')).toBeInTheDocument();
+    expect(within(dialog).getByText('Corte')).toBeInTheDocument();
+    expect(within(dialog).getByText('Nº 77')).toBeInTheDocument();
+
+    // El modal de completar quedó cerrado
+    expect(screen.queryByRole('button', { name: 'Confirmar y Registrar' })).not.toBeInTheDocument();
+  });
 });

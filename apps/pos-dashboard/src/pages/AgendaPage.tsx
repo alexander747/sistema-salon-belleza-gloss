@@ -14,6 +14,9 @@ import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { getCitaActions, type CitaAccion } from '../utils/citaActions.js';
+import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
+import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
+import ReciboModal from '../components/ReciboModal.js';
 import styles from './AgendaPage.module.css';
 
 /* ── Types ── */
@@ -76,7 +79,11 @@ interface ProductoSimple {
   marca?: string;
   precioVenta: number;
   cantidadStock: number;
+  codigoBarras?: string | null;
 }
+
+/** /auth/me devuelve el salón anidado (runtime) aunque IUser no lo declare. */
+type UserConSalon = IUser & { salon?: ReciboSalon | null };
 
 interface ProductCartItem {
   productoId: number;
@@ -225,7 +232,7 @@ const AgendaPage: React.FC = () => {
   const navigate = useNavigate();
 
   /* ── Auth state ── */
-  const [user, setUser] = useState<IUser | null>(null);
+  const [user, setUser] = useState<UserConSalon | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   /* ── Data state ── */
@@ -282,6 +289,9 @@ const AgendaPage: React.FC = () => {
   });
   const [completando, setCompletando] = useState(false);
   const [completarError, setCompletarError] = useState<string | null>(null);
+
+  /* ── Recibo post-completar (PR2) ── */
+  const [recibo, setRecibo] = useState<ReciboData | null>(null);
 
   /* ── Derived ── */
 
@@ -621,7 +631,7 @@ const AgendaPage: React.FC = () => {
       // 1. Crear registro financiero Y completar la cita en UNA sola llamada
       //    atómica (el backend persiste ambos en una transacción; si falla,
       //    no queda nada a medias y el reintento no duplica registros).
-      await api.post(`/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`, {
+      const { data } = await api.post(`/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`, {
         registro: {
           salonId,
           clienteId: selectedCita.cliente.id,
@@ -667,6 +677,57 @@ const AgendaPage: React.FC = () => {
           valorFinal: finalTotal,
         },
       });
+
+      // PR2: recibo de venta construido desde el estado del modal (lo que el
+      // usuario vio); Nº/fecha se toman del registro que devuelve el backend.
+      const registroResp =
+        data && typeof data === 'object' && 'registro' in data
+          ? (data as { registro: unknown }).registro
+          : data;
+      const servicioPrecio = (s: { id: number; precio: number }) =>
+        completarForm.serviciosPrecios[s.id] ?? s.precio;
+      const pendiente = calcularPendiente(finalTotal, completarForm.propina, completarForm.montoRecibido);
+      setRecibo(
+        buildRecibo({
+          numero: numeroDeRegistro(registroResp),
+          fecha: fechaDeRegistro(registroResp, new Date(`${selectedCita.fecha}T12:00:00`).toISOString()),
+          clienteNombre: selectedCita.cliente.nombre,
+          empleadaNombre: selectedCita.empleada.nombre,
+          lineas: [
+            // Servicios originales realizados (precio > 0; 0 = marcado "no realizado")
+            ...selectedCita.servicios
+              .filter((s) => servicioPrecio(s) > 0)
+              .map((s) => ({
+                tipo: 'SERVICIO' as const,
+                nombre: s.nombre,
+                cantidad: 1,
+                precio: servicioPrecio(s),
+              })),
+            // Servicios extra agregados en el modal
+            ...servicios
+              .filter((s) => completarForm.nuevosServiciosIds.includes(s.id))
+              .map((s) => ({
+                tipo: 'SERVICIO' as const,
+                nombre: s.nombre,
+                cantidad: 1,
+                precio: s.precioBase ?? 0,
+              })),
+            // Productos vendidos
+            ...completarForm.productosVendidos.map((p) => ({
+              tipo: 'PRODUCTO' as const,
+              nombre: p.nombre,
+              cantidad: p.cantidad,
+              precio: p.precioVenta,
+            })),
+          ],
+          metodoPago: completarForm.metodoPago,
+          total: finalTotal,
+          propina: completarForm.propina,
+          descuento: descuentoMonto,
+          descuentoPorcentaje: descuentoPct || undefined,
+          montoPendiente: pendiente,
+        }),
+      );
 
       setShowCompletar(false);
       setSelectedCita(null);
@@ -1067,6 +1128,14 @@ const AgendaPage: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* ── Recibo de venta post-completar (PR2) ── */}
+      <ReciboModal
+        open={recibo !== null}
+        recibo={recibo}
+        salon={user?.salon ?? null}
+        onClose={() => setRecibo(null)}
+      />
     </>
   );
 };
@@ -2383,6 +2452,26 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   onToggleServicio,
 }) => {
   const [productSearch, setProductSearch] = useState('');
+  /* Scanner de código de barras (PR2): match exacto contra la lista RETAIL. */
+  const [scanCode, setScanCode] = useState('');
+  const [scanError, setScanError] = useState(false);
+
+  const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const code = scanCode.trim();
+    if (!code) return;
+    const found = productos.find(
+      (p) => p.codigoBarras != null && p.codigoBarras.trim().toLowerCase() === code.toLowerCase(),
+    );
+    if (found) {
+      addProductToCart(found);
+      setScanCode('');
+      setScanError(false);
+    } else {
+      setScanError(true);
+    }
+  };
 
   const filteredProductos = useMemo(() => {
     let list = productos;
@@ -2651,6 +2740,33 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
               {/* ── Productos ── */}
               <div>
                 <div className={styles.sectionTitle}>Productos</div>
+                {/* Escáner de código de barras (PR2) */}
+                <input
+                  type="text"
+                  aria-label="Escanear código"
+                  autoFocus
+                  placeholder="📷 Escanear código…"
+                  value={scanCode}
+                  onChange={(e) => {
+                    setScanCode(e.target.value);
+                    setScanError(false);
+                  }}
+                  onKeyDown={handleScanKeyDown}
+                  className={styles.productSearchInput}
+                />
+                {scanError && (
+                  <div
+                    role="alert"
+                    style={{
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.7rem',
+                      color: 'var(--danger)',
+                      marginBottom: '0.4rem',
+                    }}
+                  >
+                    ⚠️ Producto no encontrado
+                  </div>
+                )}
                 <input
                   type="text"
                   placeholder="Buscar producto…"
