@@ -1,13 +1,15 @@
 import { injectable, inject } from 'tsyringe';
 import type { IProductoRepository } from '../../../domain/ports/IProductoRepository';
 import { ProductoDTO } from '../../dtos/ProductoDTO';
-import { NotFoundError } from '../../../../../shared/errors';
+import { NotFoundError, ConflictError } from '../../../../../shared/errors';
+import { normalizeCodigoBarras } from './codigoBarras';
 
 interface UpdateProductoInput {
   salonId: number;
   id: number;
   nombre?: string;
   marca?: string;
+  codigoBarras?: string | null;
   color?: string;
   tamano?: string;
   descripcion?: string;
@@ -35,6 +37,19 @@ export class UpdateProductoUseCase {
     const data: Record<string, unknown> = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;
     if (input.marca !== undefined) data.marca = input.marca;
+    if (input.codigoBarras !== undefined) {
+      const codigoBarras = normalizeCodigoBarras(input.codigoBarras);
+      data.codigoBarras = codigoBarras;
+
+      // Soft-uniqueness per salon: al asignar un código real, otro producto
+      // ACTIVO del mismo salón no puede usarlo (el propio producto queda excluido).
+      if (codigoBarras) {
+        const existing = await this.productoRepo.findByCodigoBarras(input.salonId, codigoBarras);
+        if (existing && existing.id !== input.id) {
+          throw new ConflictError('Ya existe un producto con ese código de barras en este salón');
+        }
+      }
+    }
     if (input.color !== undefined) data.color = input.color;
     if (input.tamano !== undefined) data.tamano = input.tamano;
     if (input.descripcion !== undefined) data.descripcion = input.descripcion;
