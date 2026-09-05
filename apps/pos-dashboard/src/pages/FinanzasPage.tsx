@@ -15,6 +15,7 @@ import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
+import type { ReciboSalon } from '../utils/recibo.js';
 import styles from './FinanzasPage.module.css';
 
 /* ================================================================ */
@@ -612,7 +613,8 @@ const FinanzasPage: React.FC = () => {
 
 interface RegistrosTabProps {
   salonId: number | null;
-  user: IUser | null;
+  /** /auth/me devuelve el salón anidado (runtime) aunque IUser no lo declare. */
+  user: (IUser & { salon?: ReciboSalon | null }) | null;
   /** CAJA_CERRADA en WalkInModal: cambia al tab Caja de FinanzasPage */
   onNavigateToCaja?: () => void;
 }
@@ -1331,6 +1333,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
           <WalkInModal
             salonId={salonId}
             isOpen={walkInOpen}
+            salon={user?.salon ?? null}
             onClose={() => setWalkInOpen(false)}
             onSuccess={() => {
               setWalkInOpen(false);

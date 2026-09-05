@@ -9,7 +9,10 @@ import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
+import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
+import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
 import MoneyInput from './MoneyInput.js';
+import ReciboModal from './ReciboModal.js';
 import styles from './WalkInModal.module.css';
 
 /* ── Types ── */
@@ -39,6 +42,7 @@ interface Producto {
   precioVenta: number;
   cantidadStock: number;
   categoriaId: number;
+  codigoBarras?: string | null;
 }
 
 interface ProductCartItem {
@@ -81,6 +85,8 @@ interface WalkInModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** Datos del salón para el encabezado del recibo post-venta. */
+  salon?: ReciboSalon | null;
   /** Cuando hay CAJA_CERRADA: navega a la pestaña Caja (FinanzasPage cambia de tab; otras páginas: /finanzas?tab=caja) */
   onNavigateToCaja?: () => void;
 }
@@ -159,7 +165,7 @@ const cardVariants = {
 
 /* ── Component ── */
 
-const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onSuccess, onNavigateToCaja }) => {
+const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onSuccess, salon, onNavigateToCaja }) => {
   const navigate = useNavigate();
 
   /* ── Catalog data ── */
@@ -201,6 +207,11 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorEsCajaCerrada, setErrorEsCajaCerrada] = useState(false);
+
+  /* ── Scanner (PR2) + recibo post-venta ── */
+  const [scanCode, setScanCode] = useState('');
+  const [scanError, setScanError] = useState(false);
+  const [recibo, setRecibo] = useState<ReciboData | null>(null);
 
   /* ── Derived ── */
 
@@ -362,6 +373,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setErrorEsCajaCerrada(false);
       setProcessing(false);
       setDataError(null);
+      setScanCode('');
+      setScanError(false);
+      setRecibo(null);
     }
   }, [isOpen]);
 
@@ -429,6 +443,27 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
 
   const removeProductFromCart = (productoId: number) => {
     setProductCart((prev) => prev.filter((item) => item.productoId !== productoId));
+  };
+
+  /* ── Scanner de código de barras (PR2) ──
+   * Match exacto contra la lista RETAIL ya cargada: Enter agrega el producto
+   * (reusa addProductToCart: qty +1 con tope de stock) o muestra un aviso. */
+
+  const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const code = scanCode.trim();
+    if (!code) return;
+    const found = productos.find(
+      (p) => p.codigoBarras != null && p.codigoBarras.trim().toLowerCase() === code.toLowerCase(),
+    );
+    if (found) {
+      addProductToCart(found);
+      setScanCode('');
+      setScanError(false);
+    } else {
+      setScanError(true);
+    }
   };
 
   /* ── Unified cart for display ── */
@@ -502,8 +537,42 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
         valorOriginal: subtotal + propina,
         valorFinal: finalTotal,
       };
-      await api.post(`/salones/${salonId}/registros`, payload);
-      onSuccess();
+      const { data } = await api.post(`/salones/${salonId}/registros`, payload);
+
+      // PR2: tras la venta se ofrece el recibo; onSuccess recién al cerrarlo.
+      const clienteNombre =
+        clientes.find((c) => c.id === Number(clienteId))?.nombre ?? `Cliente #${clienteId}`;
+      const empleadaNombre =
+        empleadas.find((e) => e.id === Number(empleadaId))?.nombre ?? `Empleada #${empleadaId}`;
+      const lineas = [
+        ...cart.map((item) => ({
+          tipo: 'SERVICIO' as const,
+          nombre: item.nombre,
+          cantidad: 1,
+          precio: item.precio,
+        })),
+        ...productCart.map((p) => ({
+          tipo: 'PRODUCTO' as const,
+          nombre: p.nombre,
+          cantidad: p.cantidad,
+          precio: p.precioVenta,
+        })),
+      ];
+      setRecibo(
+        buildRecibo({
+          numero: numeroDeRegistro(data),
+          fecha: fechaDeRegistro(data, new Date(`${fecha}T12:00:00`).toISOString()),
+          clienteNombre,
+          empleadaNombre,
+          lineas,
+          metodoPago: paymentMethod,
+          total: finalTotal,
+          propina,
+          descuento: descuentoMonto,
+          descuentoPorcentaje: descuento || undefined,
+          montoPendiente: pendiente,
+        }),
+      );
     } catch (err: unknown) {
       if (isCajaNoAbiertaEnFechaError(err)) {
         // Backfill (PR1): no hay caja ABIERTA para la fecha seleccionada (409).
@@ -529,12 +598,19 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     }
   };
 
+  /* ── Cerrar el recibo: la venta ya se registró → onSuccess (el padre cierra el modal y refresca) ── */
+  const handleReciboClose = () => {
+    setRecibo(null);
+    onSuccess();
+  };
+
   /* ── Render ── */
 
   if (!isOpen) return null;
 
   return (
-    <motion.div
+    <>
+      <motion.div
       className={styles.modalOverlay}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -648,6 +724,46 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                       </button>
                     );
                   })}
+                </div>
+
+                {/* ── Escáner de código de barras (PR2) ── */}
+                <div style={{ marginBottom: '0.625rem' }}>
+                  <input
+                    type="text"
+                    aria-label="Escanear código"
+                    autoFocus
+                    placeholder="📷 Escanear código…"
+                    value={scanCode}
+                    onChange={(e) => {
+                      setScanCode(e.target.value);
+                      setScanError(false);
+                    }}
+                    onKeyDown={handleScanKeyDown}
+                    style={{ ...searchInputStyle, maxWidth: '100%', width: '100%' }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--accent)';
+                      e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  />
+                  {scanError && (
+                    <div
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '0.75rem',
+                        color: 'var(--danger)',
+                        marginTop: '0.3rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                      }}
+                    >
+                      <span>⚠️ Producto no encontrado</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Universal search ── */}
@@ -1477,7 +1593,16 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           )}
         </div>
       </motion.div>
-    </motion.div>
+      </motion.div>
+
+      {/* ── Recibo de venta post-registro (PR2) ── */}
+      <ReciboModal
+        open={recibo !== null}
+        recibo={recibo}
+        salon={salon}
+        onClose={handleReciboClose}
+      />
+    </>
   );
 };
 

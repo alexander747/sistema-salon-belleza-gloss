@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPost: vi.fn(),
@@ -329,6 +328,11 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
         }),
       );
     });
+    // PR2: tras el POST aparece el recibo; onSuccess se dispara al cerrar el recibo.
+    const dialogRecibo = await screen.findByRole('dialog', { name: 'Recibo de venta' });
+    expect(within(dialogRecibo).getByText('Corte')).toBeInTheDocument();
+    expect(onSuccess).not.toHaveBeenCalled();
+    fireEvent.click(within(dialogRecibo).getByRole('button', { name: 'Cerrar' }));
     expect(onSuccess).toHaveBeenCalled();
   });
 
@@ -457,5 +461,177 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
         }),
       );
     });
+  });
+});
+
+describe('WalkInModal — escáner de código de barras (PR2)', () => {
+  const productoBarra = {
+    id: 2,
+    nombre: 'Shampoo Barra',
+    marca: null,
+    precioVenta: 15000,
+    cantidadStock: 5,
+    categoriaId: 1,
+    codigoBarras: '7701234567890',
+  };
+
+  /** Mock con 1 servicio (Corte) + 1 producto con código de barras. */
+  function apiMockConProductos() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 }],
+        });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María' }] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [productoBarra] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  function renderConProductos() {
+    return render(
+      <MemoryRouter>
+        <WalkInModal salonId={1} isOpen onClose={() => {}} onSuccess={() => {}} />
+      </MemoryRouter>,
+    );
+  }
+
+  function scanear(codigo: string) {
+    const scan = screen.getByPlaceholderText(/escanear código/i);
+    fireEvent.change(scan, { target: { value: codigo } });
+    fireEvent.keyDown(scan, { key: 'Enter' });
+    return scan as HTMLInputElement;
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+    apiMockConProductos();
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  it('escanear un código existente agrega el producto al carrito (cantidad 1) y limpia el input', async () => {
+    renderConProductos();
+    await screen.findByText('Shampoo Barra');
+
+    const scan = scanear('7701234567890');
+
+    // En el carrito: línea de producto con precio × cantidad
+    expect(await screen.findByText('$ 15.000 × 1')).toBeInTheDocument();
+    // El input del escáner queda limpio para el siguiente código
+    expect(scan.value).toBe('');
+  });
+
+  it('escanear el mismo código otra vez incrementa la cantidad (+1)', async () => {
+    renderConProductos();
+    await screen.findByText('Shampoo Barra');
+
+    scanear('7701234567890');
+    expect(await screen.findByText('$ 15.000 × 1')).toBeInTheDocument();
+
+    scanear('7701234567890');
+    expect(await screen.findByText('$ 15.000 × 2')).toBeInTheDocument();
+  });
+
+  it('código desconocido muestra "Producto no encontrado" y el mensaje desaparece al tipear', async () => {
+    renderConProductos();
+    await screen.findByText('Shampoo Barra');
+
+    scanear('999999');
+
+    expect(await screen.findByText(/Producto no encontrado/)).toBeInTheDocument();
+
+    // Al seguir escribiendo (próximo escaneo) el mensaje se limpia
+    const scan = screen.getByPlaceholderText(/escanear código/i);
+    fireEvent.change(scan, { target: { value: '7' } });
+    expect(screen.queryByText(/Producto no encontrado/)).not.toBeInTheDocument();
+  });
+
+  it('el escaneo también funciona con espacios al rededor del código (trim)', async () => {
+    renderConProductos();
+    await screen.findByText('Shampoo Barra');
+
+    scanear('  7701234567890  ');
+
+    expect(await screen.findByText('$ 15.000 × 1')).toBeInTheDocument();
+  });
+});
+
+describe('WalkInModal — recibo tras registrar (PR2)', () => {
+  function apiMockRecibo() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 }],
+        });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana Cliente' }] });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María Empleada' }] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+    apiMockRecibo();
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  /** Carrito: servicio Corte + cliente Ana + empleada María; pago Tarjeta. */
+  async function registrarConTarjeta() {
+    fireEvent.click(await screen.findByText('Corte'));
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
+    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+  }
+
+  it('tras el POST exitoso muestra el ReciboModal con cliente, línea, total y Nº del registro', async () => {
+    mockPost.mockResolvedValue({
+      data: { id: 88, fechaHora: '2026-09-04T12:00:00.000Z', montoTotal: 30000 },
+    });
+    const onSuccess = vi.fn();
+    render(
+      <MemoryRouter>
+        <WalkInModal salonId={1} isOpen onClose={() => {}} onSuccess={onSuccess} />
+      </MemoryRouter>,
+    );
+
+    await registrarConTarjeta();
+
+    const dialog = await screen.findByRole('dialog', { name: 'Recibo de venta' });
+    expect(within(dialog).getByText('Recibo de venta')).toBeInTheDocument();
+    expect(within(dialog).getByText('Ana Cliente')).toBeInTheDocument();
+    expect(within(dialog).getByText('María Empleada')).toBeInTheDocument();
+    expect(within(dialog).getByText('Corte')).toBeInTheDocument();
+    expect(within(dialog).getByText('Nº 88')).toBeInTheDocument();
+    // El modal NO cierra solo: onSuccess espera al cierre del recibo
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cerrar' }));
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('muestra el método de pago elegido en el recibo', async () => {
+    mockPost.mockResolvedValue({ data: { id: 1 } });
+    renderModal();
+
+    await registrarConTarjeta();
+
+    const dialog = await screen.findByRole('dialog', { name: 'Recibo de venta' });
+    expect(within(dialog).getByText('Tarjeta')).toBeInTheDocument();
   });
 });
