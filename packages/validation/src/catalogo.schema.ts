@@ -37,6 +37,7 @@ export type UpdateServicioInput = z.infer<typeof updateServicioSchema>;
 export const createProductoSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido').max(150),
   marca: z.string().max(100).optional(),
+  codigoBarras: z.string().max(50).optional().nullable(),
   color: z.string().max(100).optional(),
   tamano: z.string().max(50).optional(),
   descripcion: z.string().max(500).optional(),
