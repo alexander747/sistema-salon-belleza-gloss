@@ -236,6 +236,26 @@ describe('ProductosPage — listado y operaciones', () => {
     });
   }, 20000);
 
+  it('editar producto: vaciar el campo de código envía "" para limpiarlo en el backend', async () => {
+    defaultApiMock();
+    mockPut.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue('7701234567890'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith(
+        '/salones/1/productos/1',
+        expect.objectContaining({ codigoBarras: '' }),
+      );
+    });
+  }, 20000);
+
   it('restock por escáner: buscar por código consulta la API con q', async () => {
     defaultApiMock();
 

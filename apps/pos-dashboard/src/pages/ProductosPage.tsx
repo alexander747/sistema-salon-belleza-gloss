@@ -336,7 +336,9 @@ const ProductosPage: React.FC = () => {
     try {
       const payload: Record<string, unknown> = {
         nombre: form.nombre.trim(),
-        codigoBarras: form.codigoBarras.trim() || undefined,
+        // '' viaja como string vacío → el backend normaliza '' → null.
+        // Así editar sin código limpia un código previo (no lo deja stale).
+        codigoBarras: form.codigoBarras.trim(),
         descripcion: form.descripcion.trim() || undefined,
         marca: form.marca.trim() || undefined,
         precioCompra: form.precioCompra,
