@@ -13,6 +13,9 @@ import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
+import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
+import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
+import ReciboModal from '../components/ReciboModal.js';
 import styles from './VentasPage.module.css';
 
 /* ── Types ── */
@@ -30,7 +33,11 @@ interface Producto {
   cantidadStock: number;
   categoria?: Categoria;
   categoriaId?: number;
+  codigoBarras?: string | null;
 }
+
+/** /auth/me devuelve el salón anidado (runtime) aunque IUser no lo declare. */
+type UserConSalon = IUser & { salon?: ReciboSalon | null };
 
 interface CartItem {
   productoId: number;
@@ -131,7 +138,7 @@ const VentasPage: React.FC = () => {
   const navigate = useNavigate();
 
   /* Auth state */
-  const [user, setUser] = useState<IUser | null>(null);
+  const [user, setUser] = useState<UserConSalon | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   /* Data state */
@@ -159,6 +166,11 @@ const VentasPage: React.FC = () => {
   const [fecha, setFecha] = useState(() => toISODate(new Date()));
   const [processing, setProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  /* Scanner (PR2) + recibo post-venta */
+  const [scanCode, setScanCode] = useState('');
+  const [scanError, setScanError] = useState(false);
+  const [recibo, setRecibo] = useState<ReciboData | null>(null);
 
   /* Discount & Adjustment state (mirrors FinanzasPage and AgendaPage) */
   const [propina, setPropina] = useState<number>(0);
@@ -300,6 +312,26 @@ const VentasPage: React.FC = () => {
     });
   };
 
+  /* ── Scanner de código de barras (PR2) ──
+   * Match exacto contra la lista RETAIL cargada: Enter agrega el producto
+   * (reusa addToCart: qty +1 con tope de stock) o muestra un aviso. */
+  const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const code = scanCode.trim();
+    if (!code) return;
+    const found = productos.find(
+      (p) => p.codigoBarras != null && p.codigoBarras.trim().toLowerCase() === code.toLowerCase(),
+    );
+    if (found) {
+      addToCart(found);
+      setScanCode('');
+      setScanError(false);
+    } else {
+      setScanError(true);
+    }
+  };
+
   const updateQty = (productoId: number, delta: number) => {
     setCart((prev) =>
       prev
@@ -384,7 +416,36 @@ const VentasPage: React.FC = () => {
         valorOriginal: cartSubtotal + propina,
         valorFinal: finalTotal,
       };
-      await api.post(`/salones/${salonId}/registros`, payload);
+      const { data } = await api.post(`/salones/${salonId}/registros`, payload);
+
+      // PR2: recibo de venta con los datos que el usuario vio (nombres/qty/precios
+      // del carrito); el Nº y la fecha viajan desde la respuesta del backend.
+      const clienteNombre =
+        clientes.find((c) => c.id === Number(selectedCustomerId))?.nombre ??
+        `Cliente #${selectedCustomerId}`;
+      const empleadaNombre =
+        empleadas.find((e) => e.id === Number(selectedEmployeeId))?.nombre ??
+        `Empleada #${selectedEmployeeId}`;
+      setRecibo(
+        buildRecibo({
+          numero: numeroDeRegistro(data),
+          fecha: fechaDeRegistro(data, new Date(`${fecha}T12:00:00`).toISOString()),
+          clienteNombre,
+          empleadaNombre,
+          lineas: cart.map((item) => ({
+            tipo: 'PRODUCTO' as const,
+            nombre: item.nombre,
+            cantidad: item.cantidad,
+            precio: item.precioVenta,
+          })),
+          metodoPago: paymentMethod,
+          total: finalTotal,
+          propina,
+          descuento: descuentoMonto,
+          descuentoPorcentaje: descuento || undefined,
+          montoPendiente: pendiente,
+        }),
+      );
       setSuccessMsg('Venta registrada con éxito');
       setCart([]);
       setSelectedCustomerId('');
@@ -530,6 +591,27 @@ const VentasPage: React.FC = () => {
               >
                 <input
                   type="text"
+                  aria-label="Escanear código"
+                  autoFocus
+                  placeholder="📷 Escanear código…"
+                  value={scanCode}
+                  onChange={(e) => {
+                    setScanCode(e.target.value);
+                    setScanError(false);
+                  }}
+                  onKeyDown={handleScanKeyDown}
+                  style={{ ...searchInputStyle, maxWidth: '200px' }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--accent)';
+                    e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
+                <input
+                  type="text"
                   placeholder="Buscar producto…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -558,6 +640,26 @@ const VentasPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {/* Scan error (aviso inline, se limpia al tipear) */}
+              {scanError && (
+                <div
+                  role="alert"
+                  style={{
+                    marginBottom: '0.75rem',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(224,85,106,0.12)',
+                    border: '1px solid rgba(224,85,106,0.3)',
+                    color: 'var(--danger)',
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  ⚠️ Producto no encontrado
+                </div>
+              )}
 
               {/* Product grid */}
               {dataLoading ? (
@@ -1671,6 +1773,14 @@ const VentasPage: React.FC = () => {
           </div>
         </motion.div>
       </AnimatePresence>
+
+      {/* ── Recibo de venta post-cobro (PR2) ── */}
+      <ReciboModal
+        open={recibo !== null}
+        recibo={recibo}
+        salon={user?.salon ?? null}
+        onClose={() => setRecibo(null)}
+      />
     </>
   );
 };

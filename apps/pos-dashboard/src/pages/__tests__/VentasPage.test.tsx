@@ -198,6 +198,156 @@ describe('VentasPage — carrito y cobro (happy path)', () => {
   }, 20000);
 });
 
+describe('VentasPage — escáner de código de barras (PR2)', () => {
+  const productoBarra = {
+    id: 7,
+    nombre: 'Aceite Argan',
+    marca: null,
+    precioVenta: 25000,
+    cantidadStock: 8,
+    categoriaId: 1,
+    codigoBarras: '7701234567899',
+  };
+
+  function apiMockConProductos() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/productos')) return Promise.resolve({ data: [productoBarra] });
+      if (url.includes('/categorias')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', activo: true }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'María', activo: true }] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  function scanear(codigo: string) {
+    const scan = screen.getByPlaceholderText(/escanear código/i);
+    fireEvent.change(scan, { target: { value: codigo } });
+    fireEvent.keyDown(scan, { key: 'Enter' });
+    return scan as HTMLInputElement;
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    apiMockConProductos();
+  });
+
+  it('escanear un código existente agrega el producto al carrito y limpia el input', async () => {
+    renderPage();
+
+    await screen.findByText('Aceite Argan');
+
+    const scan = scanear('7701234567899');
+
+    expect(await screen.findByText('$ 25.000 × 1')).toBeInTheDocument();
+    expect(scan.value).toBe('');
+  });
+
+  it('escanear el mismo código otra vez incrementa la cantidad (+1)', async () => {
+    renderPage();
+
+    await screen.findByText('Aceite Argan');
+
+    scanear('7701234567899');
+    expect(await screen.findByText('$ 25.000 × 1')).toBeInTheDocument();
+
+    scanear('7701234567899');
+    expect(await screen.findByText('$ 25.000 × 2')).toBeInTheDocument();
+  });
+
+  it('código desconocido muestra "Producto no encontrado" y el mensaje desaparece al tipear', async () => {
+    renderPage();
+
+    await screen.findByText('Aceite Argan');
+
+    scanear('000');
+
+    expect(await screen.findByText(/Producto no encontrado/)).toBeInTheDocument();
+
+    const scan = screen.getByPlaceholderText(/escanear código/i);
+    fireEvent.change(scan, { target: { value: '7' } });
+    expect(screen.queryByText(/Producto no encontrado/)).not.toBeInTheDocument();
+  });
+});
+
+describe('VentasPage — recibo tras cobrar (PR2)', () => {
+  const productoBarra = {
+    id: 7,
+    nombre: 'Aceite Argan',
+    marca: null,
+    precioVenta: 25000,
+    cantidadStock: 8,
+    categoriaId: 1,
+    codigoBarras: '7701234567899',
+  };
+
+  function apiMockConProductos() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/productos')) return Promise.resolve({ data: [productoBarra] });
+      if (url.includes('/categorias')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', activo: true }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'María', activo: true }] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  /** Escanea 1 producto + cliente + empleada + pago Tarjeta y cobra. */
+  async function cobrarConTarjeta() {
+    fireEvent.click(await screen.findByText('Aceite Argan'));
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[1], { target: { value: '1' } }); // cliente
+    fireEvent.change(combos[2], { target: { value: '1' } }); // empleada
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Cobrar\s+\$\s*25\.000/ }));
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    apiMockConProductos();
+  });
+
+  it('tras cobrar muestra el ReciboModal con cliente, línea, total y Nº del registro', async () => {
+    mockPost.mockResolvedValue({
+      data: { id: 55, fechaHora: '2026-09-04T12:00:00.000Z', montoTotal: 25000 },
+    });
+    renderPage();
+
+    await cobrarConTarjeta();
+
+    const dialog = await screen.findByRole('dialog', { name: 'Recibo de venta' });
+    expect(within(dialog).getByText('Recibo de venta')).toBeInTheDocument();
+    expect(within(dialog).getByText('Cliente Test')).toBeInTheDocument();
+    expect(within(dialog).getByText('María')).toBeInTheDocument();
+    expect(within(dialog).getByText('Aceite Argan')).toBeInTheDocument();
+    expect(within(dialog).getByText('Nº 55')).toBeInTheDocument();
+  });
+
+  it('el banner de éxito sigue apareciendo detrás del recibo y Cerrar lo deja visible', async () => {
+    mockPost.mockResolvedValue({ data: { id: 1 } });
+    renderPage();
+
+    await cobrarConTarjeta();
+
+    // Banner de éxito (el recibo se muestra encima; el banner permanece)
+    expect(await screen.findByText(/Venta registrada con éxito/)).toBeInTheDocument();
+
+    const dialog = screen.getByRole('dialog', { name: 'Recibo de venta' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('dialog', { name: 'Recibo de venta' })).not.toBeInTheDocument();
+  });
+});
+
 describe('VentasPage — fecha de negocio / backfill (PR3)', () => {
   const producto = { id: 1, nombre: 'Shampoo', marca: null, precioVenta: 20000, cantidadStock: 10, categoriaId: 1 };
 
