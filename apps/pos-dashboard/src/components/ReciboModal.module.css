@@ -1,0 +1,309 @@
+/* ── ReciboModal: recibo de venta imprimible ─────────────────────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  padding: 1rem;
+}
+
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(212, 168, 83, 0.06);
+  width: 100%;
+  max-width: 520px;
+  max-height: 92vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Toolbar: acciones en pantalla (no se imprimen) */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface);
+  z-index: 1;
+}
+
+.toolbarTitle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.printBtn {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--bg-root);
+  padding: 0.45rem 0.9rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 12px rgba(212, 168, 83, 0.25);
+  white-space: nowrap;
+}
+
+.printBtn:hover {
+  background: var(--accent-hover, var(--accent));
+}
+
+.closeBtn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 0.45rem 0.9rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.closeBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-dim);
+}
+
+/* ── Área imprimible ── */
+
+.printArea {
+  padding: 1.5rem 1.5rem 1.25rem;
+  background: #fff;
+  color: #1a1a1a;
+}
+
+.header {
+  text-align: center;
+  border-bottom: 2px dashed #d4a853;
+  padding-bottom: 0.85rem;
+  margin-bottom: 0.9rem;
+}
+
+.salonNombre {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #111;
+}
+
+.titulo {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #d4a853;
+  margin-top: 0.15rem;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  color: #555;
+}
+
+.dataGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.dataLabel {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+}
+
+.dataValue {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111;
+}
+
+/* Tabla de líneas */
+.lineasTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.9rem;
+}
+
+.lineasTable th {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  text-align: left;
+  padding: 0.3rem 0.35rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.lineasTable td {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  color: #222;
+  padding: 0.4rem 0.35rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+
+.colDesc {
+  width: 52%;
+}
+
+.colCant,
+.colPrecio,
+.colSubtotal {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.badgeServicio,
+.badgeProducto {
+  display: inline-block;
+  font-size: 0.55rem;
+  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 3px;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.badgeServicio {
+  background: rgba(212, 168, 83, 0.2);
+  color: #a1762b;
+}
+
+.badgeProducto {
+  background: rgba(80, 200, 120, 0.2);
+  color: #2e7d4f;
+}
+
+/* Totales */
+.totales {
+  border-top: 1px solid #e5e5e5;
+  padding-top: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  color: #333;
+  padding: 0.2rem 0;
+}
+
+.descuentoVal {
+  color: #c0392b;
+}
+
+.propinaVal {
+  color: #2e7d4f;
+}
+
+.pendienteVal {
+  color: #b7791f;
+  font-weight: 700;
+}
+
+.totalRowFinal {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #111;
+  border-top: 1px solid #111;
+  margin-top: 0.35rem;
+  padding-top: 0.4rem;
+}
+
+.pagoRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  color: #333;
+  border-top: 1px dashed #ddd;
+  padding-top: 0.5rem;
+}
+
+.footer {
+  text-align: center;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.7rem;
+  color: #888;
+  margin-top: 1rem;
+}
+
+/* ── Impresión: solo el recibo ── */
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printArea,
+  .printArea * {
+    visibility: visible;
+  }
+  .printArea {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    border-radius: 0;
+  }
+  .toolbar {
+    display: none !important;
+  }
+  .overlay {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: 0;
+  }
+}
