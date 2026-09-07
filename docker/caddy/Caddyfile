@@ -1,25 +1,32 @@
 # ============================================================
-# Caddyfile — reverse proxy con HTTPS automático
-# SOLO SE USA CUANDO TENGAS DOMINIO (modo prueba usa puertos directos)
+# Caddyfile — reverse proxy con HTTPS automático (Let's Encrypt)
+# Dominio: uniongloss.com
 #
-# 1. Apuntá tu dominio (ej. misalon.com) y subdominios a 51.161.113.43
-# 2. Reemplazá misalon.com por tu dominio real
-# 3. Descomentá el servicio caddy en docker-compose.prod.yml
-# 4. Caddy genera el certificado Let's Encrypt SOLO (gratis)
+# Requisito: los registros DNS deben apuntar a 51.161.113.43
+#   uniongloss.com      → A 51.161.113.43
+#   admin.uniongloss.com → A 51.161.113.43
+#   n8n.uniongloss.com   → A 51.161.113.43
+#   pma.uniongloss.com   → A 51.161.113.43
+#
+# Caddy genera los certificados HTTPS SOLO automáticamente.
 # ============================================================
 
-misalon.com {
+uniongloss.com {
     reverse_proxy dashboard:80
 }
 
-admin.misalon.com {
+www.uniongloss.com {
+    redir https://uniongloss.com{uri} permanent
+}
+
+admin.uniongloss.com {
     reverse_proxy superadmin:81
 }
 
-n8n.misalon.com {
+n8n.uniongloss.com {
     reverse_proxy n8n:5678
 }
 
-pma.misalon.com {
+pma.uniongloss.com {
     reverse_proxy phpmyadmin:80
 }

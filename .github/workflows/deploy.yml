@@ -1,13 +1,18 @@
 # ============================================================
 # CI/CD — Despliegue continuo a la VPS
-# Disparador: push a main
+# Disparador: push/merge a la rama PRODUCCION (NO en main)
 # Acción: hace SSH a la VPS y ejecuta docker compose up -d --build
+#
+# Flujo de trabajo recomendado:
+#   1. Trabajás en main (o ramas) y subís cambios — NO se despliega
+#   2. Cuando querés publicar: main → produccion (merge o push)
+#   3. GitHub Actions despliega automáticamente a la VPS
 # ============================================================
 name: Deploy to VPS
 
 on:
   push:
-    branches: [main]
+    branches: [produccion]
   workflow_dispatch: # permitir deploy manual desde GitHub
 
 jobs:
@@ -28,7 +33,10 @@ jobs:
           script: |
             set -e
             cd ~/sistema-salon-belleza-gloss
-            git pull origin main
+            # Cambiar a la rama produccion y traer los cambios
+            git fetch origin
+            git checkout produccion 2>/dev/null || git checkout -b produccion origin/produccion
+            git pull origin produccion
             # Copiar el .env si no existe (primera vez)
             if [ ! -f .env ]; then cp .env.production.example .env; fi
             # Construir y levantar

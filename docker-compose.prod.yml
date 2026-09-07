@@ -2,14 +2,11 @@
 # docker-compose.prod.yml — PRODUCCIÓN
 # Uso:  docker compose -f docker-compose.prod.yml up -d --build
 #
-# MODO PRUEBA (IP directa): cada app en su puerto
-#   Dashboard   → http://51.161.113.43:8080
-#   Superadmin  → http://51.161.113.43:8081
-#   phpMyAdmin  → http://51.161.113.43:8082
-#   n8n         → http://51.161.113.43:5678
-#
-# CUANDO COMPRES DOMINIO: se agrega el servicio `caddy` (comentado
-# al final) que expone 80/443 y enruta por nombre con HTTPS gratis.
+# CON DOMINIO (uniongloss.com): Caddy expone 80/443 con HTTPS.
+#   Dashboard  → https://uniongloss.com
+#   Superadmin → https://admin.uniongloss.com
+#   n8n        → https://n8n.uniongloss.com
+#   phpMyAdmin → https://pma.uniongloss.com
 # ============================================================
 
 services:
@@ -67,8 +64,6 @@ services:
       dockerfile: apps/pos-dashboard/Dockerfile.prod
     container_name: posfinal-dashboard
     restart: unless-stopped
-    ports:
-      - "8080:80"
     depends_on:
       - api
     networks:
@@ -80,8 +75,6 @@ services:
       dockerfile: apps/superadmin/Dockerfile.prod
     container_name: posfinal-superadmin
     restart: unless-stopped
-    ports:
-      - "8081:81"
     depends_on:
       - api
     networks:
@@ -91,14 +84,16 @@ services:
     image: n8nio/n8n:latest
     container_name: posfinal-n8n
     restart: unless-stopped
-    ports:
-      - "5678:5678"
     environment:
       N8N_PORT: 5678
       N8N_METRICS: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
       GENERIC_TIMEZONE: "America/Bogota"
       N8N_DEFAULT_LOCALE: "es"
+      # Para que n8n funcione detrás del proxy con la URL pública
+      N8N_HOST: n8n.uniongloss.com
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.uniongloss.com/
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
@@ -108,8 +103,6 @@ services:
     image: phpmyadmin/phpmyadmin:latest
     container_name: posfinal-phpmyadmin
     restart: unless-stopped
-    ports:
-      - "8082:80"
     environment:
       PMA_HOST: mysql
       PMA_PORT: 3306
@@ -122,29 +115,26 @@ services:
     networks:
       - posfinal-network
 
-  # ═══════════════════════════════════════════════════════════
-  # CUANDO COMPRES DOMINIO — descomentá este bloque y poné tu
-  # dominio en docker/caddy/Caddyfile (sección CON DOMINIO).
-  # Caddy expone 80/443 y genera HTTPS gratis automáticamente.
-  # ═══════════════════════════════════════════════════════════
-  # caddy:
-  #   image: caddy:2-alpine
-  #   container_name: posfinal-caddy
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-  #     - caddy_data:/data
-  #     - caddy_config:/config
-  #   depends_on:
-  #     - dashboard
-  #     - superadmin
-  #     - api
-  #     - n8n
-  #   networks:
-  #     - posfinal-network
+  # Reverse proxy con HTTPS automático (Let's Encrypt)
+  caddy:
+    image: caddy:2-alpine
+    container_name: posfinal-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - dashboard
+      - superadmin
+      - api
+      - n8n
+      - phpmyadmin
+    networks:
+      - posfinal-network
 
 volumes:
   mysql_data:
