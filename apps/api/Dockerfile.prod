@@ -1,0 +1,51 @@
+# ============================================================
+# API — producción (multi-stage)
+# Stage 1: build — instala dependencias del workspace y compila TS
+# Stage 2: runtime — imagen limpia con solo dist/ + node_modules de prod
+# ============================================================
+
+# ---- Stage 1: build ----
+FROM node:22-alpine AS build
+WORKDIR /app
+
+# Copiar manifests del workspace (para resolver el grafo npm)
+COPY package.json package-lock.json* ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/pos-dashboard/package.json apps/pos-dashboard/package.json
+COPY apps/superadmin/package.json apps/superadmin/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/types/package.json packages/types/package.json
+COPY packages/ui/package.json packages/ui/package.json
+COPY packages/validation/package.json packages/validation/package.json
+
+# Instalar TODAS las dependencias (hoisted en /app/node_modules)
+RUN npm install
+
+# Copiar código fuente
+COPY apps/api apps/api
+COPY packages packages
+
+# Compilar el paquete de validación (el API importa desde dist/)
+RUN cd packages/validation && npx tsc && cd /app
+
+# Compilar la API a dist/
+WORKDIR /app/apps/api
+RUN npx tsc
+
+# ---- Stage 2: runtime ----
+FROM node:22-alpine AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV TZ=America/Bogota
+
+# Copiar node_modules del stage build (workspace completo)
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages ./packages
+COPY --from=build /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+
+WORKDIR /app/apps/api
+
+EXPOSE 3001
+CMD ["node", "dist/server.js"]

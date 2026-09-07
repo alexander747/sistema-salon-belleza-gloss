@@ -1,0 +1,45 @@
+# ============================================================
+# Caddyfile — reverse proxy + HTTPS automático
+#
+# CONFIGURACIÓN CON DOMINIO (recomendado — HTTPS gratis automático):
+#   1. Apuntá tu dominio (ej. misalon.com) a la IP 51.161.113.43
+#   2. Reemplazá las líneas misalon.com y admin.mison.com por tus dominios
+#   3. Caddy genera el certificado Let's Encrypt SOLO
+#
+# CONFIGURACIÓN SIN DOMINIO (solo IP — HTTP):
+#   Usá la sección comentada al final con http://51.161.113.43
+# ============================================================
+
+# ─── CON DOMINIO ─────────────────────────────────────────────
+# Dashboard en el dominio raíz
+misalon.com {
+    reverse_proxy dashboard:80
+}
+
+# Superadmin en subdominio
+admin.misalon.com {
+    reverse_proxy superadmin:81
+}
+
+# n8n en subdominio
+n8n.misalon.com {
+    reverse_proxy n8n:5678
+}
+
+# phpMyAdmin en subdominio (protégelo — acceso a la BD!)
+pma.misalon.com {
+    reverse_proxy phpmyadmin:80
+}
+
+# ─── SIN DOMINIO (solo IP — reemplazá la sección de arriba por esta) ───
+# http://51.161.113.43 {
+#     # Dashboard en la raíz
+#     handle {
+#         reverse_proxy dashboard:80
+#     }
+#     # Superadmin en /admin (requiere base href en el build)
+#     # n8n en /n8n
+#     handle_path /n8n/* {
+#         reverse_proxy n8n:5678
+#     }
+# }

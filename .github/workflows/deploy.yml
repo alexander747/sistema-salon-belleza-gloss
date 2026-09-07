@@ -1,0 +1,37 @@
+# ============================================================
+# CI/CD — Despliegue continuo a la VPS
+# Disparador: push a main
+# Acción: hace SSH a la VPS y ejecuta docker compose up -d --build
+# ============================================================
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # permitir deploy manual desde GitHub
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Conecta por SSH a la VPS y despliega
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd ~/sistema-salon-belleza-gloss
+            git pull origin main
+            # Copiar el .env si no existe (primera vez)
+            if [ ! -f .env ]; then cp .env.production.example .env; fi
+            # Construir y levantar
+            docker compose -f docker-compose.prod.yml up -d --build
+            # Limpiar imágenes viejas
+            docker image prune -f

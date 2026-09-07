@@ -1,0 +1,141 @@
+# ============================================================
+# docker-compose.prod.yml — PRODUCCIÓN
+# Uso:  docker compose -f docker-compose.prod.yml up -d --build
+# Reverse proxy: Caddy (HTTPS automático si hay dominio, HTTP con IP)
+# ============================================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: posfinal-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Debe definir MYSQL_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: salon_saas
+      MYSQL_USER: posfinal
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Debe definir MYSQL_PASSWORD en .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - posfinal-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.prod
+    container_name: posfinal-api
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Bogota
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USERNAME=posfinal
+      - DB_PASSWORD=${MYSQL_PASSWORD:?Debe definir MYSQL_PASSWORD en .env}
+      - DB_DATABASE=salon_saas
+      - DB_SYNCHRONIZE=${DB_SYNCHRONIZE:-true}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:?Debe definir JWT_ACCESS_SECRET en .env}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:?Debe definir JWT_REFRESH_SECRET en .env}
+      - API_KEY=${API_KEY:?Debe definir API_KEY en .env}
+      - PORT=3001
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - posfinal-network
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/pos-dashboard/Dockerfile.prod
+    container_name: posfinal-dashboard
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=/api
+    depends_on:
+      - api
+    networks:
+      - posfinal-network
+
+  superadmin:
+    build:
+      context: .
+      dockerfile: apps/superadmin/Dockerfile.prod
+    container_name: posfinal-superadmin
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=/api
+    depends_on:
+      - api
+    networks:
+      - posfinal-network
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: posfinal-n8n
+    restart: unless-stopped
+    environment:
+      N8N_PORT: 5678
+      N8N_METRICS: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      GENERIC_TIMEZONE: "America/Bogota"
+      N8N_DEFAULT_LOCALE: "es"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - posfinal-network
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: posfinal-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: posfinal
+      PMA_PASSWORD: ${MYSQL_PASSWORD:-posfinal}
+      UPLOAD_LIMIT: 100M
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - posfinal-network
+
+  # Reverse proxy con HTTPS automático (Let's Encrypt vía Caddy)
+  caddy:
+    image: caddy:2-alpine
+    container_name: posfinal-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - dashboard
+      - superadmin
+      - api
+      - n8n
+    networks:
+      - posfinal-network
+
+volumes:
+  mysql_data:
+  n8n_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  posfinal-network:
+    driver: bridge
