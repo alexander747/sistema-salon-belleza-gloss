@@ -39,7 +39,8 @@ jobs:
             git pull origin produccion
             # Copiar el .env si no existe (primera vez)
             if [ ! -f .env ]; then cp .env.production.example .env; fi
-            # Construir y levantar
-            docker compose -f docker-compose.prod.yml up -d --build
+            # Construir y levantar (--force-recreate caddy para que los cambios
+            # de Caddyfile/config montadas se apliquen siempre)
+            docker compose -f docker-compose.prod.yml up -d --build --force-recreate caddy
             # Limpiar imágenes viejas
             docker image prune -f
