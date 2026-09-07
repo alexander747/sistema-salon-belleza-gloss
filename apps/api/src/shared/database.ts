@@ -24,6 +24,12 @@ export const AppDataSource = new DataSource({
   migrations: [__dirname + '/../infrastructure/persistence/migrations/**/*.{ts,js}'],
   charset: 'utf8mb4',
   timezone: 'Z',
+  // Columnas DATE (solo fecha, sin hora) → devolver como string 'YYYY-MM-DD'
+  // crudo. Sin esto mysql2 las convierte a Date en UTC y TypeORM las formatea
+  // con la TZ local del proceso (America/Bogota) → se corren UN DÍA atrás al
+  // serializar (bug: caja del 07/09 aparecía como 06/09). Las DATETIME quedan
+  // como Date (no incluidas en el array).
+  dateStrings: ['DATE'],
 });
 
 /**
