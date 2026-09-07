@@ -11,7 +11,7 @@ Documento explicativo de cómo quedó configurada la VPS y el despliegue continu
 ```
 Tu PC                          GitHub                          VPS (OVH)
   │                              │                              │
-  │ git push (a main)            │                              │
+  │ git push (a produccion)      │                              │
   ├─────────────────────────────►│                              │
   │                              │ GitHub Actions detecta el    │
   │                              │ push y ejecuta el workflow   │
@@ -19,7 +19,7 @@ Tu PC                          GitHub                          VPS (OVH)
   │                              │                              │
   │                              │ Se conecta por SSH           │
   │                              ├─────────────────────────────►│
-  │                              │ 1. git pull origin main      │
+  │                              │ 1. git pull origin produccion│
   │                              │ 2. docker compose up -d      │
   │                              │    --build                   │
   │                              │                              │
@@ -27,18 +27,32 @@ Tu PC                          GitHub                          VPS (OVH)
   │                              │ (listo, actualizado)         │
 ```
 
-**En criollo**: cada vez que hacés `git push` a la rama `main`, GitHub se conecta a tu VPS, baja el código nuevo y reconstruye/actualiza los contenedores automáticamente. No tenés que entrar a la VPS a mano.
+**En criollo**: cada vez que hacés push o merge a la rama `produccion`, GitHub se conecta a tu VPS, baja el código y actualiza los contenedores automáticamente. **Los cambios en `main` NO despliegan** — solo `produccion`.
 
-### Qué corre en la VPS
+### Flujo de trabajo recomendado
 
-| Servicio | Qué es | Puerto |
-|---|---|---|
-| **Dashboard** | El panel del salón (React) | http://51.161.113.43:8080 |
-| **Superadmin** | Panel de administración multi-tenant | http://51.161.113.43:8081 |
-| **API** | El backend (Express) — no expuesto directo, lo usa el dashboard por dentro | interno |
-| **MySQL** | La base de datos | interno |
-| **n8n** | Automatizaciones | http://51.161.113.43:5678 |
-| **phpMyAdmin** | Admin visual de la BD | http://51.161.113.43:8082 |
+1. Trabajás y subís cambios a `main` (o ramas) — no pasa nada en producción
+2. Cuando querés publicar los cambios: hacés merge de `main` → `produccion`
+3. GitHub Actions despliega automáticamente
+
+```bash
+git checkout main
+git pull origin main
+git checkout produccion
+git merge main
+git push origin produccion
+```
+
+### Qué corre en la VPS (con dominio uniongloss.com)
+
+| Servicio | URL |
+|---|---|
+| **Dashboard** (el salón) | https://uniongloss.com |
+| **Superadmin** | https://admin.uniongloss.com |
+| **n8n** | https://n8n.uniongloss.com |
+| **phpMyAdmin** | https://pma.uniongloss.com |
+
+Todas con **HTTPS automático** (Caddy + Let's Encrypt, se renuevan solos).
 
 ---
 
@@ -105,11 +119,12 @@ docker logs posfinal-mysql      # base de datos
 docker restart posfinal-api
 ```
 
-### Actualizar a mano (sin esperar el push)
+### Actualizar a mano (sin esperar el merge)
 
 ```bash
 cd ~/sistema-salon-belleza-gloss
-git pull origin main
+git checkout produccion
+git pull origin produccion
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
@@ -169,11 +184,10 @@ Estos ya están configurados. Si algún día cambiás de VPS o de clave, hay que
 
 ## 8. Próximos pasos recomendados
 
-1. **Comprar un dominio** → con Caddy (ya preparado) se activa HTTPS gratis automáticamente
-2. **Backup automático** de la BD en la VPS (cron diario)
-3. **Proteger phpMyAdmin** (no dejarlo abierto en producción real)
-4. **Cambiar/deshabilitar el acceso por contraseña** a la VPS (ya se puede con clave SSH)
-5. Cuando quieras, migrar a PostgreSQL/Redis (hoy usa MySQL, que es lo que ya funciona con tus datos)
+1. **Backup automático** de la BD en la VPS (cron diario) — tus datos reales viven ahí
+2. **Proteger phpMyAdmin** (está en pma.uniongloss.com — agregale contraseña o restringilo)
+3. **Cambiar/deshabilitar el acceso por contraseña** a la VPS (ya se puede con clave SSH)
+4. Cuando quieras, migrar a PostgreSQL/Redis (hoy usa MySQL, que es lo que ya funciona con tus datos)
 
 ---
 
