@@ -38,6 +38,9 @@
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  gap: 0.75rem;
+  position: relative;
+  z-index: 10;
 }
 
 .modalTitle {
@@ -61,6 +64,7 @@
 .modalCloseBtn:hover {
   color: var(--text-primary);
 }
+
 
 .modalBody {
   flex: 1;
@@ -141,6 +145,15 @@
 }
 
 /* ── Type filter toggle buttons ── */
+.catalogSticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-surface);
+  padding: 0.25rem 0;
+  margin: -0.25rem 0 0;
+}
+
 .typeFilterRow {
   display: flex;
   gap: 0.35rem;
@@ -601,26 +614,173 @@
   opacity: 0.5;
 }
 
+/* ── Navegación de pasos MÓVIL (ocultos en desktop) ── */
+.mobileFooter,
+.mobileGoCheckoutBtn,
+.mobileBackBtn,
+.checkoutHiddenMobile {
+  display: none;
+}
+
 /* ── Mobile: stack columns ── */
 @media (max-width: 768px) {
+  .modalOverlay {
+    padding: 0;
+  }
+
   .modalContent {
     max-width: 100%;
-    max-height: 100vh;
+    max-height: 100dvh;
+    height: 100dvh;
     border-radius: 0;
+    border: none;
+  }
+
+  /* Header SIEMPRE visible arriba con la X accesible (≥44px de área táctil) */
+  .modalHeader {
+    padding: calc(0.9rem + env(safe-area-inset-top)) 0.9rem 0.6rem;
+    background: var(--bg-surface);
+  }
+
+  .modalCloseBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    font-size: 1.5rem;
+    border-radius: 50%;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .modalCloseBtn:hover {
+    color: var(--accent);
   }
 
   .twoColumn {
     grid-template-columns: 1fr;
   }
 
+  /* En móvil TODO fluye en un único scroll natural (sin scroll anidado): el
+     modalBody scrollea catálogo + checkout juntos, y la toolbar sticky del
+     catálogo se pega bajo el header mientras recorrés los ítems. */
   .catalogPanel {
     border-right: none;
     border-bottom: 1px solid var(--border);
-    max-height: 50vh;
+    max-height: none;
+    overflow-y: visible;
+    padding: 0.75rem 0.9rem 1rem;
   }
 
   .checkoutPanel {
-    max-height: 50vh;
+    max-height: none;
+    padding: 0.75rem 0.9rem 1.25rem;
+  }
+
+  /* Toolbar sticky bajo el header (filtros + escáner + búsqueda nunca se pierden) */
+  .catalogSticky {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg-surface);
+    padding: 0.4rem 0 0.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.75rem;
+  }
+
+  /* Botón "Ver carrito y cobrar" entre el paso 1 y el paso 2 */
+  .mobileGoCheckoutBtn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0.5rem 0 1rem;
+    padding: 0.85rem 1rem;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--bg-root);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(212, 168, 83, 0.35);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobileGoCheckoutTotal {
+    font-weight: 800;
+    font-size: 1rem;
+  }
+
+  /* Barra inferior fija: resumen + botón para ir al cobro (paso 2) */
+  .mobileFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-shrink: 0;
+    padding: 0.75rem 0.9rem calc(0.75rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+
+  .mobileFooterInfo {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+    min-width: 0;
+  }
+
+  .mobileFooterCount {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.6875rem;
+    color: var(--text-dim);
+  }
+
+  .mobileFooterTotal {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.125rem;
+    font-weight: 800;
+    color: var(--accent);
+  }
+
+  .mobileFooterBtn {
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--bg-root);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 700;
+    padding: 0.75rem 1.1rem;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(212, 168, 83, 0.35);
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+
+  /* Botón "volver a elegir" arriba del checkout */
+  .mobileBackBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.35rem 0.7rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .serviceGrid {
@@ -643,3 +803,4 @@
     max-width: 100% !important;
   }
 }
+

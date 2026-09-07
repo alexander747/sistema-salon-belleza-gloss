@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Skeleton } from '@pos-final/ui';
@@ -168,6 +168,15 @@ const cardVariants = {
 const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onSuccess, salon, onNavigateToCaja }) => {
   const navigate = useNavigate();
 
+  /* Pantalla chica (celular/tablet): NO auto-focusear el escáner al abrir el modal,
+     porque el teclado virtual tapa el header y esconde la X de cerrar. */
+  const [esPantallaTactil] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      ((window.matchMedia?.('(pointer: coarse)')?.matches ?? false) ||
+        (window.matchMedia?.('(max-width: 768px)')?.matches ?? false)),
+  );
+
   /* ── Catalog data ── */
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -212,6 +221,18 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   const [scanCode, setScanCode] = useState('');
   const [scanError, setScanError] = useState(false);
   const [recibo, setRecibo] = useState<ReciboData | null>(null);
+
+  /* Scroll control móvil: anclas para el paso "elegir" (catálogo) y "cobrar" (checkout). */
+  const catalogTopRef = useRef<HTMLDivElement>(null);
+  const checkoutTopRef = useRef<HTMLDivElement>(null);
+
+  const scrollToCatalog = useCallback(() => {
+    catalogTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const scrollToCheckout = useCallback(() => {
+    checkoutTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   /* ── Derived ── */
 
@@ -704,7 +725,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
               {/* ============================================================ */}
               {/*  LEFT PANEL — Unified Catalog                                */}
               {/* ============================================================ */}
-              <div className={styles.catalogPanel}>
+              <div className={styles.catalogPanel} ref={catalogTopRef}>
+                {/* Toolbar sticky: filtros + escáner + búsqueda siempre visibles al scrollear el catálogo */}
+                <div className={styles.catalogSticky}>
                 {/* ── Type filter buttons ── */}
                 <div className={styles.typeFilterRow}>
                   {(['TODO', 'SERVICIOS', 'PRODUCTOS'] as TypeFilter[]).map((t) => {
@@ -731,7 +754,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   <input
                     type="text"
                     aria-label="Escanear código"
-                    autoFocus
+                    autoFocus={!esPantallaTactil}
                     placeholder="📷 Escanear código…"
                     value={scanCode}
                     onChange={(e) => {
@@ -784,6 +807,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     }}
                   />
                 </div>
+                </div>{/* /catalogSticky */}
 
                 {/* ── Unified grid ── */}
                 {filteredItems.length === 0 ? (
@@ -938,7 +962,14 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
               {/* ============================================================ */}
               {/*  RIGHT PANEL — Cart + Checkout                               */}
               {/* ============================================================ */}
-              <div className={styles.checkoutPanel}>
+              <div
+                className={`${styles.checkoutPanel} ${esPantallaTactil && unifiedCart.length === 0 ? styles.checkoutHiddenMobile : ''}`}
+                ref={checkoutTopRef}
+              >
+                {/* ── Mobile: volver a elegir ── */}
+                <button className={styles.mobileBackBtn} onClick={scrollToCatalog}>
+                  ← Seguir eligiendo
+                </button>
                 {/* ── Unified cart ── */}
                 <div className={styles.checkoutSection}>
                   <div className={styles.checkoutHeader}>
@@ -1592,6 +1623,21 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
             </div>
           )}
         </div>
+
+        {/* ── Footer móvil: paso 1 → paso 2 (solo táctil + items en carrito) ── */}
+        {esPantallaTactil && unifiedCart.length > 0 && (
+          <div className={styles.mobileFooter}>
+            <div className={styles.mobileFooterInfo}>
+              <span className={styles.mobileFooterCount}>
+                {unifiedCart.length} {unifiedCart.length === 1 ? 'item' : 'items'}
+              </span>
+              <span className={styles.mobileFooterTotal}>{formatCurrency(finalTotal)}</span>
+            </div>
+            <button className={styles.mobileFooterBtn} onClick={scrollToCheckout}>
+              Ver carrito y cobrar →
+            </button>
+          </div>
+        )}
       </motion.div>
       </motion.div>
 
