@@ -15,7 +15,10 @@ export const AppDataSource = new DataSource({
   password: process.env.DB_PASSWORD ?? 'posfinal',
   database: process.env.DB_DATABASE ?? 'salon_saas',
   synchronize: process.env.DB_SYNCHRONIZE === 'true',
-  migrationsRun: process.env.NODE_ENV === 'production',
+  // Migraciones SOLO si NO hay synchronize (correr ambas es contradictorio:
+  // synchronize crea el schema desde entidades; las migraciones viejas como
+  // CreatePrestamos tienen SQL inválido para MySQL 8 y chocan).
+  migrationsRun: process.env.DB_SYNCHRONIZE !== 'true' && process.env.NODE_ENV === 'production',
   logging: process.env.NODE_ENV !== 'production' ? ['error', 'warn', 'schema'] : ['error'],
   entities: [__dirname + '/../infrastructure/persistence/entities/**/*.{ts,js}'],
   migrations: [__dirname + '/../infrastructure/persistence/migrations/**/*.{ts,js}'],
