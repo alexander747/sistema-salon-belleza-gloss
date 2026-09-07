@@ -50,9 +50,18 @@ git push origin produccion
 | **Dashboard** (el salón) | https://uniongloss.com |
 | **Superadmin** | https://admin.uniongloss.com |
 | **n8n** | https://n8n.uniongloss.com |
-| **phpMyAdmin** | https://pma.uniongloss.com |
+| **phpMyAdmin** | 🔒 Solo por túnel SSH (no está en internet) |
 
 Todas con **HTTPS automático** (Caddy + Let's Encrypt, se renuevan solos).
+
+> **phpMyAdmin no está expuesto públicamente** (seguridad). Para accederlo,
+> abrí un túnel SSH desde tu PC y entrá por `http://localhost:8082`:
+>
+> ```bash
+> ssh -L 8082:localhost:8082 ubuntu@51.161.113.43
+> ```
+>
+> Después abrí en tu navegador: http://localhost:8082
 
 ---
 

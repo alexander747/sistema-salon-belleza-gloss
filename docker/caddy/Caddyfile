@@ -3,12 +3,12 @@
 # Dominio: uniongloss.com
 #
 # Requisito: los registros DNS deben apuntar a 51.161.113.43
-#   uniongloss.com      → A 51.161.113.43
+#   uniongloss.com       → A 51.161.113.43
 #   admin.uniongloss.com → A 51.161.113.43
 #   n8n.uniongloss.com   → A 51.161.113.43
-#   pma.uniongloss.com   → A 51.161.113.43
 #
-# Caddy genera los certificados HTTPS SOLO automáticamente.
+# NOTA: phpMyAdmin NO está expuesto públicamente (seguridad).
+# Se accede por túnel SSH (ver DEPLOY.md).
 # ============================================================
 
 uniongloss.com {
@@ -25,8 +25,4 @@ admin.uniongloss.com {
 
 n8n.uniongloss.com {
     reverse_proxy n8n:5678
-}
-
-pma.uniongloss.com {
-    reverse_proxy phpmyadmin:80
 }

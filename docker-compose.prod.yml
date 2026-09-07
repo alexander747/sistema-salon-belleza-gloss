@@ -103,6 +103,9 @@ services:
     image: phpmyadmin/phpmyadmin:latest
     container_name: posfinal-phpmyadmin
     restart: unless-stopped
+    # Solo accesible desde localhost de la VPS (vía túnel SSH) — NO público
+    ports:
+      - "127.0.0.1:8082:80"
     environment:
       PMA_HOST: mysql
       PMA_PORT: 3306
