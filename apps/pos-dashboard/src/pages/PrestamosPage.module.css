@@ -213,7 +213,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  /* 1300: por ENCIMA del AppBar de MUI (1100) para que el modal no quede tapado */
+  z-index: 1300;
   padding: 1rem;
 }
 

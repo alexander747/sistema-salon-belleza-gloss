@@ -10,7 +10,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 300;
+  /* 1300: por ENCIMA del AppBar de MUI (z-index 1100). Sin esto, en móvil el
+     header de la página tapa el header del modal (y la X de cerrar). */
+  z-index: 1300;
   padding: 1rem;
 }
 
