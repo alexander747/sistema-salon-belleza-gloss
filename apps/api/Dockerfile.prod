@@ -25,12 +25,15 @@ RUN npm install
 COPY apps/api apps/api
 COPY packages packages
 
-# Compilar el paquete de validación (el API importa desde dist/)
-RUN cd packages/validation && npx tsc && cd /app
+# Compilar packages en orden de dependencia (cada uno genera su dist/
+# que los siguientes importan vía @pos-final/*). NOTA: packages/config
+# es solo tsconfig.base.json (sin src) — no se compila.
+RUN cd packages/types && npx tsc && cd /app \
+    && cd packages/validation && npx tsc && cd /app
 
-# Compilar la API a dist/
+# Compilar la API a dist/ (excluye tests, seed y scripts — solo producción)
 WORKDIR /app/apps/api
-RUN npx tsc
+RUN npx tsc -p tsconfig.build.json
 
 # ---- Stage 2: runtime ----
 FROM node:22-alpine AS runtime

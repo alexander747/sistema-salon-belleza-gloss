@@ -1,6 +1,6 @@
 # ============================================================
 # Dashboard — producción (multi-stage)
-# Stage 1: build — compila el workspace y genera el bundle Vite
+# Stage 1: build — compila packages necesarios + bundle Vite
 # Stage 2: runtime — sirve estáticos con nginx (proxy /api al backend)
 # ============================================================
 
@@ -20,13 +20,12 @@ COPY packages/validation/package.json packages/validation/package.json
 
 RUN npm install
 
-# Copiar código fuente (dashboard + sus packages de dependencia)
+# Copiar código fuente
 COPY apps/pos-dashboard apps/pos-dashboard
 COPY packages packages
 
-# Compilar packages que el frontend importa (types/ui/config/validation)
-RUN cd packages/types && npx tsc -b 2>/dev/null || npx tsc && cd /app
-RUN cd packages/ui && npx tsc -b 2>/dev/null || npx tsc && cd /app
+# Compilar @pos-final/types (main apunta a dist/); ui resuelve desde src/
+RUN cd packages/types && npx tsc && cd /app
 
 # Build Vite del dashboard
 WORKDIR /app/apps/pos-dashboard

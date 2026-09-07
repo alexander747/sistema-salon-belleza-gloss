@@ -1,8 +1,7 @@
 # ============================================================
 # Superadmin — producción (multi-stage)
-# Stage 1: build — compila el workspace y genera el bundle Vite
+# Stage 1: build — compila packages necesarios + bundle Vite
 # Stage 2: runtime — sirve estáticos con nginx en el puerto 81
-#           (el reverse proxy externo distingue dashboard:80 vs superadmin:81)
 # ============================================================
 
 # ---- Stage 1: build ----
@@ -25,9 +24,8 @@ RUN npm install
 COPY apps/superadmin apps/superadmin
 COPY packages packages
 
-# Compilar packages que el frontend importa
-RUN cd packages/types && (npx tsc -b 2>/dev/null || npx tsc) && cd /app
-RUN cd packages/ui && (npx tsc -b 2>/dev/null || npx tsc) && cd /app
+# Compilar @pos-final/types (main apunta a dist/); ui resuelve desde src/
+RUN cd packages/types && npx tsc && cd /app
 
 # Build Vite del superadmin
 WORKDIR /app/apps/superadmin
