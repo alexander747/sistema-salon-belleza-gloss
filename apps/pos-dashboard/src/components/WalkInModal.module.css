@@ -627,14 +627,19 @@
 /* ── Mobile: stack columns ── */
 @media (max-width: 768px) {
   .modalOverlay {
-    padding: 0;
+    /* Aire arriba para que asome el redondeo (regla general top-sheet) */
+    padding: 1rem 0 0;
+    align-items: flex-start;
   }
 
   .modalContent {
     max-width: 100%;
     max-height: 100dvh;
-    height: 100dvh;
-    border-radius: 0;
+    height: calc(100dvh - 1rem);
+    /* REGLA GENERAL móvil (ver globals.css): modales desde arriba con
+       pequeño redondeo en las esquinas. WalkInModal no usa las clases
+       globales .mobileBottomSheet, por eso replica el redondeo acá. */
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     border: none;
   }
 

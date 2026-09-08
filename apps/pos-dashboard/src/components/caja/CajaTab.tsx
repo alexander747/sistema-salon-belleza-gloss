@@ -158,7 +158,7 @@ const overlayStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'center',
-  zIndex: 200,
+  zIndex: 1300,
   padding: '12vh 1rem 2rem',
 };
 

@@ -94,7 +94,7 @@ const modalOverlayStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  zIndex: 200,
+  zIndex: 1300,
   padding: '1rem',
 };
 

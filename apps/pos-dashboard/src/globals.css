@@ -148,22 +148,27 @@ a:hover {
   -moz-appearance: textfield;
 }
 
-/* ── Mobile: modales como bottom-sheet (≤600px) ─────────────────────
-   Clases globales (no-hasheadas) que los batches R2–R5 agregarán a los
+/* ── Mobile: modales como "top sheet" (≤600px) ─────────────────────
+   REGLA GENERAL de modales en celular: aparecen desde la PARTE SUPERIOR
+   de la pantalla y con pequeño redondeo en las esquinas.
+   Clases globales (no-hasheadas) que los batches R2–R5 agregan a los
    modales de formulario: overlay + content. `!important` vence a las
    reglas hasheadas de los módulos CSS (p. ej. .modalContentXl 1100px). */
 @media (max-width: 600px) {
   .mobileBottomSheet {
-    padding: 0 !important;
-    align-items: flex-end !important;
+    padding: 0.75rem 0 0 !important;
+    align-items: flex-start !important;
   }
 
   .mobileBottomSheetContent {
     max-width: 100% !important;
-    max-height: 92vh;
+    max-height: 94vh;
     /* !important también aquí: los modales con estilos inline
        (R3+ Servicios/Productos/Categorías) no ceden ante una clase
-       sin !important. Desktop intacto (regla dentro del MQ). */
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+       sin !important. Desktop intacto (regla dentro del MQ).
+       Radio en TODAS las esquinas: al colgar desde arriba el modal
+       puede no llegar al borde inferior, y esquinas cuadradas abajo
+       flotando sobre el overlay se verían mal. */
+    border-radius: var(--radius-lg) !important;
   }
 }
