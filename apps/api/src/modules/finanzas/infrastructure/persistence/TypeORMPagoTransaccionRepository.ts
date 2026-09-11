@@ -36,18 +36,24 @@ export class TypeORMPagoTransaccionRepository implements IPagoTransaccionReposit
    * Arqueo: pagos que pertenecen a la caja `cajaId`.
    * Unión sin doble conteo: `p.cajaId = C` (pagos de la caja + abonos de hoy
    * sobre registros de otra caja) OR (`p.cajaId IS NULL` legacy AND el registro
-   * es de la caja C y NO está anulado — preserva la exclusión de ANULADOS del
-   * arqueo actual).
+   * es de la caja C).
+   *
+   * IMPORTANTE: los registros ANULADOS se excluyen SIEMPRE (en ambas ramas).
+   * Antes la exclusión solo aplicaba a la rama legacy, por lo que los pagos
+   * anulados CON cajaId asignado (caso normal) se sumaban al arqueo e inflaban
+   * el efectivo esperado.
    */
   async findByCajaConFallback(cajaId: number): Promise<PagoTransaccionEntity[]> {
     return this.getRepo()
       .createQueryBuilder('pago')
       .leftJoinAndSelect('pago.registroServicio', 'registro')
-      .where('pago.cajaId = :cajaId', { cajaId })
-      .orWhere(
-        'pago.cajaId IS NULL AND registro.cajaId = :cajaId AND registro.estado != :anulado',
-        { cajaId, anulado: EstadoRegistro.ANULADO },
+      .where(
+        '(pago.cajaId = :cajaId OR (pago.cajaId IS NULL AND registro.cajaId = :cajaId))',
+        { cajaId },
       )
+      .andWhere('(registro.estado IS NULL OR registro.estado != :anulado)', {
+        anulado: EstadoRegistro.ANULADO,
+      })
       .getMany();
   }
 }
