@@ -25,6 +25,10 @@ interface Servicio {
   duracionMinutos: number;
   categoriaId: number;
   costoBaseInsumos?: number;
+  /** Cost mode from the catalog: `FIJO` (default) or `POR_GRAMO`. */
+  tipoCostoInsumo?: 'FIJO' | 'POR_GRAMO';
+  /** Price per gram for `POR_GRAMO` services. */
+  precioPorGramo?: number | null;
 }
 
 interface CartItem {
@@ -33,6 +37,12 @@ interface CartItem {
   precio: number;
   duracionMinutos: number;
   costoBaseInsumos?: number;
+  /** Units sold; N units expand into N per-unit item rows server-side. */
+  cantidad: number;
+  tipoCostoInsumo?: 'FIJO' | 'POR_GRAMO';
+  precioPorGramo?: number | null;
+  /** Grams used per unit — only for `POR_GRAMO` services. */
+  gramosUsados?: number;
 }
 
 interface Producto {
@@ -281,7 +291,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   }, [unifiedItems, typeFilter, search]);
 
   const totalServicios = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.precio, 0);
+    return cart.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
   }, [cart]);
 
   const totalProductos = useMemo(() => {
@@ -314,7 +324,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   );
 
   const descripcionServicio = useMemo(() => {
-    const names = cart.map((item) => item.nombre);
+    const names = cart.map((item) =>
+      item.cantidad > 1 ? `${item.nombre} x${item.cantidad}` : item.nombre,
+    );
     names.push(...productCart.map((p) => `${p.nombre} x${p.cantidad}`));
     return names.join(', ');
   }, [cart, productCart]);
@@ -326,6 +338,13 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     if (cart.length === 0 && productCart.length === 0) return false;
     if (!clienteId) return false;
     if (!empleadaId) return false;
+    // A POR_GRAMO line needs its grams before the server can derive its real cost.
+    const faltaGramos = cart.some(
+      (item) =>
+        item.tipoCostoInsumo === 'POR_GRAMO' &&
+        !(item.gramosUsados != null && item.gramosUsados > 0),
+    );
+    if (faltaGramos) return false;
     // Con fiado se acepta cualquier monto >= 0 (0 = fiado total); sin fiado, pago completo.
     if (!esFiado && paymentMethod === 'EFECTIVO' && montoRecibido < finalTotal) return false;
     if (hasAdjustment && notaAjuste.trim().length === 0) return false;
@@ -404,7 +423,13 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
 
   const addToCart = (serv: Servicio) => {
     setCart((prev) => {
-      if (prev.find((item) => item.servicioId === serv.id)) return prev;
+      // Re-click increments quantity instead of duplicating the line.
+      const existing = prev.find((item) => item.servicioId === serv.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.servicioId === serv.id ? { ...item, cantidad: item.cantidad + 1 } : item,
+        );
+      }
       return [
         ...prev,
         {
@@ -413,9 +438,32 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           precio: serv.precioFinal,
           duracionMinutos: serv.duracionMinutos,
           costoBaseInsumos: serv.costoBaseInsumos ?? 0,
+          cantidad: 1,
+          tipoCostoInsumo: serv.tipoCostoInsumo,
+          precioPorGramo: serv.precioPorGramo ?? null,
         },
       ];
     });
+  };
+
+  const updateServiceQty = (servicioId: number, delta: number) => {
+    setCart((prev) =>
+      prev
+        .map((item) =>
+          item.servicioId === servicioId
+            ? { ...item, cantidad: Math.max(0, item.cantidad + delta) }
+            : item,
+        )
+        .filter((item) => item.cantidad > 0),
+    );
+  };
+
+  const updateServiceGramos = (servicioId: number, gramos: number | undefined) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.servicioId === servicioId ? { ...item, gramosUsados: gramos } : item,
+      ),
+    );
   };
 
   const removeFromCart = (servicioId: number) => {
@@ -550,7 +598,10 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           servicioId: item.servicioId,
           nombreServicio: item.nombre,
           precioServicio: item.precio,
+          // Server re-derives the cost from the catalog; grams are required for POR_GRAMO.
           costoBaseInsumos: item.costoBaseInsumos ?? 0,
+          gramosUsados: item.tipoCostoInsumo === 'POR_GRAMO' ? item.gramosUsados : undefined,
+          cantidad: item.cantidad,
         })),
         // Price adjustment fields
         porcentajeDescuento: descuento,
@@ -569,7 +620,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
         ...cart.map((item) => ({
           tipo: 'SERVICIO' as const,
           nombre: item.nombre,
-          cantidad: 1,
+          cantidad: item.cantidad,
           precio: item.precio,
         })),
         ...productCart.map((p) => ({
@@ -852,11 +903,13 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                           whileHover={!inCart && !outOfStock ? { scale: 1.02, y: -2 } : undefined}
                           whileTap={!inCart && !outOfStock ? { scale: 0.98 } : undefined}
                           onClick={() => {
-                            if (inCart || outOfStock) return;
+                            if (outOfStock) return;
                             if (isService) {
+                              // Re-clicking a service increments its quantity (no duplicate lines).
                               const serv = servicios.find((s) => s.id === item.id);
                               if (serv) addToCart(serv);
                             } else {
+                              if (inCart) return;
                               const prod = productos.find((p) => p.id === item.id);
                               if (prod) addProductToCart(prod);
                             }
@@ -1041,7 +1094,100 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                                 </div>
                                 <div className={styles.cartItemDuration}>
                                   {item.duracionMinutos} min
+                                  {item.tipoCostoInsumo === 'POR_GRAMO' && (
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      inputMode="decimal"
+                                      aria-label={`Gramos usados ${item.nombre}`}
+                                      placeholder="Gramos"
+                                      value={item.gramosUsados ?? ''}
+                                      onChange={(e) =>
+                                        updateServiceGramos(
+                                          item.servicioId,
+                                          e.target.value === '' ? undefined : Number(e.target.value),
+                                        )
+                                      }
+                                      style={{
+                                        width: '70px',
+                                        height: '24px',
+                                        marginLeft: '0.5rem',
+                                        padding: '0 0.35rem',
+                                        borderRadius: 'var(--radius-sm)',
+                                        border: '1px solid var(--border)',
+                                        background: 'var(--bg-base)',
+                                        color: 'var(--text-primary)',
+                                        fontFamily: "'DM Sans', sans-serif",
+                                        fontSize: '0.75rem',
+                                        outline: 'none',
+                                      }}
+                                    />
+                                  )}
                                 </div>
+                              </div>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.35rem',
+                                }}
+                              >
+                                <button
+                                  aria-label={`Quitar ${item.nombre}`}
+                                  onClick={() => updateServiceQty(item.servicioId, -1)}
+                                  style={{
+                                    background: 'var(--bg-base)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    color: 'var(--text-primary)',
+                                    width: '26px',
+                                    height: '26px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    lineHeight: 1,
+                                    padding: 0,
+                                  }}
+                                >
+                                  −
+                                </button>
+                                <span
+                                  aria-label={`Cantidad ${item.nombre}`}
+                                  style={{
+                                    fontFamily: "'DM Sans', sans-serif",
+                                    fontSize: '0.8125rem',
+                                    fontWeight: 600,
+                                    color: 'var(--text-primary)',
+                                    minWidth: '20px',
+                                    textAlign: 'center',
+                                  }}
+                                >
+                                  {item.cantidad}
+                                </span>
+                                <button
+                                  aria-label={`Agregar ${item.nombre}`}
+                                  onClick={() => updateServiceQty(item.servicioId, 1)}
+                                  style={{
+                                    background: 'var(--bg-base)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    color: 'var(--text-primary)',
+                                    width: '26px',
+                                    height: '26px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    lineHeight: 1,
+                                    padding: 0,
+                                  }}
+                                >
+                                  +
+                                </button>
                               </div>
                               <span
                                 style={{
@@ -1053,7 +1199,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                                   textAlign: 'right',
                                 }}
                               >
-                                {formatCurrency(item.precio)}
+                                {formatCurrency(item.precio * item.cantidad)}
                               </span>
                               <button
                                 onClick={() => removeFromCart(item.servicioId)}

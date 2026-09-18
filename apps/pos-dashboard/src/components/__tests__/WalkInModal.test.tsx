@@ -635,3 +635,138 @@ describe('WalkInModal — recibo tras registrar (PR2)', () => {
     expect(within(dialog).getByText('Tarjeta')).toBeInTheDocument();
   });
 });
+
+describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
+  const SERVICIO_POR_GRAMO = {
+    id: 7,
+    nombre: 'Tintura Global',
+    descripcion: null,
+    precioFinal: 450000,
+    duracionMinutos: 120,
+    categoriaId: 1,
+    tipoCostoInsumo: 'POR_GRAMO',
+    precioPorGramo: 1200,
+  };
+
+  function apiMockConGramos() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [
+            {
+              id: 1,
+              nombre: 'Corte',
+              descripcion: null,
+              precioFinal: 30000,
+              duracionMinutos: 60,
+              categoriaId: 1,
+              tipoCostoInsumo: 'FIJO',
+              precioPorGramo: null,
+            },
+            SERVICIO_POR_GRAMO,
+          ],
+        });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María' }] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  /** Cliente + empleada + pago Tarjeta (sin monto recibido manual). */
+  function llenarYSeleccionarTarjeta() {
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
+    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+    apiMockConGramos();
+  });
+
+  it('re-clicking a service increments cantidad (no duplicate lines) and sends cantidad=2', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    const corte = await screen.findByText('Corte');
+    fireEvent.click(corte);
+    expect(screen.getByLabelText('Cantidad Corte').textContent).toBe('1');
+
+    fireEvent.click(corte);
+    expect(screen.getByLabelText('Cantidad Corte').textContent).toBe('2');
+
+    llenarYSeleccionarTarjeta();
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          totalServicios: 60000,
+          serviciosItems: [
+            expect.objectContaining({ servicioId: 1, cantidad: 2, precioServicio: 30000 }),
+          ],
+        }),
+      );
+    });
+  });
+
+  it('blocks submit when a POR_GRAMO service has no grams yet', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Tintura Global'));
+    llenarYSeleccionarTarjeta();
+
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeDisabled();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('sends gramosUsados for a POR_GRAMO service once grams are entered', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Tintura Global'));
+    llenarYSeleccionarTarjeta();
+    fireEvent.change(screen.getByLabelText('Gramos usados Tintura Global'), {
+      target: { value: '95' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          totalServicios: 450000,
+          serviciosItems: [
+            expect.objectContaining({ servicioId: 7, gramosUsados: 95, cantidad: 1 }),
+          ],
+        }),
+      );
+    });
+  });
+
+  it('the receipt reflects the quantity of the service line', async () => {
+    mockPost.mockResolvedValue({
+      data: { id: 88, fechaHora: '2026-09-04T12:00:00.000Z', montoTotal: 60000 },
+    });
+    renderModal();
+
+    const corte = await screen.findByText('Corte');
+    fireEvent.click(corte);
+    fireEvent.click(corte);
+    llenarYSeleccionarTarjeta();
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Recibo de venta' });
+    const fila = within(dialog).getByText('Corte').closest('tr') as HTMLElement;
+    expect(within(fila).getByText('2')).toBeInTheDocument();
+    expect(within(fila).getByText('$ 60.000')).toBeInTheDocument();
+  });
+});
