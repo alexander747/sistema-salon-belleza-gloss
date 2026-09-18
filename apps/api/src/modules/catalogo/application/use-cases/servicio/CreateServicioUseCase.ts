@@ -4,6 +4,7 @@ import type { ICategoriaServicioRepository } from '../../../domain/ports/ICatego
 import { ServicioDTO } from '../../dtos/ServicioDTO';
 import { ValidationError } from '../../../../../shared/errors';
 import type { SalonEntity } from '../../../../../infrastructure/persistence/entities/SalonEntity';
+import type { TipoCostoInsumo } from '../../../../../infrastructure/persistence/entities/ServicioEntity';
 import type { ISalonRepository } from '../../../../../modules/salon/domain/ports/ISalonRepository';
 
 interface CreateServicioInput {
@@ -14,6 +15,8 @@ interface CreateServicioInput {
   duracionMinutos?: number;
   categoriaId: number;
   costoBaseInsumos?: number;
+  tipoCostoInsumo?: TipoCostoInsumo;
+  precioPorGramo?: number | null;
 }
 
 interface ReglaTemporada {
@@ -37,6 +40,12 @@ export class CreateServicioUseCase {
       throw new ValidationError('La categoría especificada no existe o no pertenece a este salón');
     }
 
+    const tipoCostoInsumo: TipoCostoInsumo = input.tipoCostoInsumo ?? 'FIJO';
+    const precioPorGramo =
+      tipoCostoInsumo === 'POR_GRAMO' && input.precioPorGramo != null
+        ? Number(input.precioPorGramo)
+        : null;
+
     const servicio = await this.servicioRepo.create({
       nombre: input.nombre,
       descripcion: input.descripcion ?? undefined,
@@ -44,6 +53,8 @@ export class CreateServicioUseCase {
       duracionMinutos: input.duracionMinutos ?? 60,
       categoriaId: input.categoriaId,
       costoBaseInsumos: input.costoBaseInsumos ?? 0,
+      tipoCostoInsumo,
+      precioPorGramo,
       activo: true,
     });
 

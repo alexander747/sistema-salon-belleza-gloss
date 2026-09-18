@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 import { ServicioController } from '../ServicioController';
+import { UnprocessableEntityError } from '../../../../../shared/errors';
 
 describe('ServicioController', () => {
   let controller: ServicioController;
@@ -105,6 +106,60 @@ describe('ServicioController', () => {
 
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(expected);
+    });
+
+    it('reenvía tipoCostoInsumo y precioPorGramo al use case (POR_GRAMO)', async () => {
+      const expected = { id: 1, tipoCostoInsumo: 'POR_GRAMO', precioPorGramo: 1200 };
+      mockCreateUseCase.execute.mockResolvedValue(expected);
+
+      const req = {
+        salonId: 1,
+        body: {
+          nombre: 'Tinte',
+          precioBase: 45000,
+          categoriaId: 1,
+          tipoCostoInsumo: 'POR_GRAMO',
+          precioPorGramo: 1200,
+        },
+      } as Request;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      await controller.create(req, res, next);
+
+      expect(mockCreateUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          salonId: 1,
+          tipoCostoInsumo: 'POR_GRAMO',
+          precioPorGramo: 1200,
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+  });
+
+  describe('update — regla POR_GRAMO sin precio', () => {
+    it('propaga el error del use case (422) sin responder éxito', async () => {
+      mockUpdateUseCase.execute.mockRejectedValue(
+        new UnprocessableEntityError('El precio por gramo debe ser mayor a 0'),
+      );
+
+      const req = {
+        salonId: 1,
+        params: { id: '10' },
+        body: { tipoCostoInsumo: 'POR_GRAMO' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.update(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      const error = next.mock.calls[0][0];
+      expect(error).toBeInstanceOf(UnprocessableEntityError);
+      expect(error.statusCode).toBe(422);
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 
