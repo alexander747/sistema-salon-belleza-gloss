@@ -83,3 +83,22 @@ La relación cita-servicio MUST poder representar `cantidad` por servicio (int �
 - GIVEN una cita existente creada con `serviciosIds` (sin cantidad)
 - WHEN se consulta o completa
 - THEN cada servicio se interpreta como `cantidad=1` AND no cambia el comportamiento previo
+
+### Requirement: Totales mostrados al completar respetan la cantidad
+
+La UI del modal de completar cita MUST calcular los totales de servicios multiplicando cada línea por su `cantidad` (≥1). El subtotal mostrado, la base del "Ajustar valor total", el desglose del reparto y el recibo MUST coincidir con el total que el servidor persiste. El cálculo MUST salir de una única fuente compartida entre el display y el payload del POST, para que no puedan divergir.
+
+#### Scenario: Completar cita con cantidad ×2 muestra el total persistido
+
+- GIVEN una cita CONFIRMADA con servicio A (`cantidad=2`, `precio=30000`) y una empleada con 60 % de comisión
+- WHEN se abre el modal de completar
+- THEN el subtotal de servicios mostrado es 60000 (2 × 30000)
+- AND el `totalServicios` del POST es 60000 (display y payload coinciden)
+- WHEN el desglose del reparto es visible (servicio POR_GRAMO o total ajustado)
+- THEN "A repartir" y la comisión se calculan sobre 60000, no sobre 30000
+
+#### Scenario: Base del total ajustado usa la cantidad
+
+- GIVEN la misma cita con `cantidad=2` y caja ABIERTA
+- WHEN se habilita "Ajustar valor total"
+- THEN el placeholder del input de ajuste es el total calculado 60000 (no 30000)

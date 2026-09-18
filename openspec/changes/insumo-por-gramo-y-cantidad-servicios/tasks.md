@@ -99,3 +99,14 @@ Pedido del dueño: que la UI explique que el costo de insumos se descuenta del t
 - [x] 6.5 RED→GREEN: `AgendaPage.test.tsx` — caso canónico (números + payload) y borde; `AgendaPage.tsx` cablea el panel con el % de la empleada de la cita.
 - [x] 6.6 Spec delta `finanzas-registros`: requirement "Explicación visual del reparto" + 3 scenarios.
 - [x] 6.7 Verify: dashboard `vitest` + `tsc --noEmit`; api `vitest` sin regresión.
+
+## Phase 7 — PR6: Fix bloqueante de totales con cantidad (pre-deploy)
+
+Review pre-deploy detectó que `RenderCompletarModal` calculaba `totalOriginalServicios` sin `× cantidad`, mostrando la mitad de lo que el servidor cobra cuando `cantidad > 1` (subtotal, base del ajuste y panel PR5). El POST ya era correcto.
+
+- [x] 7.1 RED→GREEN: `reparto.test.ts` — `lineasServicioCita`/`totalServiciosCita` (cantidad, override de precio, legacy sin cantidad).
+- [x] 7.2 GREEN: `reparto.ts` — helpers puros como fuente única del total de servicios de la cita.
+- [x] 7.3 GREEN: `AgendaPage.tsx` — display (`totalOriginalServicios`) y payload (`totalServicios`) usan los helpers compartidos.
+- [x] 7.4 RED→GREEN: `AgendaPage.test.tsx` — subtotal mostrado, base del ajuste y panel PR5 (a repartir/comisión/salón) para `cantidad=2` (FIJO y POR_GRAMO); `cantidad=1` sin cambios.
+- [x] 7.5 Spec delta `agenda-citas`: requirement "Totales mostrados al completar respetan la cantidad" + 2 scenarios.
+- [x] 7.6 Verify: dashboard `vitest` (3 fallos conocidos) + `tsc --noEmit` 0; api `vitest` baseline (5 fallos en `NominaPendienteUseCase`).
