@@ -20,7 +20,7 @@ Chain strategy: stacked-to-main
 
 Per-area estimates (additions+deletions): DB/entities/migrations ~180; `packages/validation` ~180; API use-cases/services/DTOs ~520; API tests ~520; frontend ~450; frontend tests ~200. `packages/validation/dist` is gitignored — rebuilding adds zero review lines.
 
-> Deviation from design: three slice-owned migrations (014 servicios, 015 item grams, 016 citas_servicios) instead of one, so each slice rolls back alone. Prod keeps `citaId/servicioId` (`InitialSchema`); local `DB_SYNCHRONIZE=true` recreates the 2-row dev table.
+> Deviation from design: three slice-owned migrations (014 servicios, 015 item grams, 016 citas_servicios) instead of one, so each slice rolls back alone. **Correction (verified live):** the real table is `citas_servicios(citasId, serviciosId)` (TypeORM `synchronize`); production was never migrated (`DB_SYNCHRONIZE=true`), so migration 016 is additive (`ADD cantidad DEFAULT 1`) and renames no column.
 
 ### Suggested Work Units
 
@@ -61,17 +61,17 @@ Each unit keeps tests with its code; each is independently shippable. Verify: `c
 
 ## Phase 3 — PR 3: Cita cantidad (explicit join) + AgendaPage
 
-- [ ] 3.1 New `entities/CitaServicioEntity.ts` on `citas_servicios`, composite PK, `cantidad` int default 1.
-- [ ] 3.2 Migration `1700000000016-AddCantidadCitaServicios.ts`; note prod `citaId/servicioId`, local synchronize recreate.
-- [ ] 3.3 `CitaEntity`/`ServicioEntity`: replace `@ManyToMany` with OneToMany `citasServicios`.
-- [ ] 3.4 RED→GREEN: `CitaDTO` + `cantidad`; `duracionTotalMinutos=Σ(duracion×cantidad)`; legacy `cantidad=1`.
-- [ ] 3.5 `agenda.schema.ts`: accept `servicios:[{servicioId,cantidad}]` OR legacy `serviciosIds`; tests reject `cantidad=0`.
-- [ ] 3.6 `CitaController` normalize input; `CreateCitaUseCase` duration/overlap use expanded duration.
-- [ ] 3.7 `TypeORMCitaRepository`/`DisponibilidadService` read `citasServicios.servicio`; update their tests.
-- [ ] 3.8 RED→GREEN: `CompletarCitaUseCase` test — `cantidad=2` → 2 item rows, `totalServicios=40000`.
-- [ ] 3.9 Frontend `AgendaPage.tsx`: `Cita` types + `cantidad`; create `servicioCantidades` sends `servicios`; completar per-line `cantidad`/grams.
-- [ ] 3.10 RED→GREEN: `AgendaPage.test.tsx`.
-- [ ] 3.11 Verify unit 3 + full suites both apps + `tsc --noEmit` + validation rebuild.
+- [x] 3.1 New `entities/CitaServicioEntity.ts` on `citas_servicios`, composite PK, `cantidad` int default 1.
+- [x] 3.2 Migration `1700000000016-AddCantidadCitaServicios.ts`; additive `ADD cantidad DEFAULT 1` on the live `citasId/serviciosId` table (no rename).
+- [x] 3.3 `CitaEntity`/`ServicioEntity`: replace `@ManyToMany` with OneToMany `citasServicios`.
+- [x] 3.4 RED→GREEN: `CitaDTO` + `cantidad`; `duracionTotalMinutos=Σ(duracion×cantidad)`; legacy `cantidad=1`.
+- [x] 3.5 `agenda.schema.ts`: accept `servicios:[{servicioId,cantidad}]` OR legacy `serviciosIds`; tests reject `cantidad=0`.
+- [x] 3.6 `CitaController` normalize input; `CreateCitaUseCase` duration/overlap use expanded duration.
+- [x] 3.7 `TypeORMCitaRepository`/`DisponibilidadService` read `citasServicios.servicio`; update their tests.
+- [x] 3.8 RED→GREEN: `CompletarCitaUseCase` test — `cantidad=2` → 2 item rows, `totalServicios=40000`.
+- [x] 3.9 Frontend `AgendaPage.tsx`: `Cita` types + `cantidad`; create `servicioCantidades` sends `servicios`; completar per-line `cantidad`/grams.
+- [x] 3.10 RED→GREEN: `AgendaPage.test.tsx`.
+- [x] 3.11 Verify unit 3 + full suites both apps + `tsc --noEmit` + validation rebuild.
 
 ## Phase 4 — Documentation
 
