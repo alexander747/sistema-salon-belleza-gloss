@@ -6,6 +6,10 @@ export interface RegistroServicioItemDTO {
   nombreServicio: string;
   precioServicio: number;
   costoBaseInsumos: number;
+  /** Grams used for a `POR_GRAMO` service (per unit); null for `FIJO`/legacy items. */
+  gramosUsados: number | null;
+  /** Catalog price per gram snapshot; null for `FIJO`/legacy items. */
+  precioPorGramo: number | null;
 }
 
 export function registroServicioItemToDTO(entity: RegistroServicioItemEntity): RegistroServicioItemDTO {
@@ -15,5 +19,7 @@ export function registroServicioItemToDTO(entity: RegistroServicioItemEntity): R
     nombreServicio: entity.nombreServicio,
     precioServicio: Number(entity.precioServicio),
     costoBaseInsumos: Number(entity.costoBaseInsumos),
+    gramosUsados: entity.gramosUsados != null ? Number(entity.gramosUsados) : null,
+    precioPorGramo: entity.precioPorGramo != null ? Number(entity.precioPorGramo) : null,
   };
 }

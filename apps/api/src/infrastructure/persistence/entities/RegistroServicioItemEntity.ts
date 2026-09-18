@@ -27,4 +27,12 @@ export class RegistroServicioItemEntity extends BaseEntity {
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   costoBaseInsumos: number;
+
+  /** Grams used for a `POR_GRAMO` service (per unit); null for `FIJO`/legacy items. */
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  gramosUsados: number | null;
+
+  /** Catalog price per gram snapshot for a `POR_GRAMO` service; null for `FIJO`/legacy items. */
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  precioPorGramo: number | null;
 }
