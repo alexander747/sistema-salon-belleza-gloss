@@ -88,3 +88,27 @@ En `POST /api/salones/:salonId/registros`, para cada línea de un servicio `POR_
 - GIVEN una línea de servicio `FIJO` con `costoBaseInsumos=25000` y `gramosUsados=50`
 - WHEN POST /registros
 - THEN el item persiste `costoBaseInsumos=25000` AND los gramos no alteran el costo
+
+### Requirement: Captura de gramos usable en móvil con preview del costo de insumo
+
+La UI de creación de registros (venta de mostrador y "completar cita") MUST presentar la captura de gramos de una línea `POR_GRAMO` como una fila propia del carrito, con etiqueta visible ("Gramos usados"), sufijo de unidad (`g`) y un área táctil de al menos 44px de alto — nunca comprimida entre el stepper de cantidad y el precio. Mientras `gramosUsados > 0`, la UI MUST mostrar el costo de insumo derivado (`gramosUsados × precioPorGramo`) formateado como moneda, y ese valor MUST coincidir con el `costoBaseInsumos` que el servidor persistirá para esa línea. Cuando los gramos están vacíos o son 0, la UI MUST NOT mostrar un costo de `$ 0`.
+
+#### Scenario: Gramos editables en una fila propia
+
+- GIVEN una línea `POR_GRAMO` en el carrito en un viewport móvil (390px)
+- WHEN la línea se renderiza
+- THEN el input de gramos tiene una etiqueta visible "Gramos usados", un sufijo "g" y un área táctil ≥44px
+- AND la fila de gramos ocupa el ancho completo del carrito, sin compartir fila con el stepper de cantidad y el precio
+
+#### Scenario: Preview del costo coincide con el persistido
+
+- GIVEN una línea `POR_GRAMO` con `precioPorGramo=800` y 100 gramos ingresados
+- WHEN el usuario tipea los gramos
+- THEN la UI muestra "Costo de insumo $ 80.000" (= 100 × 800)
+- AND ese valor MUST igualar el `costoBaseInsumos` que el servidor deriva para esa línea
+
+#### Scenario: Sin gramos no hay costo engañoso
+
+- GIVEN una línea `POR_GRAMO` con el input de gramos vacío o en 0
+- WHEN la línea se renderiza
+- THEN la UI MUST NOT mostrar "Costo de insumo $ 0"

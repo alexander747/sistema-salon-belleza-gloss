@@ -76,3 +76,14 @@ Each unit keeps tests with its code; each is independently shippable. Verify: `c
 ## Phase 4 — Documentation
 
 - [x] 4.1 `AGENTS.md` gotchas: `tipoCostoInsumo`/`precioPorGramo`, quantity semantics, join-table naming, validation rebuild.
+
+## Phase 5 — PR 4: Refinamiento UI de la captura por gramo
+
+Feedback del dueño en móvil (390×844): el input de gramos quedaba en 70×24 px entre el stepper y el precio, sin unidad ni feedback de costo.
+
+- [x] 5.1 RED→GREEN: `WalkInModal.test.tsx` — fila propia, etiqueta visible + sufijo `g`, preview `100 g × $800 = $ 80.000`, y ausencia de `$0` sin gramos.
+- [x] 5.2 GREEN: `WalkInModal.tsx` + `WalkInModal.module.css` — `gramsField` de ancho completo (flex 1 0 100%), input 44px, label/sufijo y costo en vivo.
+- [x] 5.3 RED→GREEN: `AgendaPage.test.tsx` — mismo preview (`$ 114.000` y `$ 80.000`) + contrato MQ ≤600px (touch target 44px, fila propia).
+- [x] 5.4 GREEN: `AgendaPage.tsx` + `AgendaPage.module.css` — `serviceCardMain` + `gramsField` de ancho completo.
+- [x] 5.5 Spec delta `finanzas-registros`: requirement "Captura de gramos usable en móvil" + 3 scenarios.
+- [x] 5.6 Verify: dashboard `vitest` + `tsc --noEmit`; api `vitest` sin regresión.
