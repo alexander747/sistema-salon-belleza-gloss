@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calcularDesgloseReparto, costoUnitarioLinea } from './reparto.js';
+import {
+  calcularDesgloseReparto,
+  costoUnitarioLinea,
+  lineasServicioCita,
+  totalServiciosCita,
+} from './reparto.js';
 
 /**
  * Réplica de la fórmula del servidor:
@@ -131,5 +136,48 @@ describe('costoUnitarioLinea — espejo de CostoInsumoService', () => {
 
   it('sin datos devuelve 0', () => {
     expect(costoUnitarioLinea({})).toBe(0);
+  });
+});
+
+/**
+ * Fuente única del total de servicios de una cita (display + payload).
+ * Antes del PR6 el display omitía `× cantidad` y mostraba la MITAD de lo
+ * que el servidor persistía para `cantidad > 1`.
+ */
+describe('lineasServicioCita / totalServiciosCita — total del completar (PR6)', () => {
+  it('expande cantidad y totaliza Σ(cantidad × precio)', () => {
+    const lineas = lineasServicioCita(
+      [
+        { id: 1, precio: 30000, cantidad: 2 },
+        { id: 2, precio: 10000, cantidad: 1 },
+      ],
+      {},
+    );
+
+    expect(lineas).toEqual([
+      { id: 1, precio: 30000, cantidad: 2 },
+      { id: 2, precio: 10000, cantidad: 1 },
+    ]);
+    expect(totalServiciosCita(lineas)).toBe(70000);
+  });
+
+  it('usa el precio override del formulario y defaultea cantidad a 1 (legacy)', () => {
+    const lineas = lineasServicioCita(
+      [
+        { id: 1, precio: 30000 },
+        { id: 2, precio: 10000 },
+      ],
+      { 1: 45000 },
+    );
+
+    expect(lineas).toEqual([
+      { id: 1, precio: 45000, cantidad: 1 },
+      { id: 2, precio: 10000, cantidad: 1 },
+    ]);
+    expect(totalServiciosCita(lineas)).toBe(55000);
+  });
+
+  it('sin servicios totaliza 0', () => {
+    expect(totalServiciosCita(lineasServicioCita([], {}))).toBe(0);
   });
 });

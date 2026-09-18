@@ -66,6 +66,39 @@ export function costoUnitarioLinea(linea: {
   return Number(linea.costoBaseInsumos ?? 0);
 }
 
+/**
+ * Línea de servicio de una cita ya expandida con su precio efectivo y cantidad.
+ * Fuente única para el total que se MUESTRA en el modal y el que viaja en el POST.
+ */
+export interface LineaServicioCita {
+  id: number;
+  /** Precio efectivo: override del formulario o el precio original de la cita. */
+  precio: number;
+  /** Unidades (≥1; legacy sin `cantidad` = 1). */
+  cantidad: number;
+}
+
+/**
+ * Expande los servicios de una cita con su precio efectivo (override o catálogo)
+ * y su cantidad. Compartido por el display del modal y el payload del POST para
+ * que `cantidad > 1` no pueda divergir entre lo que se ve y lo que se cobra.
+ */
+export function lineasServicioCita(
+  servicios: ReadonlyArray<{ id: number; precio: number; cantidad?: number | null }>,
+  precios: Readonly<Record<number, number>>,
+): LineaServicioCita[] {
+  return servicios.map((s) => ({
+    id: s.id,
+    precio: precios[s.id] ?? s.precio,
+    cantidad: s.cantidad ?? 1,
+  }));
+}
+
+/** Σ(precio × cantidad) de las líneas de una cita. */
+export function totalServiciosCita(lineas: ReadonlyArray<LineaServicioCita>): number {
+  return lineas.reduce((sum, l) => sum + l.precio * l.cantidad, 0);
+}
+
 export function calcularDesgloseReparto(input: DesgloseRepartoInput): DesgloseReparto {
   const {
     totalServicios,

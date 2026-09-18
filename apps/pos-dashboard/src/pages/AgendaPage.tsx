@@ -12,7 +12,12 @@ import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
-import { calcularDesgloseReparto, costoUnitarioLinea } from '../utils/reparto.js';
+import {
+  calcularDesgloseReparto,
+  costoUnitarioLinea,
+  lineasServicioCita,
+  totalServiciosCita,
+} from '../utils/reparto.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { getCitaActions, type CitaAccion } from '../utils/citaActions.js';
 import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
@@ -623,15 +628,11 @@ const AgendaPage: React.FC = () => {
     if (!salonId || !selectedCita) return;
     setCompletando(true);
     try {
-      const serviciosConPrecios = selectedCita.servicios.map(s => ({
-        id: s.id,
-        precio: completarForm.serviciosPrecios[s.id] ?? s.precio,
-        cantidad: s.cantidad ?? 1,
-      }));
-      const totalServicios = serviciosConPrecios.reduce(
-        (sum, s) => sum + s.precio * s.cantidad,
-        0,
+      const serviciosConPrecios = lineasServicioCita(
+        selectedCita.servicios,
+        completarForm.serviciosPrecios,
       );
+      const totalServicios = totalServiciosCita(serviciosConPrecios);
 
       // Extra services added in completar
       const extraServicios = servicios.filter(s => completarForm.nuevosServiciosIds.includes(s.id));
@@ -2636,7 +2637,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   );
 
   const totalOriginalServicios = useMemo(
-    () => cita.servicios.reduce((sum, s) => sum + (form.serviciosPrecios[s.id] ?? s.precio), 0),
+    () => totalServiciosCita(lineasServicioCita(cita.servicios, form.serviciosPrecios)),
     [cita.servicios, form.serviciosPrecios],
   );
 

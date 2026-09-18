@@ -1320,3 +1320,172 @@ describe('AgendaPage — desglose del reparto al completar (PR5)', () => {
     expect(within(panel).queryByText(/−\s*\$-/)).not.toBeInTheDocument();
   }, 20000);
 });
+
+describe('AgendaPage — totales del completar con cantidad > 1 (PR6)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  /**
+   * Cita de un servicio con la cantidad indicada y la empleada al 60%.
+   * `precioBase = 30.000`: para cantidad=2 el server persiste 60.000.
+   */
+  function apiMockCantidad(opts: {
+    cantidad: number;
+    tipoCostoInsumo?: 'FIJO' | 'POR_GRAMO';
+    precioPorGramo?: number;
+  }) {
+    const servicioCita: Record<string, unknown> = {
+      id: 1,
+      nombre: 'Alisado',
+      duracionMinutos: 60,
+      precioBase: 30000,
+      costoBaseInsumos: 0,
+      cantidad: opts.cantidad,
+    };
+    const servicioCatalogo: Record<string, unknown> = {
+      id: 1,
+      nombre: 'Alisado',
+      duracionMinutos: 60,
+      precioBase: 30000,
+      costoBaseInsumos: 0,
+      activo: true,
+    };
+    if (opts.tipoCostoInsumo) servicioCatalogo.tipoCostoInsumo = opts.tipoCostoInsumo;
+    if (opts.precioPorGramo !== undefined) {
+      servicioCatalogo.precioPorGramo = opts.precioPorGramo;
+    }
+
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/agenda/disponibilidad/slots')) {
+        return Promise.resolve({ data: [{ hora: '10:00', disponible: true }] });
+      }
+      if (url.includes('/agenda/citas')) {
+        const fechaHora = new Date(new Date().setHours(10, 0, 0, 0)).toISOString();
+        return Promise.resolve({
+          data: [
+            {
+              id: 1,
+              salonId: 1,
+              fechaHora,
+              estado: 'CONFIRMADA',
+              clienteId: 1,
+              usuarioId: 1,
+              servicios: [servicioCita],
+              creadoEn: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', telefono: '123456' }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Empleada Test', activo: true, porcentajeComisionServicio: 60 }],
+        });
+      }
+      if (url.includes('/servicios')) return Promise.resolve({ data: [servicioCatalogo] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  /** Valor monetario de una fila del recibo del modal a partir de su etiqueta. */
+  function valorFilaRecibo(etiqueta: string): string {
+    // Hay un infoRow "Servicios" del modal de detalle detrás: descartamos las
+    // filas cuyo segundo valor no sea un monto.
+    const label = screen.getAllByText(etiqueta, { selector: 'span' }).find((el) => {
+      const row = el.parentElement;
+      return row != null && /\$\s*\d/.test(row.textContent ?? '');
+    });
+    if (!label) throw new Error(`No se encontró la fila de recibo "${etiqueta}"`);
+    const row = label.parentElement as HTMLElement;
+    const valueNode = Array.from(row.querySelectorAll('span')).find(
+      (el) => el !== label && /^\$\s/.test(el.textContent ?? ''),
+    );
+    // `Intl.NumberFormat` usa un espacio duro (NBSP): normalizamos a espacio simple.
+    return (valueNode?.textContent ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  async function abrirCompletar() {
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+  }
+
+  it('FIJO cantidad=2: el subtotal mostrado es 2 × $30.000 (y el payload coincide)', async () => {
+    apiMockCantidad({ cantidad: 2 });
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+    await abrirCompletar();
+
+    // Regresión: antes del PR6 mostraba $ 30.000 (omitía ×cantidad) mientras
+    // el server cobraba 60.000. Display y payload deben coincidir.
+    expect(valorFilaRecibo('Servicios')).toBe('$ 60.000');
+    expect(valorFilaRecibo('Subtotal')).toBe('$ 60.000');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const completarCall = mockPost.mock.calls.find(([url]) =>
+        String(url).includes('/completar'),
+      );
+      expect(completarCall).toBeDefined();
+      const [, body] = completarCall as [
+        string,
+        { registro: { totalServicios: number; valorOriginal: number } },
+      ];
+      expect(body.registro.totalServicios).toBe(60000);
+      expect(body.registro.valorOriginal).toBe(60000);
+    }, WAIT);
+  }, 20000);
+
+  it('POR_GRAMO cantidad=2: el panel del reparto usa 2 × precio y 2 × insumo', async () => {
+    apiMockCantidad({ cantidad: 2, tipoCostoInsumo: 'POR_GRAMO', precioPorGramo: 1000 });
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+    await abrirCompletar();
+
+    fireEvent.change(screen.getByLabelText('Gramos Alisado'), { target: { value: '10' } });
+
+    // Servicios 2 × 30.000 = 60.000; insumo 2 × (10 g × 1.000) = 20.000.
+    expect(valorFilaRecibo('Servicios')).toBe('$ 60.000');
+
+    const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
+    expect(within(panel).getByLabelText('Cobrado $ 60.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Insumos − $ 20.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('A repartir $ 40.000')).toBeInTheDocument();
+    expect(within(panel).getByText('Comisión empleada (60%)')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Comisión empleada $ 24.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Queda para el salón $ 16.000')).toBeInTheDocument();
+  }, 20000);
+
+  it('FIJO cantidad=2 + ajuste: la base del total ajustado también es 2 × precio', async () => {
+    apiMockCantidad({ cantidad: 2 });
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+    await abrirCompletar();
+
+    // El placeholder del input de ajuste (y el de "monto recibido") es el total
+    // calculado: 2 × 30.000. Antes del PR6 era 30.000.
+    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
+    const ajuste = screen.getAllByPlaceholderText(/\$\s*60\.000/)[0];
+    fireEvent.change(ajuste, { target: { value: '60000' } });
+
+    expect(valorFilaRecibo('Total')).toBe('$ 60.000');
+
+    // Con el ajuste en el total calculado, el desglose reparte 60.000 sin insumo.
+    const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
+    expect(within(panel).getByLabelText('A repartir $ 60.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Comisión empleada $ 36.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Queda para el salón $ 24.000')).toBeInTheDocument();
+  }, 20000);
+});
