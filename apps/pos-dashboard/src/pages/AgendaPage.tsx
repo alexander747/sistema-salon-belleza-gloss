@@ -2744,7 +2744,10 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                     const currentPrice = form.serviciosPrecios[s.id] ?? s.precio;
                     const isRemoved = currentPrice === 0 && form.serviciosPrecios[s.id] === 0;
                     const cantidad = s.cantidad ?? 1;
-                    const esPorGramo = servicios.find((x) => x.id === s.id)?.tipoCostoInsumo === 'POR_GRAMO';
+                    const catalogoServicio = servicios.find((x) => x.id === s.id);
+                    const esPorGramo = catalogoServicio?.tipoCostoInsumo === 'POR_GRAMO';
+                    const gramosLinea = form.serviciosGramos[s.id] ?? 0;
+                    const costoInsumoLinea = gramosLinea * (catalogoServicio?.precioPorGramo ?? 0);
                     return (
                       <div
                         key={s.id}
@@ -2754,65 +2757,79 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                           textDecoration: isRemoved ? 'line-through' : 'none',
                         }}
                       >
-                        <span className={styles.serviceName}>
-                          {s.nombre}
-                          {cantidad > 1 && (
-                            <span style={{ color: 'var(--accent)', marginLeft: '0.25rem' }}>
-                              ×{cantidad}
-                            </span>
-                          )}
-                        </span>
-                        {esPorGramo && !isRemoved && (
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            inputMode="decimal"
-                            aria-label={`Gramos ${s.nombre}`}
-                            placeholder="gramos"
-                            value={form.serviciosGramos[s.id] ?? ''}
-                            onChange={(e) =>
-                              onChangeForm({
-                                serviciosGramos: {
-                                  ...form.serviciosGramos,
-                                  [s.id]: Number(e.target.value),
-                                },
-                              })
-                            }
-                            className={styles.noSpinner}
+                        <div className={styles.serviceCardMain}>
+                          <span className={styles.serviceName}>
+                            {s.nombre}
+                            {cantidad > 1 && (
+                              <span style={{ color: 'var(--accent)', marginLeft: '0.25rem' }}>
+                                ×{cantidad}
+                              </span>
+                            )}
+                          </span>
+                          <span
                             style={{
-                              width: 84,
-                              height: 30,
-                              padding: '0 0.4rem',
-                              borderRadius: 'var(--radius-sm)',
-                              border: '1px solid var(--border)',
-                              background: 'var(--bg-elevated)',
-                              color: 'var(--text-primary)',
                               fontFamily: "'DM Sans', sans-serif",
                               fontSize: '0.8125rem',
+                              fontWeight: 600,
+                              color: isRemoved ? 'var(--text-dim)' : 'var(--text-primary)',
+                              minWidth: '80px',
+                              textAlign: 'right',
                             }}
-                          />
+                          >
+                            {formatCurrency(currentPrice * cantidad)}
+                          </span>
+                          <button
+                            onClick={() => onToggleServicio(s.id)}
+                            className={styles.serviceRemoveBtn}
+                            aria-label={isRemoved ? 'Restaurar servicio' : 'No realizar servicio'}
+                            title={isRemoved ? 'Restaurar servicio' : 'Marcar como no realizado'}
+                          >
+                            {isRemoved ? '↩' : '✕'}
+                          </button>
+                        </div>
+                        {esPorGramo && !isRemoved && (
+                          <div className={styles.gramsField}>
+                            <label
+                              className={styles.gramsLabel}
+                              htmlFor={`gramos-cita-${s.id}`}
+                            >
+                              Gramos usados
+                            </label>
+                            <div className={styles.gramsInputWrap}>
+                              <input
+                                id={`gramos-cita-${s.id}`}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputMode="decimal"
+                                aria-label={`Gramos ${s.nombre}`}
+                                placeholder="0"
+                                value={form.serviciosGramos[s.id] ?? ''}
+                                onChange={(e) =>
+                                  onChangeForm({
+                                    serviciosGramos: {
+                                      ...form.serviciosGramos,
+                                      [s.id]: Number(e.target.value),
+                                    },
+                                  })
+                                }
+                                className={`${styles.noSpinner} ${styles.gramsInput}`}
+                              />
+                              <span className={styles.gramsSuffix}>g</span>
+                            </div>
+                            {costoInsumoLinea > 0 && (
+                              <span
+                                className={styles.gramsCost}
+                                aria-label={`Costo de insumo ${formatCurrency(costoInsumoLinea)}`}
+                              >
+                                Costo de insumo
+                                <strong className={styles.gramsCostValue}>
+                                  {formatCurrency(costoInsumoLinea)}
+                                </strong>
+                              </span>
+                            )}
+                          </div>
                         )}
-                        <span
-                          style={{
-                            fontFamily: "'DM Sans', sans-serif",
-                            fontSize: '0.8125rem',
-                            fontWeight: 600,
-                            color: isRemoved ? 'var(--text-dim)' : 'var(--text-primary)',
-                            minWidth: '80px',
-                            textAlign: 'right',
-                          }}
-                        >
-                          {formatCurrency(currentPrice * cantidad)}
-                        </span>
-                        <button
-                          onClick={() => onToggleServicio(s.id)}
-                          className={styles.serviceRemoveBtn}
-                          aria-label={isRemoved ? 'Restaurar servicio' : 'No realizar servicio'}
-                          title={isRemoved ? 'Restaurar servicio' : 'Marcar como no realizado'}
-                        >
-                          {isRemoved ? '↩' : '✕'}
-                        </button>
                       </div>
                     );
                   })}

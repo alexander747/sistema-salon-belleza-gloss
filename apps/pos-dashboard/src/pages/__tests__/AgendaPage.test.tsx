@@ -722,6 +722,19 @@ describe('AgendaPage — MQ móvil del module.css (R5/D9)', () => {
     // Los steppers de cantidad del carrito de productos ≥40px
     expect(mobileBlock).toMatch(/\.qtyBtn\s*\{[^}]*40px/s);
   });
+
+  it('≤600px: la captura de gramos POR_GRAMO es un touch target de 44px en fila propia', () => {
+    const mqIndex = agendaCss.indexOf('@media (max-width: 600px)');
+    const nextMq = agendaCss.indexOf('@media', mqIndex + 1);
+    const mobileBlock =
+      nextMq === -1 ? agendaCss.slice(mqIndex) : agendaCss.slice(mqIndex, nextMq);
+
+    // El input de gramos sube a 44px de alto en móvil (antes 30px inline).
+    expect(mobileBlock).toMatch(/\.gramsInput[^{]*\{[^}]*min-height:\s*44px/s);
+    // La fila de gramos ocupa el ancho completo del serviceCard (no se comprime
+    // entre el nombre y el precio): flex 1 0 100%.
+    expect(agendaCss).toMatch(/\.gramsField\s*\{[^}]*flex:\s*1 0 100%/s);
+  });
 });
 
 describe('AgendaPage — fiado y pago parcial al completar cita (PR3)', () => {
@@ -1099,6 +1112,9 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
     fireEvent.change(screen.getByLabelText('Gramos Tinte'), { target: { value: '95' } });
     await waitFor(() => expect(confirmar).toBeEnabled(), WAIT);
 
+    // Preview en vivo: 95 g × $1200 = $ 114.000 (igual al costoBaseInsumos del server)
+    expect(screen.getByLabelText('Costo de insumo $ 114.000')).toBeInTheDocument();
+
     fireEvent.click(confirmar);
 
     await waitFor(() => {
@@ -1114,5 +1130,37 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
         expect.objectContaining({ servicioId: 1, cantidad: 1, gramosUsados: 95 }),
       ]);
     }, WAIT);
+  }, 20000);
+
+  it('completar POR_GRAMO: costo de insumo en vivo con etiqueta y sufijo (100 g × $800 = $ 80.000)', async () => {
+    apiMockCon(
+      [{ id: 1, nombre: 'Alisado', duracionMinutos: 60, precioBase: 60000, costoBaseInsumos: 0, cantidad: 1 }],
+      [
+        {
+          id: 1,
+          nombre: 'Alisado',
+          duracionMinutos: 60,
+          precioBase: 60000,
+          tipoCostoInsumo: 'POR_GRAMO',
+          precioPorGramo: 800,
+          activo: true,
+        },
+      ],
+    );
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    const gramosInput = screen.getByLabelText('Gramos Alisado');
+    // Etiqueta visible + sufijo de unidad en la misma fila del input.
+    expect(screen.getByText('Gramos usados')).toBeInTheDocument();
+    expect(within(gramosInput.parentElement as HTMLElement).getByText('g')).toBeInTheDocument();
+    // Sin gramos todavía: no hay costo engañoso de $ 0.
+    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
+
+    fireEvent.change(gramosInput, { target: { value: '100' } });
+    expect(screen.getByLabelText('Costo de insumo $ 80.000')).toBeInTheDocument();
   }, 20000);
 });

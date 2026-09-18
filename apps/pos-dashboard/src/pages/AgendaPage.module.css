@@ -494,6 +494,96 @@
   background: var(--bg-base);
   margin-bottom: 0.35rem;
   transition: border-color 0.15s;
+  /* La fila de gramos (100% ancho) cae a su propia línea, sin comprimir el nombre. */
+  flex-wrap: wrap;
+}
+
+.serviceCardMain {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+/* ── POR_GRAMO: fila propia de captura + preview del costo de insumo ──
+   Antes el input (84×30) se apretaba entre el nombre y el precio. Ahora ocupa
+   una fila completa del serviceCard, con etiqueta, sufijo 'g' y costo en vivo. */
+.gramsField {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.1rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.gramsLabel {
+  flex-shrink: 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.gramsInputWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+  padding: 0 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.gramsInputWrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.gramsInput {
+  width: 68px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: right;
+  outline: none;
+}
+
+.gramsSuffix {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+}
+
+.gramsCost {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.gramsCostValue {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--accent);
 }
 
 .serviceCardAdded {
@@ -982,7 +1072,8 @@
   .amountInput,
   .productSearchInput,
   .addServiceSelect,
-  .paymentBtn {
+  .paymentBtn,
+  .gramsInput {
     min-height: 44px;
   }
 
