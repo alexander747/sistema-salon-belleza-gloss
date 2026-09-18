@@ -648,6 +648,18 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     precioPorGramo: 1200,
   };
 
+  // Caso reportado por el dueño: 100 g × $800 = $ 80.000.
+  const SERVICIO_POR_GRAMO_800 = {
+    id: 8,
+    nombre: 'Alisado permanente brasileño',
+    descripcion: null,
+    precioFinal: 60000,
+    duracionMinutos: 180,
+    categoriaId: 1,
+    tipoCostoInsumo: 'POR_GRAMO',
+    precioPorGramo: 800,
+  };
+
   function apiMockConGramos() {
     mockGet.mockImplementation((url: string) => {
       if (url.includes('/servicios')) {
@@ -664,6 +676,7 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
               precioPorGramo: null,
             },
             SERVICIO_POR_GRAMO,
+            SERVICIO_POR_GRAMO_800,
           ],
         });
       }
@@ -750,6 +763,41 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
         }),
       );
     });
+  });
+
+  it('shows the live supply cost for a POR_GRAMO line (100 g × $800 = $ 80.000)', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Alisado permanente brasileño'));
+    llenarYSeleccionarTarjeta();
+
+    const gramosInput = screen.getByLabelText('Gramos usados Alisado permanente brasileño');
+    // La captura de gramos tiene una etiqueta visible y sufijo de unidad.
+    expect(screen.getByText('Gramos usados')).toBeInTheDocument();
+    expect(within(gramosInput.parentElement as HTMLElement).getByText('g')).toBeInTheDocument();
+
+    // Sin gramos todavía: no se muestra un costo engañoso de $ 0.
+    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
+
+    fireEvent.change(gramosInput, { target: { value: '100' } });
+
+    // 100 g × $800 coincide con el costoBaseInsumos que persistirá el servidor.
+    expect(screen.getByLabelText('Costo de insumo $ 80.000')).toBeInTheDocument();
+  });
+
+  it('hides the supply cost when grams are empty or zero', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Tintura Global'));
+    llenarYSeleccionarTarjeta();
+    const gramosInput = screen.getByLabelText('Gramos usados Tintura Global');
+
+    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
+
+    fireEvent.change(gramosInput, { target: { value: '0' } });
+    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
   });
 
   it('the receipt reflects the quantity of the service line', async () => {

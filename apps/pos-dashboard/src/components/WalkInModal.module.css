@@ -335,6 +335,8 @@
   gap: 0.5rem;
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
+  /* Permite que la fila de gramos (100% ancho) caiga a su propia línea. */
+  flex-wrap: wrap;
 }
 
 .cartItem:last-child {
@@ -360,6 +362,87 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 0.6875rem;
   color: var(--text-dim);
+}
+
+/* ── POR_GRAMO: fila propia de captura + preview del costo de insumo ──
+   Antes el input vivía comprimido entre el stepper y el precio (70×24px).
+   Ahora ocupa una fila completa del carrito, con etiqueta visible, sufijo
+   de unidad y altura táctil, más el costo derivado en vivo. */
+.gramsField {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+}
+
+.gramsLabel {
+  flex-shrink: 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.gramsInputWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+  padding: 0 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.gramsInputWrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.gramsInput {
+  width: 68px;
+  height: 42px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: right;
+  outline: none;
+}
+
+.gramsSuffix {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+}
+
+.gramsCost {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.gramsCostValue {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--accent);
 }
 
 .priceInput {

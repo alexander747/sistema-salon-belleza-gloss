@@ -1057,6 +1057,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                       {unifiedCart.map((entry) => {
                         if (entry.type === 'SERVICIO') {
                           const item = entry.data;
+                          const gramosLinea = item.gramosUsados ?? 0;
+                          const costoInsumoLinea = gramosLinea * (item.precioPorGramo ?? 0);
                           return (
                             <motion.div
                               key={`svc-${item.servicioId}`}
@@ -1094,36 +1096,6 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                                 </div>
                                 <div className={styles.cartItemDuration}>
                                   {item.duracionMinutos} min
-                                  {item.tipoCostoInsumo === 'POR_GRAMO' && (
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      inputMode="decimal"
-                                      aria-label={`Gramos usados ${item.nombre}`}
-                                      placeholder="Gramos"
-                                      value={item.gramosUsados ?? ''}
-                                      onChange={(e) =>
-                                        updateServiceGramos(
-                                          item.servicioId,
-                                          e.target.value === '' ? undefined : Number(e.target.value),
-                                        )
-                                      }
-                                      style={{
-                                        width: '70px',
-                                        height: '24px',
-                                        marginLeft: '0.5rem',
-                                        padding: '0 0.35rem',
-                                        borderRadius: 'var(--radius-sm)',
-                                        border: '1px solid var(--border)',
-                                        background: 'var(--bg-base)',
-                                        color: 'var(--text-primary)',
-                                        fontFamily: "'DM Sans', sans-serif",
-                                        fontSize: '0.75rem',
-                                        outline: 'none',
-                                      }}
-                                    />
-                                  )}
                                 </div>
                               </div>
                               <div
@@ -1207,6 +1179,47 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                               >
                                 ✕
                               </button>
+                              {item.tipoCostoInsumo === 'POR_GRAMO' && (
+                                <div className={styles.gramsField}>
+                                  <label
+                                    className={styles.gramsLabel}
+                                    htmlFor={`gramos-svc-${item.servicioId}`}
+                                  >
+                                    Gramos usados
+                                  </label>
+                                  <div className={styles.gramsInputWrap}>
+                                    <input
+                                      id={`gramos-svc-${item.servicioId}`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      inputMode="decimal"
+                                      aria-label={`Gramos usados ${item.nombre}`}
+                                      placeholder="0"
+                                      value={item.gramosUsados ?? ''}
+                                      onChange={(e) =>
+                                        updateServiceGramos(
+                                          item.servicioId,
+                                          e.target.value === '' ? undefined : Number(e.target.value),
+                                        )
+                                      }
+                                      className={styles.gramsInput}
+                                    />
+                                    <span className={styles.gramsSuffix}>g</span>
+                                  </div>
+                                  {costoInsumoLinea > 0 && (
+                                    <span
+                                      className={styles.gramsCost}
+                                      aria-label={`Costo de insumo ${formatCurrency(costoInsumoLinea)}`}
+                                    >
+                                      Costo de insumo
+                                      <strong className={styles.gramsCostValue}>
+                                        {formatCurrency(costoInsumoLinea)}
+                                      </strong>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </motion.div>
                           );
                         } else {
