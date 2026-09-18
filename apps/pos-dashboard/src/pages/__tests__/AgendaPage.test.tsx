@@ -192,7 +192,11 @@ describe('AgendaPage — errores del backend visibles', () => {
     }, WAIT);
     expect(mockPost).toHaveBeenCalledWith(
       '/salones/1/agenda/citas',
-      expect.objectContaining({ clienteId: 1, serviciosIds: [1], usuarioId: 1 }),
+      expect.objectContaining({
+        clienteId: 1,
+        servicios: [{ servicioId: 1, cantidad: 1 }],
+        usuarioId: 1,
+      }),
     );
   }, 20000);
 
@@ -452,12 +456,12 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
             totalProductos: 0,
             montoTotal: 30000,
             pagos: [{ monto: 30000, metodoPago: 'EFECTIVO' }],
-            serviciosIds: [1],
             serviciosItems: [
               expect.objectContaining({
                 servicioId: 1,
                 nombreServicio: 'Corte',
                 precioServicio: 30000,
+                cantidad: 1,
               }),
             ],
           }),
@@ -949,4 +953,166 @@ describe('AgendaPage — recibo tras completar cita (PR2)', () => {
     // El modal de completar quedó cerrado
     expect(screen.queryByRole('button', { name: 'Confirmar y Registrar' })).not.toBeInTheDocument();
   });
+});
+
+describe('AgendaPage — cantidad por servicio (PR3)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  function apiMockCon(
+    citaServicios: Array<Record<string, unknown>>,
+    catalogoServicios: Array<Record<string, unknown>>,
+  ) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/agenda/disponibilidad/slots')) {
+        return Promise.resolve({ data: [{ hora: '10:00', disponible: true }] });
+      }
+      if (url.includes('/agenda/citas')) {
+        const fechaHora = new Date(new Date().setHours(10, 0, 0, 0)).toISOString();
+        return Promise.resolve({
+          data: [
+            {
+              id: 1,
+              salonId: 1,
+              fechaHora,
+              estado: 'CONFIRMADA',
+              clienteId: 1,
+              usuarioId: 1,
+              servicios: citaServicios,
+              creadoEn: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', telefono: '123456' }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Empleada Test', activo: true }] });
+      }
+      if (url.includes('/servicios')) return Promise.resolve({ data: catalogoServicios });
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  it('crear cita ×2: envía servicios con cantidad y pide slots con duración expandida', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+    const { container } = renderAgenda();
+
+    await fillCreateForm(container);
+
+    // Incrementar la cantidad del servicio seleccionado
+    fireEvent.click(await screen.findByRole('button', { name: 'Más Corte' }, WAIT));
+
+    // El refetch de slots usa Σ(60 × 2) = 120
+    await waitFor(() => {
+      const slotCalls = mockGet.mock.calls.filter(([url]) =>
+        String(url).includes('/agenda/disponibilidad/slots'),
+      );
+      const last = slotCalls[slotCalls.length - 1] as [string, { params: { duracionMinutos: number } }];
+      expect(last?.[1].params.duracionMinutos).toBe(120);
+    }, WAIT);
+
+    // Al cambiar cantidad se limpia la hora: re-seleccionar el slot
+    fireEvent.click(await screen.findByRole('button', { name: '10:00' }, WAIT));
+    const crearBtn = await screen.findByRole('button', { name: 'Crear cita' });
+    await waitFor(() => expect(crearBtn).toBeEnabled(), WAIT);
+
+    fireEvent.click(crearBtn);
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/agenda/citas',
+        expect.objectContaining({ servicios: [{ servicioId: 1, cantidad: 2 }] }),
+      );
+    }, WAIT);
+  }, 20000);
+
+  it('completar cita con cantidad=2: totalServicios 60000 e item con cantidad 2', async () => {
+    apiMockCon(
+      [{ id: 1, nombre: 'Corte', duracionMinutos: 60, precioBase: 30000, costoBaseInsumos: 0, cantidad: 2 }],
+      [{ id: 1, nombre: 'Corte', duracionMinutos: 60, precioBase: 30000, costoBaseInsumos: 0, activo: true }],
+    );
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const completarCall = mockPost.mock.calls.find(([url]) =>
+        String(url).includes('/completar'),
+      );
+      expect(completarCall).toBeDefined();
+      const [, body] = completarCall as [
+        string,
+        { registro: { totalServicios: number; serviciosItems: Array<Record<string, unknown>> } },
+      ];
+      expect(body.registro.totalServicios).toBe(60000);
+      expect(body.registro.serviciosItems).toEqual([
+        expect.objectContaining({ servicioId: 1, cantidad: 2, precioServicio: 30000 }),
+      ]);
+    }, WAIT);
+  }, 20000);
+
+  it('completar POR_GRAMO: bloquea sin gramos y envía gramosUsados con el valor', async () => {
+    apiMockCon(
+      [{ id: 1, nombre: 'Tinte', duracionMinutos: 60, precioBase: 45000, costoBaseInsumos: 0, cantidad: 1 }],
+      [
+        {
+          id: 1,
+          nombre: 'Tinte',
+          duracionMinutos: 60,
+          precioBase: 45000,
+          tipoCostoInsumo: 'POR_GRAMO',
+          precioPorGramo: 1200,
+          activo: true,
+        },
+      ],
+    );
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    // Sin gramos: bloqueado + aviso visible
+    const confirmar = screen.getByRole('button', { name: 'Confirmar y Registrar' });
+    expect(confirmar).toBeDisabled();
+    expect(
+      await screen.findByText(/Ingresá los gramos usados/i),
+    ).toBeInTheDocument();
+
+    // Ingresar gramos habilita el submit
+    fireEvent.change(screen.getByLabelText('Gramos Tinte'), { target: { value: '95' } });
+    await waitFor(() => expect(confirmar).toBeEnabled(), WAIT);
+
+    fireEvent.click(confirmar);
+
+    await waitFor(() => {
+      const completarCall = mockPost.mock.calls.find(([url]) =>
+        String(url).includes('/completar'),
+      );
+      expect(completarCall).toBeDefined();
+      const [, body] = completarCall as [
+        string,
+        { registro: { serviciosItems: Array<Record<string, unknown>> } },
+      ];
+      expect(body.registro.serviciosItems).toEqual([
+        expect.objectContaining({ servicioId: 1, cantidad: 1, gramosUsados: 95 }),
+      ]);
+    }, WAIT);
+  }, 20000);
 });

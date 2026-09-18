@@ -38,6 +38,8 @@ interface Cita {
     duracionMinutos: number;
     precio: number;
     costoBaseInsumos?: number;
+    /** Unidades del servicio agendadas (≥1, legacy = 1). */
+    cantidad: number;
   }>;
   empleada: { id: number; nombre: string };
   salonId: number;
@@ -64,6 +66,8 @@ interface ServicioSimple {
   duracionMinutos: number;
   precioBase: number;
   costoBaseInsumos?: number;
+  tipoCostoInsumo?: 'FIJO' | 'POR_GRAMO';
+  precioPorGramo?: number | null;
   activo?: boolean;
 }
 
@@ -254,6 +258,8 @@ const AgendaPage: React.FC = () => {
   const [createForm, setCreateForm] = useState({
     clienteId: 0,
     serviciosIds: [] as number[],
+    /** Cantidad por servicio seleccionado (default 1). */
+    servicioCantidades: {} as Record<number, number>,
     empleadaId: 0,
     fecha: toISODate(new Date()),
     horaInicio: '',
@@ -276,6 +282,8 @@ const AgendaPage: React.FC = () => {
   const [showCompletar, setShowCompletar] = useState(false);
   const [completarForm, setCompletarForm] = useState({
     serviciosPrecios: {} as Record<number, number>,
+    /** Gramos usados por servicio POR_GRAMO (costo derivado en el servidor). */
+    serviciosGramos: {} as Record<number, number>,
     nuevosServiciosIds: [] as number[],
     productosVendidos: [] as ProductCartItem[],
     propina: 0,
@@ -357,7 +365,10 @@ const AgendaPage: React.FC = () => {
         const [h, m] = horaInicio.split(':').map(Number);
         const endMin = h * 60 + m + duracionTotal;
         const horaFin = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
-        const precioTotal = (item.servicios ?? []).reduce((sum: number, s: any) => sum + (s.precioBase ?? 0), 0);
+        const precioTotal = (item.servicios ?? []).reduce(
+          (sum: number, s: any) => sum + (s.precioBase ?? 0) * (s.cantidad ?? 1),
+          0,
+        );
         return {
           id: item.id,
           salonId: item.salonId,
@@ -378,6 +389,7 @@ const AgendaPage: React.FC = () => {
             duracionMinutos: s.duracionMinutos,
             precio: s.precioBase ?? 0,
             costoBaseInsumos: s.costoBaseInsumos ?? 0,
+            cantidad: s.cantidad ?? 1,
           })),
         };
       });
@@ -465,7 +477,7 @@ const AgendaPage: React.FC = () => {
       })
       .catch(() => setAvailableSlots([]))
       .finally(() => setSlotsLoading(false));
-  }, [showCreate, createForm.fecha, createForm.empleadaId, createForm.serviciosIds, salonId]);
+  }, [showCreate, createForm.fecha, createForm.empleadaId, createForm.serviciosIds, createForm.servicioCantidades, salonId]);
 
   /* ── Derived form values ── */
 
@@ -475,13 +487,21 @@ const AgendaPage: React.FC = () => {
   );
 
   const totalDuration = useMemo(
-    () => selectedServicios.reduce((sum, s) => sum + s.duracionMinutos, 0),
-    [selectedServicios],
+    () =>
+      selectedServicios.reduce(
+        (sum, s) => sum + s.duracionMinutos * (createForm.servicioCantidades[s.id] ?? 1),
+        0,
+      ),
+    [selectedServicios, createForm.servicioCantidades],
   );
 
   const totalPrice = useMemo(
-    () => selectedServicios.reduce((sum, s) => sum + (s.precioBase ?? 0), 0),
-    [selectedServicios],
+    () =>
+      selectedServicios.reduce(
+        (sum, s) => sum + (s.precioBase ?? 0) * (createForm.servicioCantidades[s.id] ?? 1),
+        0,
+      ),
+    [selectedServicios, createForm.servicioCantidades],
   );
 
   /* ── Week navigation ── */
@@ -507,6 +527,7 @@ const AgendaPage: React.FC = () => {
     setCreateForm({
       clienteId: 0,
       serviciosIds: [],
+      servicioCantidades: {},
       empleadaId: 0,
       fecha: toISODate(new Date()),
       horaInicio: '',
@@ -525,7 +546,10 @@ const AgendaPage: React.FC = () => {
     try {
       await api.post(`/salones/${salonId}/agenda/citas`, {
         clienteId: createForm.clienteId,
-        serviciosIds: createForm.serviciosIds,
+        servicios: createForm.serviciosIds.map((id) => ({
+          servicioId: id,
+          cantidad: createForm.servicioCantidades[id] ?? 1,
+        })),
         usuarioId: createForm.empleadaId,
         fechaHora: new Date(`${createForm.fecha}T${createForm.horaInicio}:00`).toISOString(),
         notas: createForm.notas || undefined,
@@ -575,6 +599,7 @@ const AgendaPage: React.FC = () => {
     selectedCita.servicios.forEach(s => { precios[s.id] = s.precio; });
     setCompletarForm({
       serviciosPrecios: precios,
+      serviciosGramos: {},
       nuevosServiciosIds: [],
       productosVendidos: [],
       propina: 0,
@@ -597,13 +622,16 @@ const AgendaPage: React.FC = () => {
       const serviciosConPrecios = selectedCita.servicios.map(s => ({
         id: s.id,
         precio: completarForm.serviciosPrecios[s.id] ?? s.precio,
+        cantidad: s.cantidad ?? 1,
       }));
-      const totalServicios = serviciosConPrecios.reduce((sum, s) => sum + s.precio, 0);
+      const totalServicios = serviciosConPrecios.reduce(
+        (sum, s) => sum + s.precio * s.cantidad,
+        0,
+      );
 
       // Extra services added in completar
-      const totalExtraServicios = servicios
-        .filter(s => completarForm.nuevosServiciosIds.includes(s.id))
-        .reduce((sum, s) => sum + (s.precioBase ?? 0), 0);
+      const extraServicios = servicios.filter(s => completarForm.nuevosServiciosIds.includes(s.id));
+      const totalExtraServicios = extraServicios.reduce((sum, s) => sum + (s.precioBase ?? 0), 0);
 
       const totalServiciosFinal = totalServicios + totalExtraServicios;
       const totalProductos = completarForm.productosVendidos.reduce(
@@ -647,22 +675,41 @@ const AgendaPage: React.FC = () => {
               metodoPago: completarForm.metodoPago,
             },
           ],
-          serviciosIds: [...selectedCita.servicios.map(s => s.id), ...completarForm.nuevosServiciosIds],
           serviciosItems: [
-            ...selectedCita.servicios.map(s => ({
-              servicioId: s.id,
-              nombreServicio: s.nombre,
-              precioServicio: completarForm.serviciosPrecios[s.id] ?? s.precio,
-              costoBaseInsumos: s.costoBaseInsumos ?? 0,
-            })),
-            ...servicios
-              .filter(s => completarForm.nuevosServiciosIds.includes(s.id))
-              .map(s => ({
+            ...serviciosConPrecios
+              .map((s) => {
+                const original = selectedCita.servicios.find((x) => x.id === s.id);
+                const catalogo = servicios.find((x) => x.id === s.id);
+                if (catalogo?.tipoCostoInsumo === 'POR_GRAMO' && s.precio <= 0) {
+                  // Marcado "no realizado": se omite para no exigir gramos.
+                  return null;
+                }
+                const item: Record<string, unknown> = {
+                  servicioId: s.id,
+                  nombreServicio: original?.nombre ?? '',
+                  precioServicio: s.precio,
+                  cantidad: s.cantidad,
+                  costoBaseInsumos: original?.costoBaseInsumos ?? 0,
+                };
+                if (catalogo?.tipoCostoInsumo === 'POR_GRAMO') {
+                  item.gramosUsados = completarForm.serviciosGramos[s.id] ?? 0;
+                }
+                return item;
+              })
+              .filter((item): item is Record<string, unknown> => item !== null),
+            ...extraServicios.map((s) => {
+              const item: Record<string, unknown> = {
                 servicioId: s.id,
                 nombreServicio: s.nombre,
                 precioServicio: s.precioBase ?? 0,
+                cantidad: 1,
                 costoBaseInsumos: s.costoBaseInsumos ?? 0,
-              })),
+              };
+              if (s.tipoCostoInsumo === 'POR_GRAMO') {
+                item.gramosUsados = completarForm.serviciosGramos[s.id] ?? 0;
+              }
+              return item;
+            }),
           ],
           notas,
           registradoPorId: user?.id,
@@ -700,7 +747,7 @@ const AgendaPage: React.FC = () => {
               .map((s) => ({
                 tipo: 'SERVICIO' as const,
                 nombre: s.nombre,
-                cantidad: 1,
+                cantidad: s.cantidad ?? 1,
                 precio: servicioPrecio(s),
               })),
             // Servicios extra agregados en el modal
@@ -1472,6 +1519,7 @@ interface CreateModalProps {
   form: {
     clienteId: number;
     serviciosIds: number[];
+    servicioCantidades: Record<number, number>;
     empleadaId: number;
     fecha: string;
     horaInicio: string;
@@ -1582,10 +1630,25 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
     form.horaInicio;
 
   const toggleServicio = (id: number) => {
-    const next = form.serviciosIds.includes(id)
+    const isSelected = form.serviciosIds.includes(id);
+    const nextIds = isSelected
       ? form.serviciosIds.filter((s) => s !== id)
       : [...form.serviciosIds, id];
-    onChange({ serviciosIds: next, horaInicio: '' });
+    const nextCantidades = { ...form.servicioCantidades };
+    if (isSelected) {
+      delete nextCantidades[id];
+    } else {
+      nextCantidades[id] = nextCantidades[id] ?? 1;
+    }
+    onChange({ serviciosIds: nextIds, servicioCantidades: nextCantidades, horaInicio: '' });
+  };
+
+  const changeServicioCantidad = (id: number, delta: number) => {
+    const current = form.servicioCantidades[id] ?? 1;
+    onChange({
+      servicioCantidades: { ...form.servicioCantidades, [id]: Math.max(1, current + delta) },
+      horaInicio: '',
+    });
   };
 
   const selectedServicios = useMemo(
@@ -1701,15 +1764,37 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
             </div>
             {form.serviciosIds.length > 0 && (
               <div className={styles.serviceChips}>
-                {selectedServicios.map(svc => (
-                  <span key={svc.id} className={styles.serviceChip}>
-                    {svc.nombre}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleServicio(svc.id); }}
-                      className={styles.serviceChipRemove}
-                    >✕</button>
-                  </span>
-                ))}
+                {selectedServicios.map(svc => {
+                  const cantidad = form.servicioCantidades[svc.id] ?? 1;
+                  return (
+                    <span key={svc.id} className={styles.serviceChip}>
+                      {svc.nombre}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.15rem', marginLeft: '0.25rem' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); changeServicioCantidad(svc.id, -1); }}
+                          className={styles.qtyBtn}
+                          aria-label={`Menos ${svc.nombre}`}
+                        >
+                          −
+                        </button>
+                        <span className={styles.qtyValue}>{cantidad}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); changeServicioCantidad(svc.id, 1); }}
+                          className={styles.qtyBtn}
+                          aria-label={`Más ${svc.nombre}`}
+                        >
+                          +
+                        </button>
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleServicio(svc.id); }}
+                        className={styles.serviceChipRemove}
+                      >✕</button>
+                    </span>
+                  );
+                })}
               </div>
             )}
             {form.serviciosIds.length > 0 && (
@@ -2422,6 +2507,7 @@ interface CompletarModalProps {
   completarError: string | null;
   form: {
     serviciosPrecios: Record<number, number>;
+    serviciosGramos: Record<number, number>;
     nuevosServiciosIds: number[];
     productosVendidos: ProductCartItem[];
     propina: number;
@@ -2561,6 +2647,15 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   const hasAdjustment = descuentoPct > 0 || form.totalPersonalizado !== null;
   const ajusteNoteRequired = hasAdjustment && form.notaAjuste.trim().length === 0;
 
+  /** Servicios POR_GRAMO realizados (precio > 0) que aún no tienen gramos > 0. */
+  const gramosFaltantes = cita.servicios.some((s) => {
+    const precio = form.serviciosPrecios[s.id] ?? s.precio;
+    if (precio <= 0) return false;
+    const catalogo = servicios.find((x) => x.id === s.id);
+    return catalogo?.tipoCostoInsumo === 'POR_GRAMO' && !((form.serviciosGramos[s.id] ?? 0) > 0);
+  });
+  const registrarDisabled = ajusteNoteRequired || gramosFaltantes;
+
   const fechaStr = new Date(cita.fecha + 'T' + cita.horaInicio).toLocaleDateString('es-CL', {
     day: 'numeric',
     month: 'short',
@@ -2648,6 +2743,8 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                   {cita.servicios.map(s => {
                     const currentPrice = form.serviciosPrecios[s.id] ?? s.precio;
                     const isRemoved = currentPrice === 0 && form.serviciosPrecios[s.id] === 0;
+                    const cantidad = s.cantidad ?? 1;
+                    const esPorGramo = servicios.find((x) => x.id === s.id)?.tipoCostoInsumo === 'POR_GRAMO';
                     return (
                       <div
                         key={s.id}
@@ -2657,7 +2754,45 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                           textDecoration: isRemoved ? 'line-through' : 'none',
                         }}
                       >
-                        <span className={styles.serviceName}>{s.nombre}</span>
+                        <span className={styles.serviceName}>
+                          {s.nombre}
+                          {cantidad > 1 && (
+                            <span style={{ color: 'var(--accent)', marginLeft: '0.25rem' }}>
+                              ×{cantidad}
+                            </span>
+                          )}
+                        </span>
+                        {esPorGramo && !isRemoved && (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            aria-label={`Gramos ${s.nombre}`}
+                            placeholder="gramos"
+                            value={form.serviciosGramos[s.id] ?? ''}
+                            onChange={(e) =>
+                              onChangeForm({
+                                serviciosGramos: {
+                                  ...form.serviciosGramos,
+                                  [s.id]: Number(e.target.value),
+                                },
+                              })
+                            }
+                            className={styles.noSpinner}
+                            style={{
+                              width: 84,
+                              height: 30,
+                              padding: '0 0.4rem',
+                              borderRadius: 'var(--radius-sm)',
+                              border: '1px solid var(--border)',
+                              background: 'var(--bg-elevated)',
+                              color: 'var(--text-primary)',
+                              fontFamily: "'DM Sans', sans-serif",
+                              fontSize: '0.8125rem',
+                            }}
+                          />
+                        )}
                         <span
                           style={{
                             fontFamily: "'DM Sans', sans-serif",
@@ -2668,7 +2803,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                             textAlign: 'right',
                           }}
                         >
-                          {formatCurrency(currentPrice)}
+                          {formatCurrency(currentPrice * cantidad)}
                         </span>
                         <button
                           onClick={() => onToggleServicio(s.id)}
@@ -3180,20 +3315,34 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
           >
             Cancelar
           </button>
+          {gramosFaltantes && (
+            <div
+              role="alert"
+              style={{
+                flexBasis: '100%',
+                color: 'var(--danger)',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.75rem',
+                padding: '0 0 0.4rem',
+              }}
+            >
+              Ingresá los gramos usados de los servicios por gramo para continuar.
+            </div>
+          )}
           <button
             onClick={onConfirmar}
-            disabled={ajusteNoteRequired || completando}
+            disabled={registrarDisabled || completando}
             style={{
               flex: 2,
               height: '38px',
               borderRadius: 'var(--radius-sm)',
               border: 'none',
-              background: ajusteNoteRequired ? 'var(--border)' : 'var(--accent)',
-              color: ajusteNoteRequired ? 'var(--text-dim)' : 'var(--bg-root)',
+              background: registrarDisabled ? 'var(--border)' : 'var(--accent)',
+              color: registrarDisabled ? 'var(--text-dim)' : 'var(--bg-root)',
               fontFamily: "'DM Sans', sans-serif",
               fontSize: '0.8125rem',
               fontWeight: 600,
-              cursor: ajusteNoteRequired ? 'not-allowed' : 'pointer',
+              cursor: registrarDisabled ? 'not-allowed' : 'pointer',
               transition: 'all 0.2s',
             }}
           >
