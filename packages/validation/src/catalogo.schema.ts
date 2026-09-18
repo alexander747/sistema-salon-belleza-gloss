@@ -17,18 +17,46 @@ export type UpdateCategoriaInput = z.infer<typeof updateCategoriaSchema>;
 
 // ── Servicios ───────────────────────────────────────────────
 
-export const createServicioSchema = z.object({
+/**
+ * Plain object schema (no `.superRefine`) so `updateServicioSchema` can call
+ * `.partial()`. ZodEffects has no `.partial()`; putting the POR_GRAMO rule in
+ * a refine on the base object would silently break partial updates.
+ */
+export const servicioBaseSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido').max(150),
   descripcion: z.string().max(500).optional(),
   precioBase: z.number().positive('El precio base debe ser positivo'),
   duracionMinutos: z.number().int().positive().default(60),
   categoriaId: z.number().int().positive().optional(),
   costoBaseInsumos: z.number().min(0).default(0).optional(),
+  tipoCostoInsumo: z.enum(['FIJO', 'POR_GRAMO']).default('FIJO'),
+  precioPorGramo: z
+    .number()
+    .positive('El precio por gramo debe ser positivo')
+    .optional()
+    .nullable(),
+});
+
+export type TipoCostoInsumo = z.infer<typeof servicioBaseSchema>['tipoCostoInsumo'];
+
+/**
+ * Create-only semantic rule: a POR_GRAMO service must carry a positive price.
+ * The update path enforces the resulting-state rule in `UpdateServicioUseCase`
+ * because partial updates can flip the mode without re-sending the price.
+ */
+export const createServicioSchema = servicioBaseSchema.superRefine((data, ctx) => {
+  if (data.tipoCostoInsumo === 'POR_GRAMO' && !(data.precioPorGramo && data.precioPorGramo > 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['precioPorGramo'],
+      message: 'El precio por gramo debe ser mayor a 0 cuando el tipo de costo es POR_GRAMO',
+    });
+  }
 });
 
 export type CreateServicioInput = z.infer<typeof createServicioSchema>;
 
-export const updateServicioSchema = createServicioSchema.partial();
+export const updateServicioSchema = servicioBaseSchema.partial();
 
 export type UpdateServicioInput = z.infer<typeof updateServicioSchema>;
 
