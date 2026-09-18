@@ -94,6 +94,20 @@ services:
       N8N_HOST: n8n.uniongloss.com
       N8N_PROTOCOL: https
       WEBHOOK_URL: https://n8n.uniongloss.com/
+      # --- Latido (n8n compartido) · ver DEPLOY.md de Latido ---
+      # Permite leer $env dentro de nodos Code (workflows de Latido).
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # Variables que consumen los workflows de Latido (valores en .env, no en git).
+      NEXT_PUBLIC_BASE_URL: ${LATIDO_BASE_URL}
+      MAIL_FROM: ${LATIDO_MAIL_FROM}
+      ADMIN_EMAIL: ${LATIDO_ADMIN_EMAIL}
+      MP_WEBHOOK_SECRET: ${LATIDO_MP_WEBHOOK_SECRET}
+      TALLY_WEBHOOK_SECRET: ${LATIDO_TALLY_WEBHOOK_SECRET}
+      TALLY_FORM_URL: ${LATIDO_TALLY_FORM_URL}
+      LATIDO_ADMIN_SECRET: ${LATIDO_ADMIN_SECRET}
+      R2_ACCOUNT_ID: ${LATIDO_R2_ACCOUNT_ID}
+      R2_BUCKET: ${LATIDO_R2_BUCKET}
+      R2_PUBLIC_BASE_URL: ${LATIDO_R2_PUBLIC_BASE_URL}
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
