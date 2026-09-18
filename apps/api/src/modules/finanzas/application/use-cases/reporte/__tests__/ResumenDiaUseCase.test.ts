@@ -169,6 +169,46 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     expect(result.totalCostoBaseInsumos).toBe(50000);
   });
 
+  it('suma el costo real POR_GRAMO derivado (114000) aunque el cliente haya enviado 0', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 450000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 450000,
+        serviciosItems: [{ costoBaseInsumos: 114000 }],
+      }),
+    ]);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.totalCostoBaseInsumos).toBe(114000);
+  });
+
+  it('suma múltiples líneas POR_GRAMO (114000 + 36000 = 150000)', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 500000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 500000,
+        serviciosItems: [{ costoBaseInsumos: 114000 }, { costoBaseInsumos: 36000 }],
+      }),
+    ]);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.totalCostoBaseInsumos).toBe(150000);
+  });
+
   it('filtra por usuarioId vía search cuando se pasa un empleado (single-day)', async () => {
     mockRegistroRepo.search.mockResolvedValue([
       buildRegistro({

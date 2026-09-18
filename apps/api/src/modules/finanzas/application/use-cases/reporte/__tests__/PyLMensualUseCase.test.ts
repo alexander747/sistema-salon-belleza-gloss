@@ -438,4 +438,39 @@ describe('PyLMensualUseCase', () => {
       hasta: colombiaDayEndUTC('2026-05-31'),
     });
   });
+
+  describe('costo real POR_GRAMO persistido (PR2)', () => {
+    it('suma el costo real derivado (114000) aunque el cliente haya enviado 0', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 450000,
+          montoTotal: 450000,
+          valorFinal: 450000,
+          comisionCalculada: 201600,
+          // Server persisted the derived cost: 95 × 1200
+          serviciosItems: [{ costoBaseInsumos: 114000 }],
+        }),
+      ]);
+
+      const result = await useCase.execute({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
+
+      expect(result.costoBaseInsumos).toBe(114000);
+      expect(result.margenBruto).toBe(336000);
+    });
+
+    it('suma múltiples líneas POR_GRAMO (114000 + 36000 = 150000)', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 500000,
+          montoTotal: 500000,
+          valorFinal: 500000,
+          serviciosItems: [{ costoBaseInsumos: 114000 }, { costoBaseInsumos: 36000 }],
+        }),
+      ]);
+
+      const result = await useCase.execute({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
+
+      expect(result.costoBaseInsumos).toBe(150000);
+    });
+  });
 });
