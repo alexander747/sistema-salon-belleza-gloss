@@ -2,13 +2,38 @@ import { z } from 'zod';
 
 // ── Citas ────────────────────────────────────────────────
 
-export const createCitaSchema = z.object({
-  clienteId: z.number().int().min(1, 'Cliente requerido'),
-  usuarioId: z.number().int().min(1, 'Usuario/empleada requerido'),
-  fechaHora: z.string().datetime({ message: 'Formato ISO requerido' }),
-  serviciosIds: z.array(z.number().int().positive()).min(1, 'Al menos un servicio requerido'),
-  notas: z.string().max(300).optional(),
+/** Línea de servicio de una cita: `cantidad` (int ≥ 1, default 1) se expande en duración y persistencia. */
+export const citaServicioLineaSchema = z.object({
+  servicioId: z.number().int().positive('Servicio requerido'),
+  cantidad: z
+    .number()
+    .int('La cantidad debe ser un entero')
+    .min(1, 'La cantidad debe ser ≥ 1')
+    .default(1),
 });
+
+export type CitaServicioLineaInput = z.infer<typeof citaServicioLineaSchema>;
+
+export const createCitaSchema = z
+  .object({
+    clienteId: z.number().int().min(1, 'Cliente requerido'),
+    usuarioId: z.number().int().min(1, 'Usuario/empleada requerido'),
+    fechaHora: z.string().datetime({ message: 'Formato ISO requerido' }),
+    // Nuevo formato: líneas con cantidad. Legacy: `serviciosIds` (cantidad implícita 1).
+    servicios: z
+      .array(citaServicioLineaSchema)
+      .min(1, 'Al menos un servicio requerido')
+      .optional(),
+    serviciosIds: z
+      .array(z.number().int().positive())
+      .min(1, 'Al menos un servicio requerido')
+      .optional(),
+    notas: z.string().max(300).optional(),
+  })
+  .refine(
+    (data) => (data.servicios?.length ?? 0) > 0 || (data.serviciosIds?.length ?? 0) > 0,
+    { message: 'Al menos un servicio requerido', path: ['servicios'] },
+  );
 
 export type CreateCitaInput = z.infer<typeof createCitaSchema>;
 
