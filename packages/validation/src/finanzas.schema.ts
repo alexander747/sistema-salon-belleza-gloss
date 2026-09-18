@@ -47,7 +47,14 @@ export const createRegistroSchema = z.object({
     servicioId: z.number().int().positive('El servicioId debe ser un entero positivo'),
     nombreServicio: z.string().min(1, 'El nombre del servicio es requerido').max(200),
     precioServicio: z.number().min(0, 'El precio del servicio debe ser mayor o igual a 0'),
+    // FIJO: costoBaseInsumos is the catalog snapshot sent by the client (server
+    // re-resolves the catalog). POR_GRAMO: ignored — the server derives it.
     costoBaseInsumos: z.number().min(0).default(0).optional(),
+    // POR_GRAMO only: grams used per unit (> 0). Shape validation lives here;
+    // the use case enforces "POR_GRAMO without grams → 422" after resolving the catalog.
+    gramosUsados: z.number().positive('Los gramos deben ser mayores a 0').optional(),
+    // Quantity of units sold for this line (expanded to N item rows server-side).
+    cantidad: z.number().int('La cantidad debe ser un entero').positive('La cantidad debe ser ≥ 1').default(1),
   })).optional().default([]),
 });
 

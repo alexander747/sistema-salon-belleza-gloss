@@ -66,12 +66,87 @@ describe('createRegistroSchema — serviciosItems', () => {
       servicioId: 1,
       nombreServicio: 'Corte',
       precioServicio: 25000,
+      cantidad: 1,
     });
     expect(result.serviciosItems[1]).toEqual({
       servicioId: 2,
       nombreServicio: 'Tintura',
       precioServicio: 60000,
+      cantidad: 1,
     });
+  });
+
+  it('should accept gramosUsados > 0 and preserve it', () => {
+    const payload = {
+      ...baseValid,
+      serviciosItems: [
+        { servicioId: 7, nombreServicio: 'Tintura', precioServicio: 450000, gramosUsados: 95 },
+      ],
+    };
+    const result = createRegistroSchema.parse(payload);
+    expect(result.serviciosItems[0].gramosUsados).toBe(95);
+  });
+
+  it('should reject gramosUsados = 0 (spec: grams must be > 0)', () => {
+    const payload = {
+      ...baseValid,
+      serviciosItems: [
+        { servicioId: 7, nombreServicio: 'Tintura', precioServicio: 450000, gramosUsados: 0 },
+      ],
+    };
+    expect(() => createRegistroSchema.parse(payload)).toThrow();
+  });
+
+  it('should reject negative gramosUsados', () => {
+    const payload = {
+      ...baseValid,
+      serviciosItems: [
+        { servicioId: 7, nombreServicio: 'Tintura', precioServicio: 450000, gramosUsados: -5 },
+      ],
+    };
+    expect(() => createRegistroSchema.parse(payload)).toThrow();
+  });
+
+  it('should default cantidad to 1 when absent', () => {
+    const payload = {
+      ...baseValid,
+      serviciosItems: [
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000 },
+      ],
+    };
+    const result = createRegistroSchema.parse(payload);
+    expect(result.serviciosItems[0].cantidad).toBe(1);
+  });
+
+  it('should accept and preserve cantidad ≥ 1', () => {
+    const payload = {
+      ...baseValid,
+      serviciosItems: [
+        { servicioId: 1, nombreServicio: 'Pies', precioServicio: 20000, cantidad: 2 },
+      ],
+    };
+    const result = createRegistroSchema.parse(payload);
+    expect(result.serviciosItems[0].cantidad).toBe(2);
+  });
+
+  it('should reject cantidad = 0 or negative', () => {
+    const base = { servicioId: 1, nombreServicio: 'Pies', precioServicio: 20000 };
+    expect(() =>
+      createRegistroSchema.parse({ ...baseValid, serviciosItems: [{ ...base, cantidad: 0 }] }),
+    ).toThrow();
+    expect(() =>
+      createRegistroSchema.parse({ ...baseValid, serviciosItems: [{ ...base, cantidad: -1 }] }),
+    ).toThrow();
+  });
+
+  it('should reject a non-integer cantidad', () => {
+    const payload = {
+      ...baseValid,
+      serviciosItems: [
+        { servicioId: 1, nombreServicio: 'Pies', precioServicio: 20000, cantidad: 1.5 },
+      ],
+    };
+    expect(() => createRegistroSchema.parse(payload)).toThrow();
   });
 
   it('should reject serviciosItems with servicioId = 0', () => {
