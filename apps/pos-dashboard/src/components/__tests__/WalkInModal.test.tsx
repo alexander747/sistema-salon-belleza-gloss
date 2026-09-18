@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPost: vi.fn(),
@@ -816,5 +818,20 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     const fila = within(dialog).getByText('Corte').closest('tr') as HTMLElement;
     expect(within(fila).getByText('2')).toBeInTheDocument();
     expect(within(fila).getByText('$ 60.000')).toBeInTheDocument();
+  });
+});
+
+describe('WalkInModal — captura de gramos usable en móvil (PR4)', () => {
+  const css = readFileSync(
+    join(process.cwd(), 'src/components/WalkInModal.module.css'),
+    'utf-8',
+  );
+
+  it('el input de gramos vive en una fila propia de ancho completo con touch target de 44px', () => {
+    // Fila propia: ocupa el 100% del cartItem (antes 70px entre stepper y precio).
+    expect(css).toMatch(/\.gramsField\s*\{[^}]*flex:\s*1 0 100%/s);
+    // Touch target táctil: input y contenedor ≥44px.
+    expect(css).toMatch(/\.gramsInput\s*\{[^}]*height:\s*44px/s);
+    expect(css).toMatch(/\.gramsInputWrap\s*\{[^}]*min-height:\s*44px/s);
   });
 });
