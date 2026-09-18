@@ -12,11 +12,13 @@ import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
+import { calcularDesgloseReparto, costoUnitarioLinea } from '../utils/reparto.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { getCitaActions, type CitaAccion } from '../utils/citaActions.js';
 import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
 import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
 import ReciboModal from '../components/ReciboModal.js';
+import DesgloseReparto from '../components/DesgloseReparto.js';
 import styles from './AgendaPage.module.css';
 
 /* ── Types ── */
@@ -58,6 +60,8 @@ interface EmpleadaSimple {
   id: number;
   nombre: string;
   activo?: boolean;
+  /** % de comisión de la empleada (lo usa el desglose del reparto). */
+  porcentajeComisionServicio?: number | null;
 }
 
 interface ServicioSimple {
@@ -1162,6 +1166,7 @@ const AgendaPage: React.FC = () => {
             cita={selectedCita}
             servicios={servicios}
             productos={productos}
+            empleada={empleadas.find((e) => e.id === selectedCita.empleada.id) ?? null}
             completando={completando}
             completarError={completarError}
             form={completarForm}
@@ -2503,6 +2508,8 @@ interface CompletarModalProps {
   cita: Cita;
   servicios: ServicioSimple[];
   productos: ProductoSimple[];
+  /** Empleada de la cita (con su % de comisión) para el desglose del reparto. */
+  empleada: EmpleadaSimple | null;
   completando: boolean;
   completarError: string | null;
   form: {
@@ -2529,6 +2536,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   cita,
   servicios,
   productos,
+  empleada,
   completando,
   completarError,
   form,
@@ -2655,6 +2663,58 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
     return catalogo?.tipoCostoInsumo === 'POR_GRAMO' && !((form.serviciosGramos[s.id] ?? 0) > 0);
   });
   const registrarDisabled = ajusteNoteRequired || gramosFaltantes;
+
+  /* ── PR5: desglose visible del reparto (espejo de la fórmula del server) ──
+   * Mismos totales que viajan en el POST /completar: el insumo se descuenta
+   * completo y el resto se reparte por el % de la empleada. */
+  const porcentajeComisionEmpleada = empleada?.porcentajeComisionServicio ?? null;
+
+  const totalCostoInsumos = useMemo(() => {
+    const deOriginales = cita.servicios.reduce((sum, s) => {
+      const precio = form.serviciosPrecios[s.id] ?? s.precio;
+      const catalogo = servicios.find((x) => x.id === s.id);
+      const esPorGramo = catalogo?.tipoCostoInsumo === 'POR_GRAMO';
+      // Igual que el submit: un POR_GRAMO "no realizado" se omite (sin costo).
+      if (esPorGramo && precio <= 0) return sum;
+      const unitario = costoUnitarioLinea({
+        tipoCostoInsumo: catalogo?.tipoCostoInsumo,
+        gramosUsados: form.serviciosGramos[s.id] ?? 0,
+        precioPorGramo: catalogo?.precioPorGramo,
+        costoBaseInsumos: catalogo?.costoBaseInsumos ?? s.costoBaseInsumos,
+      });
+      return sum + unitario * (s.cantidad ?? 1);
+    }, 0);
+
+    const deExtras = addedServicios.reduce(
+      (sum, s) =>
+        sum +
+        costoUnitarioLinea({
+          tipoCostoInsumo: s.tipoCostoInsumo,
+          gramosUsados: form.serviciosGramos[s.id] ?? 0,
+          precioPorGramo: s.precioPorGramo,
+          costoBaseInsumos: s.costoBaseInsumos,
+        }),
+      0,
+    );
+
+    return deOriginales + deExtras;
+  }, [cita.servicios, form.serviciosPrecios, form.serviciosGramos, servicios, addedServicios]);
+
+  const desglose = calcularDesgloseReparto({
+    totalServicios: totalOriginalServicios + totalExtraServicios,
+    totalProductos: totalProductosCalc,
+    propina: form.propina,
+    totalCostoInsumos,
+    valorFinal: totalFinal,
+    porcentajeComision: porcentajeComisionEmpleada ?? 0,
+  });
+
+  const hayServicioPorGramo =
+    cita.servicios.some(
+      (s) => servicios.find((x) => x.id === s.id)?.tipoCostoInsumo === 'POR_GRAMO',
+    ) || addedServicios.some((s) => s.tipoCostoInsumo === 'POR_GRAMO');
+
+  const mostrarDesglose = hasAdjustment || hayServicioPorGramo;
 
   const fechaStr = new Date(cita.fecha + 'T' + cita.horaInicio).toLocaleDateString('es-CL', {
     day: 'numeric',
@@ -3171,6 +3231,14 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                     className={`${styles.noSpinner} ${styles.propinaInput}`}
                   />
                 </div>
+
+                {/* ── PR5: ¿Cómo se reparte? (cobrado − insumos = a repartir) ── */}
+                {mostrarDesglose && (
+                  <DesgloseReparto
+                    desglose={desglose}
+                    porcentajeComision={porcentajeComisionEmpleada}
+                  />
+                )}
 
                 <hr className={styles.receiptDivider} />
 

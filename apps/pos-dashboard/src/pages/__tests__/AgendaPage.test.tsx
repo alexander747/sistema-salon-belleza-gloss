@@ -1164,3 +1164,159 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
     expect(screen.getByLabelText('Costo de insumo $ 80.000')).toBeInTheDocument();
   }, 20000);
 });
+
+describe('AgendaPage — desglose del reparto al completar (PR5)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+    window.addEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('caja-refresh', refreshSpy as EventListener);
+  });
+
+  /** Cita + catálogo del caso canónico: 550.000 POR_GRAMO $800/g, empleada 60%. */
+  function apiMockReparto() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/agenda/disponibilidad/slots')) {
+        return Promise.resolve({ data: [{ hora: '10:00', disponible: true }] });
+      }
+      if (url.includes('/agenda/citas')) {
+        const fechaHora = new Date(new Date().setHours(10, 0, 0, 0)).toISOString();
+        return Promise.resolve({
+          data: [
+            {
+              id: 1,
+              salonId: 1,
+              fechaHora,
+              estado: 'CONFIRMADA',
+              clienteId: 1,
+              usuarioId: 1,
+              servicios: [
+                {
+                  id: 1,
+                  nombre: 'Alisado permanente brasileño',
+                  duracionMinutos: 180,
+                  precioBase: 550000,
+                  costoBaseInsumos: 0,
+                  cantidad: 1,
+                },
+              ],
+              creadoEn: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', telefono: '123456' }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Empleada Test', activo: true, porcentajeComisionServicio: 60 }],
+        });
+      }
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [
+            {
+              id: 1,
+              nombre: 'Alisado permanente brasileño',
+              duracionMinutos: 180,
+              precioBase: 550000,
+              costoBaseInsumos: 0,
+              tipoCostoInsumo: 'POR_GRAMO',
+              precioPorGramo: 800,
+              activo: true,
+            },
+          ],
+        });
+      }
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  /** Abre el modal de completar con 30 g y ajusta el total al valor indicado. */
+  async function abrirConAjuste(totalAjustado: number) {
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+
+    fireEvent.change(screen.getByLabelText('Gramos Alisado permanente brasileño'), {
+      target: { value: '30' },
+    });
+    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
+    // El input de ajuste es el primero con el placeholder del total calculado.
+    const ajuste = screen.getAllByPlaceholderText(/\$\s*550\.000/)[0];
+    fireEvent.change(ajuste, { target: { value: String(totalAjustado) } });
+  }
+
+  it('muestra Cobrado − Insumos = A repartir y el split por % de la empleada', async () => {
+    apiMockReparto();
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    await abrirConAjuste(300000);
+
+    const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
+    expect(within(panel).getByText('$ 300.000')).toBeInTheDocument();
+    expect(within(panel).getByText('− $ 24.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 276.000')).toBeInTheDocument();
+    expect(within(panel).getByText('Comisión empleada (60%)')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 165.600')).toBeInTheDocument();
+    expect(within(panel).getByText('Queda para el salón')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 110.400')).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        'El costo de insumos se descuenta del total cobrado y el resto se reparte entre la empleada y el salón.',
+      ),
+    ).toBeInTheDocument();
+
+    // El número mostrado coincide con lo que viaja al servidor (que deriva el insumo).
+    fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo del ajuste/i), {
+      target: { value: 'Precio especial' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const completarCall = mockPost.mock.calls.find(([url]) =>
+        String(url).includes('/completar'),
+      );
+      expect(completarCall).toBeDefined();
+      const [, body] = completarCall as [
+        string,
+        {
+          registro: {
+            totalServicios: number;
+            valorFinal: number;
+            serviciosItems: Array<Record<string, unknown>>;
+          };
+        },
+      ];
+      expect(body.registro.totalServicios).toBe(550000);
+      expect(body.registro.valorFinal).toBe(300000);
+      expect(body.registro.serviciosItems).toEqual([
+        expect.objectContaining({ servicioId: 1, gramosUsados: 30, cantidad: 1 }),
+      ]);
+    }, WAIT);
+  }, 20000);
+
+  it('insumo mayor al cobrado: comisión $0 honesta y sin números negativos', async () => {
+    apiMockReparto();
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+
+    // 20.000 cobrado < 24.000 de insumo (30 g × $800).
+    await abrirConAjuste(20000);
+
+    const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
+    expect(within(panel).getByLabelText('A repartir $ 0')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Comisión empleada $ 0')).toBeInTheDocument();
+    expect(
+      within(panel).getByText('La comisión queda en $0 porque el insumo supera el total cobrado.'),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText(/−\s*\$-/)).not.toBeInTheDocument();
+  }, 20000);
+});
