@@ -12,6 +12,9 @@ import { FotoPortafolioEntity } from './FotoPortafolioEntity';
 import { CitaEntity } from './CitaEntity';
 import { CategoriaServicioEntity } from './CategoriaServicioEntity';
 
+/** Cost mode of a service's supplies. `FIJO` uses `costoBaseInsumos`; `POR_GRAMO` uses `precioPorGramo`. */
+export type TipoCostoInsumo = 'FIJO' | 'POR_GRAMO';
+
 @Entity('servicios')
 export class ServicioEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 150 })
@@ -31,6 +34,12 @@ export class ServicioEntity extends BaseEntity {
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   costoBaseInsumos: number;
+
+  @Column({ type: 'varchar', length: 20, default: 'FIJO' })
+  tipoCostoInsumo: TipoCostoInsumo;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  precioPorGramo: number | null;
 
   // ---- Relations ----
   @ManyToOne(() => CategoriaServicioEntity, (cat) => cat.servicios, { nullable: true })

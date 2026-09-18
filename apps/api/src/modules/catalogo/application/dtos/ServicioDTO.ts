@@ -1,4 +1,7 @@
-import type { ServicioEntity } from '../../../../infrastructure/persistence/entities/ServicioEntity';
+import type {
+  ServicioEntity,
+  TipoCostoInsumo,
+} from '../../../../infrastructure/persistence/entities/ServicioEntity';
 
 export class ServicioDTO {
   id: number;
@@ -9,6 +12,8 @@ export class ServicioDTO {
   duracionMinutos: number;
   activo: boolean;
   costoBaseInsumos: number;
+  tipoCostoInsumo: TipoCostoInsumo;
+  precioPorGramo: number | null;
   categoriaId: number;
   categoria?: { id: number; nombre: string } | null;
   fotosCount?: number;
@@ -27,6 +32,8 @@ export class ServicioDTO {
     dto.precioBase = Number(entity.precioBase);
     dto.precioFinal = precioFinal ?? Number(entity.precioBase);
     dto.costoBaseInsumos = Number(entity.costoBaseInsumos ?? 0);
+    dto.tipoCostoInsumo = entity.tipoCostoInsumo ?? 'FIJO';
+    dto.precioPorGramo = entity.precioPorGramo != null ? Number(entity.precioPorGramo) : null;
     dto.duracionMinutos = entity.duracionMinutos;
     dto.activo = entity.activo;
     dto.categoriaId = entity.categoriaId ?? 0;
