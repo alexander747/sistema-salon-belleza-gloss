@@ -46,18 +46,18 @@ Each unit keeps tests with its code; each is independently shippable. Verify: `c
 
 ## Phase 2 — PR 2: Grams cost + quantity in walk-in sales
 
-- [ ] 2.1 `RegistroServicioItemEntity`: add nullable `gramosUsados`/`precioPorGramo` decimal(12,2).
-- [ ] 2.2 Migration `1700000000015-AddGramosUsadosItem.ts` (+ `down`).
-- [ ] 2.3 RED: `CostoInsumoService.test.ts` — FIJO passthrough, POR_GRAMO 95×1200=114000, round2, commission case 182 = 201600, insumos>total → 0.
-- [ ] 2.4 GREEN: new `.../finanzas/application/services/CostoInsumoService.ts` (`calcularCostoLinea`).
-- [ ] 2.5 RED→GREEN: `finanzas.schema.ts` + tests — `gramosUsados` >0 optional, `cantidad` int≥1 default 1.
-- [ ] 2.6 RED→GREEN: `RegistroServicioItemDTO` + test — gram snapshot; legacy nulls.
-- [ ] 2.7 RED: extend `CreateRegistroUseCase.test.ts` — client-forged cost ignored, POR_GRAMO sin gramos → 422 (nothing persists), ×N rows, `totalServicios=Σ(precio×cantidad)`, FIJO regression.
-- [ ] 2.8 GREEN: `CreateRegistroUseCase.ts` — single `CostoInsumoService` point, expand each line ×`cantidad`, recompute `totalServicios`/cost when items present; persist snapshots.
-- [ ] 2.9 RED→GREEN: report tests — `PyLMensualUseCase`/`ResumenDiaUseCase` sum persisted cost (114000, 150000).
-- [ ] 2.10 Frontend `WalkInModal.tsx`: `CartItem` + `cantidad`/`tipoCostoInsumo`/`precioPorGramo`/`gramosUsados`; re-click increments; qty stepper; grams input; block submit without grams; receipt uses `cantidad`.
-- [ ] 2.11 RED→GREEN: `WalkInModal.test.tsx` grams/qty payload.
-- [ ] 2.12 Verify unit 2.
+- [x] 2.1 `RegistroServicioItemEntity`: add nullable `gramosUsados`/`precioPorGramo` decimal(12,2).
+- [x] 2.2 Migration `1700000000015-AddGramosUsadosItem.ts` (+ `down`).
+- [x] 2.3 RED: `CostoInsumoService.test.ts` — FIJO passthrough, POR_GRAMO 95×1200=114000, round2, commission case 182 = 201600, insumos>total → 0.
+- [x] 2.4 GREEN: new `.../finanzas/application/services/CostoInsumoService.ts` (`calcularCostoLinea`).
+- [x] 2.5 RED→GREEN: `finanzas.schema.ts` + tests — `gramosUsados` >0 optional, `cantidad` int≥1 default 1.
+- [x] 2.6 RED→GREEN: `RegistroServicioItemDTO` + test — gram snapshot; legacy nulls.
+- [x] 2.7 RED: extend `CreateRegistroUseCase.test.ts` — client-forged cost ignored, POR_GRAMO sin gramos → 422 (nothing persists), ×N rows, `totalServicios=Σ(precio×cantidad)`, FIJO regression.
+- [x] 2.8 GREEN: `CreateRegistroUseCase.ts` — single `CostoInsumoService` point, expand each line ×`cantidad`, recompute `totalServicios`/cost when items present; persist snapshots.
+- [x] 2.9 RED→GREEN: report tests — `PyLMensualUseCase`/`ResumenDiaUseCase` sum persisted cost (114000, 150000).
+- [x] 2.10 Frontend `WalkInModal.tsx`: `CartItem` + `cantidad`/`tipoCostoInsumo`/`precioPorGramo`/`gramosUsados`; re-click increments; qty stepper; grams input; block submit without grams; receipt uses `cantidad`.
+- [x] 2.11 RED→GREEN: `WalkInModal.test.tsx` grams/qty payload.
+- [x] 2.12 Verify unit 2.
 
 ## Phase 3 — PR 3: Cita cantidad (explicit join) + AgendaPage
 
