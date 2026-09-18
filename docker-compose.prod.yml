@@ -97,6 +97,9 @@ services:
       # --- Latido (n8n compartido) · ver DEPLOY.md de Latido ---
       # Permite leer $env dentro de nodos Code (workflows de Latido).
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # n8n 2.x corre los Code nodes en un sandbox que bloquea módulos nativos.
+      # Los workflows de Latido usan require('crypto') (HMAC de MP, timingSafeEqual).
+      NODE_FUNCTION_ALLOW_BUILTIN: "crypto"
       # Variables que consumen los workflows de Latido (valores en .env, no en git).
       NEXT_PUBLIC_BASE_URL: ${LATIDO_BASE_URL}
       MAIL_FROM: ${LATIDO_MAIL_FROM}
