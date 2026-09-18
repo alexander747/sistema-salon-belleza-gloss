@@ -21,6 +21,8 @@ vi.mock('../../../../../../infrastructure/persistence/entities/RegistroServicioI
     nombreServicio: string;
     precioServicio: number;
     costoBaseInsumos: number;
+    gramosUsados: number | null;
+    precioPorGramo: number | null;
   },
 }));
 
@@ -53,6 +55,7 @@ vi.mock('../../../../../../shared/database.js', () => ({
 }));
 
 import { CreateRegistroUseCase } from '../CreateRegistroUseCase';
+import { CostoInsumoService } from '../../../services/CostoInsumoService';
 import { NotFoundError, CajaCerradaError, CajaNoAbiertaEnFechaError, UnprocessableEntityError } from '../../../../../../shared/errors';
 import { AppDataSource } from '../../../../../../shared/database';
 import { getColombiaDateString } from '../../../../../../shared/colombia-date';
@@ -87,6 +90,11 @@ const mockProductoRepo = {
   findBySalonAndId: vi.fn(),
   decrementStock: vi.fn(),
 };
+const mockServicioRepo = {
+  findBySalonAndId: vi.fn(),
+};
+/** Real pure implementation: cost derivation must be exercised, not stubbed. */
+const costoInsumoService = new CostoInsumoService();
 
 describe('CreateRegistroUseCase', () => {
   let useCase: CreateRegistroUseCase;
@@ -105,12 +113,15 @@ describe('CreateRegistroUseCase', () => {
     divisiones: [],
     porcentajeDescuento: 0,
     productosVendidos: [],
+    serviciosItems: [],
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     // Regla de oro: caja ABIERTA por defecto para que los tests existentes pasen
     mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 5, salonId: 1, estado: 'ABIERTA' });
+    // Legacy default: no catalog match → client cost passthrough (FIJO semantics).
+    mockServicioRepo.findBySalonAndId.mockResolvedValue(null);
     useCase = new CreateRegistroUseCase(
       mockRegistroRepo as never,
       mockPagoRepo as never,
@@ -120,6 +131,8 @@ describe('CreateRegistroUseCase', () => {
       mockComisionService as never,
       mockProductoRepo as never,
       mockCajaRepo as never,
+      mockServicioRepo as never,
+      costoInsumoService,
     );
   });
 
@@ -307,7 +320,7 @@ describe('CreateRegistroUseCase', () => {
       valorOriginal: 85000,
       valorFinal: 80000,
       serviciosItems: [
-        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 85000, costoBaseInsumos: 0 },
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 85000, costoBaseInsumos: 0, cantidad: 1 },
       ],
     };
 
@@ -372,15 +385,16 @@ describe('CreateRegistroUseCase', () => {
     const input = {
       ...validInput,
       serviciosItems: [
-        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000, costoBaseInsumos: 10000 },
-        { servicioId: 2, nombreServicio: 'Tintura', precioServicio: 60000, costoBaseInsumos: 30000 },
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000, costoBaseInsumos: 10000, cantidad: 1 },
+        { servicioId: 2, nombreServicio: 'Tintura', precioServicio: 60000, costoBaseInsumos: 30000, cantidad: 1 },
       ],
     };
 
     await useCase.execute(input);
 
-    // Verify calcularComision was called with totalCostoBaseInsumos = 10000 + 30000 = 40000
-    expect(mockComisionService.calcularComision).toHaveBeenCalledWith(100000, 60, 40000);
+    // Verify calcularComision was called with totalCostoBaseInsumos = 10000 + 30000 = 40000.
+    // totalServicios is server-recomputed from the lines: 25000 + 60000 = 85000.
+    expect(mockComisionService.calcularComision).toHaveBeenCalledWith(85000, 60, 40000);
     expect(mockRepoCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         costoBaseInsumos: 10000,
@@ -432,8 +446,8 @@ describe('CreateRegistroUseCase', () => {
     const input = {
       ...validInput,
       serviciosItems: [
-        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000 },
-        { servicioId: 2, nombreServicio: 'Tintura', precioServicio: 60000 },
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000, cantidad: 1 },
+        { servicioId: 2, nombreServicio: 'Tintura', precioServicio: 60000, cantidad: 1 },
       ],
     };
 
@@ -805,6 +819,167 @@ describe('CreateRegistroUseCase', () => {
         expect.objectContaining({ citaId: null }),
         expect.anything(),
       );
+    });
+  });
+
+  describe('costo real por gramo y cantidad (PR2)', () => {
+    const setupHappy = (comision = 60000) => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 5, deudaTotal: 50000 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '60' });
+      mockComisionService.calcularComision.mockReturnValue(comision);
+      mockComisionService.calcularMontoTotal.mockReturnValue(160000);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(50000);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue({
+        id: 1,
+        salonId: 1,
+        clienteId: 1,
+        usuarioId: 2,
+        totalServicios: 40000,
+        totalProductos: 0,
+        montoTotal: 40000,
+        propina: 0,
+        comisionCalculada: comision,
+        esRetoque: false,
+        montoPendiente: 0,
+        estaPagadaEmpleada: false,
+        notas: null,
+        descripcionServicio: null,
+        pagos: [],
+        divisiones: [],
+        serviciosItems: [],
+        creadoEn: new Date(),
+        actualizadoEn: new Date(),
+      });
+    };
+
+    it('derives the real per-gram cost from the catalog, ignoring the client costoBaseInsumos', async () => {
+      setupHappy();
+      mockServicioRepo.findBySalonAndId.mockResolvedValue({
+        id: 7,
+        costoBaseInsumos: 0,
+        tipoCostoInsumo: 'POR_GRAMO',
+        precioPorGramo: 1200,
+      });
+
+      const input = {
+        ...validInput,
+        totalServicios: 450000,
+        totalProductos: 0,
+        propina: 0,
+        serviciosItems: [
+          {
+            servicioId: 7,
+            nombreServicio: 'Tintura',
+            precioServicio: 450000,
+            costoBaseInsumos: 0,
+            gramosUsados: 95,
+            cantidad: 1,
+          },
+        ],
+      };
+
+      await useCase.execute(input);
+
+      // Client sent 0 → server persists 95 × 1200 = 114000
+      expect(mockRepoCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          servicioId: 7,
+          costoBaseInsumos: 114000,
+          gramosUsados: 95,
+          precioPorGramo: 1200,
+        }),
+      );
+      // Commission uses the real derived cost (114000), not the forged 0
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(450000, 60, 114000);
+    });
+
+    it('rejects a POR_GRAMO line without grams (422) and persists nothing', async () => {
+      setupHappy();
+      mockServicioRepo.findBySalonAndId.mockResolvedValue({
+        id: 7,
+        costoBaseInsumos: 0,
+        tipoCostoInsumo: 'POR_GRAMO',
+        precioPorGramo: 1200,
+      });
+
+      const input = {
+        ...validInput,
+        serviciosItems: [
+          { servicioId: 7, nombreServicio: 'Tintura', precioServicio: 450000, cantidad: 1 },
+        ],
+      };
+
+      await expect(useCase.execute(input)).rejects.toThrow(UnprocessableEntityError);
+      expect(mockRegistroRepo.create).not.toHaveBeenCalled();
+      expect(mockRepoCreate).not.toHaveBeenCalled();
+    });
+
+    it('expands a line with cantidad=N into N item rows and recomputes totalServicios', async () => {
+      setupHappy();
+      mockServicioRepo.findBySalonAndId.mockResolvedValue({
+        id: 1,
+        costoBaseInsumos: 5000,
+        tipoCostoInsumo: 'FIJO',
+        precioPorGramo: null,
+      });
+
+      const input = {
+        ...validInput,
+        totalServicios: 0, // forged/absent → server recomputes from the lines
+        totalProductos: 0,
+        propina: 0,
+        serviciosItems: [
+          { servicioId: 1, nombreServicio: 'Pies', precioServicio: 20000, cantidad: 2 },
+        ],
+      };
+
+      await useCase.execute(input);
+
+      // 2 rows, each with the per-unit price and per-unit cost
+      const rows = mockRepoCreate.mock.calls
+        .map(([data]) => data)
+        .filter((d) => d.servicioId === 1);
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toEqual(
+        expect.objectContaining({ precioServicio: 20000, costoBaseInsumos: 5000 }),
+      );
+      // totalServicios = Σ(precio × cantidad) = 40000
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ totalServicios: 40000 }),
+        expect.anything(),
+      );
+      // totalCostoBaseInsumos = Σ(costo × cantidad) = 10000
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(40000, 60, 10000);
+    });
+
+    it('FIJO ignores gramosUsados and keeps the catalog cost', async () => {
+      setupHappy();
+      mockServicioRepo.findBySalonAndId.mockResolvedValue({
+        id: 3,
+        costoBaseInsumos: 25000,
+        tipoCostoInsumo: 'FIJO',
+        precioPorGramo: null,
+      });
+
+      const input = {
+        ...validInput,
+        serviciosItems: [
+          { servicioId: 3, nombreServicio: 'Corte', precioServicio: 40000, gramosUsados: 50, cantidad: 1 },
+        ],
+      };
+
+      await useCase.execute(input);
+
+      expect(mockRepoCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          servicioId: 3,
+          costoBaseInsumos: 25000,
+          gramosUsados: null,
+          precioPorGramo: null,
+        }),
+      );
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(40000, 60, 25000);
     });
   });
 });

@@ -12,7 +12,9 @@ import type { IDivisionRegistroRepository } from '../../../domain/ports/IDivisio
 import type { IClienteRepository } from '../../../../personas/domain/ports/IClienteRepository';
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
 import type { IProductoRepository } from '../../../../catalogo/domain/ports/IProductoRepository';
+import type { IServicioRepository } from '../../../../catalogo/domain/ports/IServicioRepository';
 import { ComisionService } from '../../services/ComisionService';
+import { CostoInsumoService } from '../../services/CostoInsumoService';
 import { verificarCajaAbierta } from '../../services/verificarCajaAbierta';
 import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { RegistroServicioDTO } from '../../dtos/RegistroServicioDTO';
@@ -27,6 +29,17 @@ import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/e
  */
 export type CreateRegistroInputConCita = CreateRegistroInput & { citaId?: number | null };
 
+/** A service line resolved against the catalog with its server-derived per-unit cost. */
+interface LineaServicioResuelta {
+  servicioId: number;
+  nombreServicio: string;
+  precioServicio: number;
+  cantidad: number;
+  costoUnitario: number;
+  gramosUsados: number | null;
+  precioPorGramo: number | null;
+}
+
 @injectable()
 export class CreateRegistroUseCase {
   constructor(
@@ -38,6 +51,8 @@ export class CreateRegistroUseCase {
     @inject(ComisionService) private readonly comisionService: ComisionService,
     @inject('IProductoRepository') private readonly productoRepo: IProductoRepository,
     @inject('ICajaRepository') private readonly cajaRepo: ICajaRepository,
+    @inject('IServicioRepository') private readonly servicioRepo: IServicioRepository,
+    @inject(CostoInsumoService) private readonly costoInsumoService: CostoInsumoService,
   ) {}
 
   async execute(
@@ -66,12 +81,72 @@ export class CreateRegistroUseCase {
     // ── 3. Get employee's commission percentage ───────────────
     const porcentaje = Number(usuario.porcentajeComisionServicio);
 
-    // ── 4. Calculate financial values ─────────────────────────
-    const totalCostoBaseInsumos = (input.serviciosItems ?? [])
-      .reduce((sum, si) => sum + (si.costoBaseInsumos ?? 0), 0);
+    // ── 4. Resolve service lines (server-authoritative cost) ──
+    // The catalog is the single source of truth: `POR_GRAMO` → grams × price
+    // (client cost ignored); `FIJO` → catalog fixed cost. Quantity expands each
+    // line into N per-unit rows further below.
+    const lineasResueltas: LineaServicioResuelta[] = [];
+    for (const si of input.serviciosItems ?? []) {
+      const servicio = await this.servicioRepo.findBySalonAndId(input.salonId, si.servicioId);
+      const cantidad = si.cantidad ?? 1;
+
+      if (servicio?.tipoCostoInsumo === 'POR_GRAMO') {
+        const gramosUsados = Number(si.gramosUsados ?? 0);
+        if (gramosUsados <= 0) {
+          // Semantic validation (spec): a POR_GRAMO line without grams is a 422.
+          // Runs before any write → nothing is persisted.
+          throw new UnprocessableEntityError(
+            `Los gramos usados son obligatorios para el servicio ${si.nombreServicio}`,
+          );
+        }
+        const precioPorGramo = Number(servicio.precioPorGramo ?? 0);
+        lineasResueltas.push({
+          servicioId: si.servicioId,
+          nombreServicio: si.nombreServicio,
+          precioServicio: si.precioServicio,
+          cantidad,
+          costoUnitario: this.costoInsumoService.calcularCostoLinea({
+            tipoCostoInsumo: 'POR_GRAMO',
+            gramosUsados,
+            precioPorGramo,
+          }),
+          gramosUsados,
+          precioPorGramo,
+        });
+        continue;
+      }
+
+      // FIJO — or an unknown catalog service (legacy: keep the client cost).
+      const costoUnitario = this.costoInsumoService.calcularCostoLinea({
+        tipoCostoInsumo: 'FIJO',
+        costoBaseInsumos:
+          servicio != null ? Number(servicio.costoBaseInsumos ?? 0) : si.costoBaseInsumos ?? 0,
+      });
+      lineasResueltas.push({
+        servicioId: si.servicioId,
+        nombreServicio: si.nombreServicio,
+        precioServicio: si.precioServicio,
+        cantidad,
+        costoUnitario,
+        gramosUsados: null,
+        precioPorGramo: null,
+      });
+    }
+
+    const totalCostoBaseInsumos = lineasResueltas.reduce(
+      (sum, l) => sum + l.costoUnitario * l.cantidad,
+      0,
+    );
+
+    // Server-authoritative income: Σ(precio × cantidad) when lines exist;
+    // otherwise keep the payload value (legacy registros without items).
+    const totalServiciosEfectivo =
+      lineasResueltas.length > 0
+        ? lineasResueltas.reduce((sum, l) => sum + l.precioServicio * l.cantidad, 0)
+        : Number(input.totalServicios);
 
     const montoTotal = this.comisionService.calcularMontoTotal(
-      input.totalServicios,
+      totalServiciosEfectivo,
       input.totalProductos,
       input.propina,
     );
@@ -90,7 +165,7 @@ export class CreateRegistroUseCase {
     const baseBruta = montoTotal - propina;
     const baseReal = valorFinal - propina;
     const proporcion = baseBruta > 0 ? baseReal / baseBruta : 1;
-    const totalServiciosAjustado = Math.round(Number(input.totalServicios) * proporcion);
+    const totalServiciosAjustado = Math.round(totalServiciosEfectivo * proporcion);
 
     const comisionCalculada = this.comisionService.calcularComision(
       totalServiciosAjustado,
@@ -134,7 +209,7 @@ export class CreateRegistroUseCase {
           usuarioId: input.usuarioId,
           cajaId: caja.id,
           citaId: input.citaId ?? null,
-          totalServicios: input.totalServicios,
+          totalServicios: totalServiciosEfectivo,
           totalProductos: input.totalProductos,
           cantidadProductosVendidos,
           montoTotal,
@@ -236,18 +311,24 @@ export class CreateRegistroUseCase {
         }
       }
 
-      // ── 11. Persist servicio items ──────────────────────────
-      if (input.serviciosItems && input.serviciosItems.length > 0) {
+      // ── 11. Persist servicio items (one row per unit) ───────
+      // Each line with `cantidad=N` expands into N identical per-unit rows; the
+      // gram/cost snapshot is per unit (spec decision #1).
+      if (lineasResueltas.length > 0) {
         const servicioItemRepo = qr.manager.getRepository(RegistroServicioItemEntity);
-        for (const si of input.serviciosItems) {
-          const item = servicioItemRepo.create({
-            registroServicioId: registro.id,
-            servicioId: si.servicioId,
-            nombreServicio: si.nombreServicio,
-            precioServicio: si.precioServicio,
-            costoBaseInsumos: si.costoBaseInsumos ?? 0,
-          });
-          await servicioItemRepo.save(item);
+        for (const linea of lineasResueltas) {
+          for (let unidad = 0; unidad < linea.cantidad; unidad++) {
+            const item = servicioItemRepo.create({
+              registroServicioId: registro.id,
+              servicioId: linea.servicioId,
+              nombreServicio: linea.nombreServicio,
+              precioServicio: linea.precioServicio,
+              costoBaseInsumos: linea.costoUnitario,
+              gramosUsados: linea.gramosUsados,
+              precioPorGramo: linea.precioPorGramo,
+            });
+            await servicioItemRepo.save(item);
+          }
         }
       }
 

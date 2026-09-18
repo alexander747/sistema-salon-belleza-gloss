@@ -233,6 +233,7 @@ import { CreatePlanUseCase } from '../modules/planes/application/use-cases/Creat
 import { UpdatePlanUseCase } from '../modules/planes/application/use-cases/UpdatePlanUseCase';
 import { DeletePlanUseCase } from '../modules/planes/application/use-cases/DeletePlanUseCase';
 import { ComisionService } from '../modules/finanzas/application/services/ComisionService';
+import { CostoInsumoService } from '../modules/finanzas/application/services/CostoInsumoService';
 
 // ---- Finanzas Module — Use Cases (Registros) ----
 import { CreateRegistroUseCase } from '../modules/finanzas/application/use-cases/registro/CreateRegistroUseCase';
@@ -294,6 +295,7 @@ container.register('IGastoRepository', { useClass: TypeORMGastoRepository });
 container.register('IDevolucionRepository', { useClass: TypeORMDevolucionRepository });
 container.register('ICajaRepository', { useClass: TypeORMCajaRepository });
 container.register(ComisionService, { useClass: ComisionService });
+container.register(CostoInsumoService, { useClass: CostoInsumoService });
 
 // ---- Finanzas Module — Use Cases (Registros) ----
 container.register(CreateRegistroUseCase, { useClass: CreateRegistroUseCase });

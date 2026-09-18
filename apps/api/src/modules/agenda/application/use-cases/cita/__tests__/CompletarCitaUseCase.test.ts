@@ -71,7 +71,7 @@ function makeRegistroPayload(
     porcentajeDescuento: 0,
     productosVendidos: [],
     pagos: [{ monto: 50000, metodoPago: 'EFECTIVO' }],
-    serviciosItems: [{ servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000 }],
+    serviciosItems: [{ servicioId: 1, nombreServicio: 'Corte', precioServicio: 25000, cantidad: 1 }],
     ...overrides,
   };
 }
