@@ -8,6 +8,8 @@ export interface Servicio {
   precioFinal: number;
   duracionMinutos: number;
   costoBaseInsumos?: number;
+  tipoCostoInsumo?: 'FIJO' | 'POR_GRAMO';
+  precioPorGramo?: number | null;
   categoriaId?: number;
   categoria?: { id: number; nombre: string } | null;
   activo: boolean;

@@ -215,6 +215,105 @@ describe('ServiciosPage — listado y CRUD', () => {
   }, 20000);
 });
 
+describe('ServiciosPage — modo de costo (FIJO | POR_GRAMO)', () => {
+  const porGramoServicio = {
+    ...servicio,
+    id: 7,
+    nombre: 'Tinte por gramo',
+    tipoCostoInsumo: 'POR_GRAMO',
+    precioPorGramo: 1200,
+  };
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockDelete.mockReset();
+  });
+
+  it('crear POR_GRAMO: el toggle muestra precio por gramo y el POST omite costoBaseInsumos', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo Servicio' }, WAIT));
+    expect(await screen.findByText('Nuevo Servicio', {}, WAIT)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Ej: Corte de cabello'), {
+      target: { value: 'Tinte' },
+    });
+    const moneyInputs = screen.getAllByPlaceholderText('0');
+    fireEvent.change(moneyInputs[0], { target: { value: '45000' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'POR_GRAMO' }));
+
+    // En modo POR_GRAMO el costo fijo desaparece y aparece el precio por gramo
+    expect(screen.queryByLabelText('Costo base insumos')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Precio por gramo'), { target: { value: '1200' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear servicio' }));
+
+    await waitFor(() => {
+      const [url, payload] = mockPost.mock.calls[0];
+      expect(url).toBe('/salones/1/servicios');
+      expect(payload).toEqual(
+        expect.objectContaining({ tipoCostoInsumo: 'POR_GRAMO', precioPorGramo: 1200 }),
+      );
+      expect(payload).not.toHaveProperty('costoBaseInsumos');
+    });
+  }, 20000);
+
+  it('crear FIJO por defecto: envía tipoCostoInsumo FIJO y el costo fijo', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo Servicio' }, WAIT));
+    fireEvent.change(screen.getByPlaceholderText('Ej: Corte de cabello'), {
+      target: { value: 'Corte' },
+    });
+    const moneyInputs = screen.getAllByPlaceholderText('0');
+    fireEvent.change(moneyInputs[0], { target: { value: '60000' } });
+    fireEvent.change(moneyInputs[1], { target: { value: '8000' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear servicio' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/servicios',
+        expect.objectContaining({ tipoCostoInsumo: 'FIJO', costoBaseInsumos: 8000 }),
+      );
+    });
+  }, 20000);
+
+  it('editar POR_GRAMO: precarga modo y precio, y el PUT los envía', async () => {
+    defaultApiMock([porGramoServicio], 1);
+    mockPut.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    expect(await screen.findByText('Editar Servicio', {}, WAIT)).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: 'POR_GRAMO' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByDisplayValue('1.200')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith(
+        '/salones/1/servicios/7',
+        expect.objectContaining({ tipoCostoInsumo: 'POR_GRAMO', precioPorGramo: 1200 }),
+      );
+    });
+  }, 20000);
+});
+
 describe('ServiciosPage — móvil (grid apilado ≤640px)', () => {
   beforeEach(() => {
     mockGet.mockReset();

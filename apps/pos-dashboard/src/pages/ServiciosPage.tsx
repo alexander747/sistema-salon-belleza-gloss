@@ -168,6 +168,8 @@ const ServiciosPage: React.FC = () => {
     precioBase: 0,
     duracionMinutos: 30,
     costoBaseInsumos: 0,
+    tipoCostoInsumo: 'FIJO' as 'FIJO' | 'POR_GRAMO',
+    precioPorGramo: 0,
     categoriaId: 0,
     activo: true,
   });
@@ -245,6 +247,8 @@ const ServiciosPage: React.FC = () => {
       precioBase: 0,
       duracionMinutos: 30,
       costoBaseInsumos: 0,
+      tipoCostoInsumo: 'FIJO',
+      precioPorGramo: 0,
       categoriaId: 0,
       activo: true,
     });
@@ -260,6 +264,8 @@ const ServiciosPage: React.FC = () => {
       precioBase: svc.precioBase,
       duracionMinutos: svc.duracionMinutos,
       costoBaseInsumos: svc.costoBaseInsumos ?? 0,
+      tipoCostoInsumo: svc.tipoCostoInsumo ?? 'FIJO',
+      precioPorGramo: svc.precioPorGramo ?? 0,
       categoriaId: svc.categoriaId ?? 0,
       activo: svc.activo,
     });
@@ -272,12 +278,16 @@ const ServiciosPage: React.FC = () => {
     setActionError(null);
     setActionLoading(true);
     try {
+      const esPorGramo = form.tipoCostoInsumo === 'POR_GRAMO';
       const payload = {
         nombre: form.nombre.trim(),
         descripcion: form.descripcion.trim() || undefined,
         precioBase: form.precioBase,
         duracionMinutos: form.duracionMinutos,
-        costoBaseInsumos: form.costoBaseInsumos > 0 ? form.costoBaseInsumos : undefined,
+        tipoCostoInsumo: form.tipoCostoInsumo,
+        ...(esPorGramo
+          ? { precioPorGramo: form.precioPorGramo }
+          : { costoBaseInsumos: form.costoBaseInsumos > 0 ? form.costoBaseInsumos : undefined }),
         categoriaId: form.categoriaId > 0 ? form.categoriaId : undefined,
         activo: form.activo,
       };
@@ -536,7 +546,13 @@ const ServiciosPage: React.FC = () => {
                     {formatCurrency(svc.precioBase)}
                   </span>
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }} data-label="Costo base insumos">
-                    {(svc.costoBaseInsumos ?? 0) > 0 ? formatCurrency(svc.costoBaseInsumos ?? 0) : '—'}
+                    {svc.tipoCostoInsumo === 'POR_GRAMO'
+                      ? svc.precioPorGramo
+                        ? `${formatCurrency(svc.precioPorGramo)} /g`
+                        : '—'
+                      : (svc.costoBaseInsumos ?? 0) > 0
+                        ? formatCurrency(svc.costoBaseInsumos ?? 0)
+                        : '—'}
                   </span>
                   <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }} data-label="Categoría">
                     {svc.categoria?.nombre ?? '—'}
@@ -729,14 +745,60 @@ const ServiciosPage: React.FC = () => {
                 </div>
 
                 <div style={{ marginBottom: '0.875rem' }}>
-                  <label style={formLabelStyle}>Costo base insumos</label>
-                  <MoneyInput
-                    value={form.costoBaseInsumos}
-                    onChange={(n) => setForm((prev) => ({ ...prev, costoBaseInsumos: n }))}
-                    style={formFieldStyle}
-                    placeholder="0"
-                  />
+                  <label style={formLabelStyle}>Tipo de costo de insumos</label>
+                  <div role="group" aria-label="Tipo de costo de insumos" style={{ display: 'flex', gap: '0.5rem' }}>
+                    {(['FIJO', 'POR_GRAMO'] as const).map((modo) => {
+                      const activo = form.tipoCostoInsumo === modo;
+                      return (
+                        <button
+                          key={modo}
+                          type="button"
+                          aria-pressed={activo}
+                          onClick={() => setForm((prev) => ({ ...prev, tipoCostoInsumo: modo }))}
+                          style={{
+                            flex: 1,
+                            padding: '0.45rem 0.75rem',
+                            borderRadius: 'var(--radius-sm)',
+                            border: `1px solid ${activo ? 'var(--accent)' : 'var(--border)'}`,
+                            background: activo ? 'var(--accent)' : 'transparent',
+                            color: activo ? 'var(--bg-root)' : 'var(--text-secondary)',
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'background 0.2s, border-color 0.2s, color 0.2s',
+                          }}
+                        >
+                          {modo === 'FIJO' ? 'FIJO' : 'POR_GRAMO'}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {form.tipoCostoInsumo === 'POR_GRAMO' ? (
+                  <div style={{ marginBottom: '0.875rem' }}>
+                    <label style={formLabelStyle}>Precio por gramo *</label>
+                    <MoneyInput
+                      value={form.precioPorGramo}
+                      onChange={(n) => setForm((prev) => ({ ...prev, precioPorGramo: n }))}
+                      style={formFieldStyle}
+                      placeholder="0"
+                      ariaLabel="Precio por gramo"
+                    />
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: '0.875rem' }}>
+                    <label style={formLabelStyle}>Costo base insumos</label>
+                    <MoneyInput
+                      value={form.costoBaseInsumos}
+                      onChange={(n) => setForm((prev) => ({ ...prev, costoBaseInsumos: n }))}
+                      style={formFieldStyle}
+                      placeholder="0"
+                      ariaLabel="Costo base insumos"
+                    />
+                  </div>
+                )}
 
                 <div style={{ marginBottom: '0.875rem' }}>
                   <label style={formLabelStyle}>Categoría</label>
@@ -803,7 +865,12 @@ const ServiciosPage: React.FC = () => {
                 <Button
                   variant="primary"
                   size="sm"
-                  disabled={!form.nombre.trim() || form.precioBase <= 0 || form.duracionMinutos <= 0}
+                  disabled={
+                    !form.nombre.trim() ||
+                    form.precioBase <= 0 ||
+                    form.duracionMinutos <= 0 ||
+                    (form.tipoCostoInsumo === 'POR_GRAMO' && form.precioPorGramo <= 0)
+                  }
                   loading={actionLoading}
                   onClick={handleSave}
                 >
