@@ -47,12 +47,24 @@ export class CitaController {
 
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Normalize: new `servicios: [{servicioId, cantidad}]` or legacy `serviciosIds` (cantidad 1).
+      const servicios =
+        Array.isArray(req.body.servicios) && req.body.servicios.length > 0
+          ? (req.body.servicios as Array<{ servicioId: number; cantidad?: number }>).map((s) => ({
+              servicioId: s.servicioId,
+              cantidad: s.cantidad ?? 1,
+            }))
+          : ((req.body.serviciosIds as number[] | undefined) ?? []).map((id) => ({
+              servicioId: id,
+              cantidad: 1,
+            }));
+
       const result = await this.createUseCase.execute({
         salonId: req.salonId!,
         usuarioId: req.body.usuarioId,
         clienteId: req.body.clienteId,
         fechaHora: new Date(req.body.fechaHora),
-        servicioIds: req.body.serviciosIds,
+        servicios,
         notas: req.body.notas,
         esWalkIn: req.body.esWalkIn,
       });

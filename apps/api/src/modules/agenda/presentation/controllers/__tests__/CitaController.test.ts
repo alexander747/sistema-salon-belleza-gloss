@@ -143,10 +143,39 @@ describe('CitaController', () => {
         usuarioId: 1,
         clienteId: 1,
         fechaHora: new Date('2026-06-01T10:00:00.000Z'),
-        servicioIds: [1, 2],
+        servicios: [
+          { servicioId: 1, cantidad: 1 },
+          { servicioId: 2, cantidad: 1 },
+        ],
         notas: 'Primera visita',
         esWalkIn: undefined,
       });
+    });
+
+    it('normaliza servicios:[{servicioId,cantidad}] y preserva la cantidad', async () => {
+      mockCreateUseCase.execute.mockResolvedValue(mockCita);
+
+      const req = {
+        salonId: 1,
+        body: {
+          usuarioId: 1,
+          clienteId: 1,
+          fechaHora: '2026-06-01T10:00:00.000Z',
+          servicios: [{ servicioId: 7, cantidad: 2 }],
+        },
+      } as unknown as Request;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      await controller.create(req, res, next);
+
+      expect(mockCreateUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          servicios: [{ servicioId: 7, cantidad: 2 }],
+        }),
+      );
     });
   });
 

@@ -37,7 +37,14 @@ function makeMockCita(overrides: Record<string, unknown> = {}) {
     estado: 'CONFIRMADA',
     notas: null,
     esWalkIn: false,
-    servicios: [{ id: 1, nombre: 'Manicure', duracionMinutos: 60, precioBase: 1000 }],
+    citasServicios: [
+      {
+        citasId: 1,
+        serviciosId: 1,
+        cantidad: 1,
+        servicio: { id: 1, nombre: 'Manicure', duracionMinutos: 60, precioBase: 1000 },
+      },
+    ],
     ...overrides,
   };
 }
@@ -167,6 +174,33 @@ describe('DisponibilidadService', () => {
       // 10:30 - 11:30 overlaps with 10:00 - 11:00 cita
       const result = await service.verificar(
         1, 1, new Date('2026-06-01T10:30:00'), 60,
+      );
+
+      expect(result.disponible).toBe(false);
+      expect(result.motivo).toContain('Conflicto');
+    });
+
+    it('usa la cantidad: una cita de 60min×2 (10:00-12:00) choca con un slot a las 11:30', async () => {
+      const { service, horarioRepo, bloqueoRepo, citaRepo } = createService();
+      horarioRepo.findBySalonAndDia.mockResolvedValue(makeMockHorario());
+      bloqueoRepo.findBySalonAndDateRange.mockResolvedValue([]);
+      citaRepo.findActiveByUsuario.mockResolvedValue([
+        makeMockCita({
+          fechaHora: new Date('2026-06-01T10:00:00'),
+          citasServicios: [
+            {
+              citasId: 1,
+              serviciosId: 1,
+              cantidad: 2,
+              servicio: { id: 1, nombre: 'Manicure', duracionMinutos: 60, precioBase: 1000 },
+            },
+          ],
+        }),
+      ]);
+
+      // 11:30 - 12:30 solo solapa si la cita dura 120min (60 × 2)
+      const result = await service.verificar(
+        1, 1, new Date('2026-06-01T11:30:00'), 60,
       );
 
       expect(result.disponible).toBe(false);

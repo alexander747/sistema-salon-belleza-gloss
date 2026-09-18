@@ -54,7 +54,9 @@ function makeMockCita(overrides: Record<string, unknown> = {}) {
     estado: EstadoCita.PENDIENTE,
     notas: null,
     esWalkIn: false,
-    servicios: [makeMockServicio()],
+    citasServicios: [
+      { citasId: 1, serviciosId: 1, cantidad: 1, servicio: makeMockServicio() },
+    ],
     creadoEn: new Date(),
     actualizadoEn: new Date(),
     ...overrides,
@@ -89,7 +91,10 @@ describe('CreateCitaUseCase', () => {
     usuarioId: 1,
     clienteId: 1,
     fechaHora: new Date('2026-06-01T10:00:00'),
-    servicioIds: [1, 2],
+    servicios: [
+      { servicioId: 1, cantidad: 1 },
+      { servicioId: 2, cantidad: 1 },
+    ],
   };
 
   it('should create cita when all validations pass', async () => {
@@ -218,6 +223,72 @@ describe('CreateCitaUseCase', () => {
       expect.any(Number),
       expect.any(Date),
       75, // 45 + 30
+    );
+  });
+
+  it('expande la duración con cantidad: 60×2 + 30×1 = 150', async () => {
+    const mocks = createMocks();
+    mocks.clienteRepo.findBySalonAndId.mockResolvedValue(makeMockCliente());
+    mocks.usuarioRepo.findBySalonAndId.mockResolvedValue(makeMockUsuario());
+    mocks.servicioRepo.findBySalonAndId
+      .mockResolvedValueOnce(makeMockServicio({ id: 1, duracionMinutos: 60 }))
+      .mockResolvedValueOnce(makeMockServicio({ id: 2, duracionMinutos: 30 }));
+    mocks.disponibilidadService.verificar.mockResolvedValue({ disponible: true });
+    mocks.citaRepo.create.mockResolvedValue(makeMockCita());
+
+    const useCase = new CreateCitaUseCase(
+      mocks.citaRepo as any,
+      mocks.disponibilidadService as any,
+      mocks.clienteRepo as any,
+      mocks.usuarioRepo as any,
+      mocks.servicioRepo as any,
+    );
+
+    await useCase.execute({
+      ...validInput,
+      servicios: [
+        { servicioId: 1, cantidad: 2 },
+        { servicioId: 2, cantidad: 1 },
+      ],
+    });
+
+    expect(mocks.disponibilidadService.verificar).toHaveBeenCalledWith(
+      1,
+      1,
+      validInput.fechaHora,
+      150, // 60×2 + 30×1
+    );
+  });
+
+  it('persiste la cantidad por servicio en citasServicios', async () => {
+    const mocks = createMocks();
+    mocks.clienteRepo.findBySalonAndId.mockResolvedValue(makeMockCliente());
+    mocks.usuarioRepo.findBySalonAndId.mockResolvedValue(makeMockUsuario());
+    mocks.servicioRepo.findBySalonAndId.mockResolvedValue(
+      makeMockServicio({ id: 1, duracionMinutos: 60 }),
+    );
+    mocks.disponibilidadService.verificar.mockResolvedValue({ disponible: true });
+    mocks.citaRepo.create.mockResolvedValue(makeMockCita());
+
+    const useCase = new CreateCitaUseCase(
+      mocks.citaRepo as any,
+      mocks.disponibilidadService as any,
+      mocks.clienteRepo as any,
+      mocks.usuarioRepo as any,
+      mocks.servicioRepo as any,
+    );
+
+    await useCase.execute({
+      ...validInput,
+      servicios: [{ servicioId: 1, cantidad: 2 }],
+    });
+
+    expect(mocks.citaRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        citasServicios: [
+          expect.objectContaining({ serviciosId: 1, cantidad: 2 }),
+        ],
+      }),
     );
   });
 });

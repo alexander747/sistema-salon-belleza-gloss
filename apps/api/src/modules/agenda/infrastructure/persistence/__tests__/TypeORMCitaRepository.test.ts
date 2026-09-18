@@ -62,4 +62,15 @@ describe('TypeORMCitaRepository.cambiarEstado', () => {
     expect(mockDefaultRepoUpdate).not.toHaveBeenCalled();
     expect(mockQrFindOne).toHaveBeenCalled();
   });
+
+  it('findById carga la join explícita citasServicios + su servicio', async () => {
+    mockDefaultFindOne.mockResolvedValue({ id: 1, citasServicios: [] });
+
+    await repo.findById(1);
+
+    expect(mockDefaultFindOne).toHaveBeenCalledWith({
+      where: { id: 1 },
+      relations: ['citasServicios', 'citasServicios.servicio'],
+    });
+  });
 });

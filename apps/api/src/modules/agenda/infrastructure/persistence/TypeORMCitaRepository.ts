@@ -13,7 +13,7 @@ export class TypeORMCitaRepository implements ICitaRepository {
   async findById(id: number): Promise<CitaEntity | null> {
     return this.getRepo().findOne({
       where: { id },
-      relations: ['servicios'],
+      relations: ['citasServicios', 'citasServicios.servicio'],
     });
   }
 
@@ -24,7 +24,8 @@ export class TypeORMCitaRepository implements ICitaRepository {
   ): Promise<CitaEntity[]> {
     return this.getRepo()
       .createQueryBuilder('cita')
-      .leftJoinAndSelect('cita.servicios', 'servicio')
+      .leftJoinAndSelect('cita.citasServicios', 'cs')
+      .leftJoinAndSelect('cs.servicio', 'servicio')
       .where('cita.salonId = :salonId', { salonId })
       .andWhere('cita.fechaHora >= :fechaInicio', { fechaInicio })
       .andWhere('cita.fechaHora <= :fechaFin', { fechaFin })
@@ -38,7 +39,8 @@ export class TypeORMCitaRepository implements ICitaRepository {
 
     return this.getRepo()
       .createQueryBuilder('cita')
-      .leftJoinAndSelect('cita.servicios', 'servicio')
+      .leftJoinAndSelect('cita.citasServicios', 'cs')
+      .leftJoinAndSelect('cs.servicio', 'servicio')
       .where('cita.usuarioId = :usuarioId', { usuarioId })
       .andWhere('cita.estado IN (:...estados)', {
         estados: [EstadoCita.PENDIENTE, EstadoCita.CONFIRMADA],
@@ -69,7 +71,10 @@ export class TypeORMCitaRepository implements ICitaRepository {
       // Transacción compartida: el caller (CompletarCitaUseCase) es dueño del
       // commit y del re-fetch post-commit.
       await queryRunner.manager.getRepository(CitaEntity).update(id, { estado, ...extraData });
-      return queryRunner.manager.findOne(CitaEntity, { where: { id }, relations: ['servicios'] });
+      return queryRunner.manager.findOne(CitaEntity, {
+        where: { id },
+        relations: ['citasServicios', 'citasServicios.servicio'],
+      });
     }
     await this.getRepo().update(id, { estado, ...extraData });
     return this.findById(id);

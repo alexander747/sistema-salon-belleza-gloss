@@ -6,15 +6,22 @@ import type { IClienteRepository } from '../../../../personas/domain/ports/IClie
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
 import type { IServicioRepository } from '../../../../catalogo/domain/ports/IServicioRepository';
 import type { ServicioEntity } from '../../../../../infrastructure/persistence/entities/ServicioEntity';
+import { CitaServicioEntity } from '../../../../../infrastructure/persistence/entities/CitaServicioEntity';
 import { EstadoCita } from '../../../../../infrastructure/persistence/entities/CitaEntity';
 import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
+
+export interface CreateCitaServicioInput {
+  servicioId: number;
+  cantidad: number;
+}
 
 export interface CreateCitaInput {
   salonId: number;
   usuarioId: number;
   clienteId: number;
   fechaHora: Date;
-  servicioIds: number[];
+  /** Líneas de servicio con cantidad (se expande en duración y persistencia). */
+  servicios: CreateCitaServicioInput[];
   notas?: string;
   esWalkIn?: boolean;
 }
@@ -44,17 +51,23 @@ export class CreateCitaUseCase {
 
     // ── 3. Validate servicios exist ───────────────────
     const servicios = await Promise.all(
-      input.servicioIds.map((id) => this.servicioRepo.findBySalonAndId(input.salonId, id)),
+      input.servicios.map((linea) =>
+        this.servicioRepo.findBySalonAndId(input.salonId, linea.servicioId),
+      ),
     );
 
     const missingIdx = servicios.findIndex((s) => !s);
     if (missingIdx !== -1) {
-      throw new NotFoundError(`Servicio con ID ${input.servicioIds[missingIdx]} no encontrado`);
+      throw new NotFoundError(`Servicio con ID ${input.servicios[missingIdx].servicioId} no encontrado`);
     }
 
     const valids = servicios as ServicioEntity[];
 
-    const duracionTotal = valids.reduce((sum, s) => sum + s.duracionMinutos, 0);
+    // Duración expandida: Σ(duracionMinutos × cantidad) — el overlap usa este valor.
+    const duracionTotal = valids.reduce(
+      (sum, s, i) => sum + s.duracionMinutos * input.servicios[i].cantidad,
+      0,
+    );
 
     // ── 4. Check disponibilidad ───────────────────────
     const disponibilidad = await this.disponibilidadService.verificar(
@@ -68,7 +81,15 @@ export class CreateCitaUseCase {
       throw new UnprocessableEntityError(disponibilidad.motivo);
     }
 
-    // ── 5. Create cita ────────────────────────────────
+    // ── 5. Create cita (explicit join, cascade) ───────
+    const citasServicios = valids.map((servicio, i) => {
+      const linea = new CitaServicioEntity();
+      linea.serviciosId = servicio.id;
+      linea.cantidad = input.servicios[i].cantidad;
+      linea.servicio = servicio;
+      return linea;
+    });
+
     const cita = await this.citaRepo.create({
       salonId: input.salonId,
       usuarioId: input.usuarioId,
@@ -77,7 +98,7 @@ export class CreateCitaUseCase {
       notas: input.notas ?? undefined,
       esWalkIn: input.esWalkIn ?? false,
       estado: EstadoCita.PENDIENTE,
-      servicios: valids,
+      citasServicios,
     });
 
     return CitaDTO.fromEntity(cita);

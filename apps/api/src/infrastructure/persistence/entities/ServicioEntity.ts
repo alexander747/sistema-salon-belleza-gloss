@@ -4,12 +4,10 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
-  ManyToMany,
 } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { RecompensaFidelidadEntity } from './RecompensaFidelidadEntity';
 import { FotoPortafolioEntity } from './FotoPortafolioEntity';
-import { CitaEntity } from './CitaEntity';
 import { CategoriaServicioEntity } from './CategoriaServicioEntity';
 
 /** Cost mode of a service's supplies. `FIJO` uses `costoBaseInsumos`; `POR_GRAMO` uses `precioPorGramo`. */
@@ -51,9 +49,6 @@ export class ServicioEntity extends BaseEntity {
 
   @OneToMany(() => FotoPortafolioEntity, (foto) => foto.servicio)
   fotos: FotoPortafolioEntity[];
-
-  @ManyToMany(() => CitaEntity, (cita) => cita.servicios)
-  citas: CitaEntity[];
 
   @OneToMany(() => RecompensaFidelidadEntity, (r) => r.servicio)
   recompensas: RecompensaFidelidadEntity[];

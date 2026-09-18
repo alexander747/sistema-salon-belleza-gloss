@@ -83,8 +83,11 @@ export class DisponibilidadService {
     const citas = await this.citaRepo.findActiveByUsuario(usuarioId, diaStart);
 
     const overlap = citas.some((c) => {
-      // Calcular duración real desde servicios (fix pos-ok bug)
-      const duracion = (c.servicios ?? []).reduce((sum, s) => sum + s.duracionMinutos, 0);
+      // Duración real desde la join explícita: Σ(duracionMinutos × cantidad)
+      const duracion = (c.citasServicios ?? []).reduce(
+        (sum, cs) => sum + cs.servicio.duracionMinutos * (cs.cantidad ?? 1),
+        0,
+      );
       const citaFin = new Date(c.fechaHora.getTime() + duracion * 60000);
       return c.fechaHora < fechaFin && citaFin > fechaInicio;
     });
@@ -138,7 +141,10 @@ export class DisponibilidadService {
 
       // Check superposición con citas
       const citaOverlap = citas.some((c) => {
-        const duracion = (c.servicios ?? []).reduce((sum, s) => sum + s.duracionMinutos, 0);
+        const duracion = (c.citasServicios ?? []).reduce(
+          (sum, cs) => sum + cs.servicio.duracionMinutos * (cs.cantidad ?? 1),
+          0,
+        );
         const citaFin = new Date(c.fechaHora.getTime() + duracion * 60000);
         return c.fechaHora < slotFin && citaFin > slotInicio;
       });

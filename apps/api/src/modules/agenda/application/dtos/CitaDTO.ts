@@ -6,6 +6,7 @@ export interface ServicioResumenDTO {
   duracionMinutos: number;
   precioBase: number;
   costoBaseInsumos: number;
+  cantidad: number;
 }
 
 export class CitaDTO {
@@ -23,15 +24,20 @@ export class CitaDTO {
   actualizadoEn: string;
 
   static fromEntity(entity: CitaEntity): CitaDTO {
-    const servicios: ServicioResumenDTO[] = (entity.servicios ?? []).map((s) => ({
-      id: s.id,
-      nombre: s.nombre,
-      duracionMinutos: s.duracionMinutos,
-      precioBase: Number(s.precioBase),
-      costoBaseInsumos: Number(s.costoBaseInsumos ?? 0),
+    // Explicit join: each `citasServicios` row carries its service + cantidad.
+    const servicios: ServicioResumenDTO[] = (entity.citasServicios ?? []).map((cs) => ({
+      id: cs.servicio.id,
+      nombre: cs.servicio.nombre,
+      duracionMinutos: cs.servicio.duracionMinutos,
+      precioBase: Number(cs.servicio.precioBase),
+      costoBaseInsumos: Number(cs.servicio.costoBaseInsumos ?? 0),
+      cantidad: cs.cantidad ?? 1,
     }));
 
-    const duracionTotalMinutos = servicios.reduce((sum, s) => sum + s.duracionMinutos, 0);
+    const duracionTotalMinutos = servicios.reduce(
+      (sum, s) => sum + s.duracionMinutos * s.cantidad,
+      0,
+    );
 
     return {
       id: entity.id,

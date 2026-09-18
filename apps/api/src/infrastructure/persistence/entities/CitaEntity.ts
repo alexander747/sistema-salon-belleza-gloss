@@ -2,15 +2,14 @@ import {
   Entity,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
-  ManyToMany,
-  JoinTable,
 } from 'typeorm';
 import { BaseEntity } from './BaseEntity';
 import { UsuarioEntity } from './UsuarioEntity';
-import { ServicioEntity } from './ServicioEntity';
 import { ClienteEntity } from './ClienteEntity';
 import { SalonEntity } from './SalonEntity';
+import { CitaServicioEntity } from './CitaServicioEntity';
 
 export enum EstadoCita {
   PENDIENTE = 'PENDIENTE',
@@ -76,7 +75,11 @@ export class CitaEntity extends BaseEntity {
   @Column({ type: 'int' })
   clienteId: number;
 
-  @ManyToMany(() => ServicioEntity)
-  @JoinTable({ name: 'citas_servicios' })
-  servicios: ServicioEntity[];
+  /**
+   * Explicit join to `citas_servicios` (citasId / serviciosId / cantidad).
+   * Replaces the previous `@ManyToMany` because TypeORM cannot expose extra
+   * join columns, and duplicate M:N rows are blocked by the composite PK.
+   */
+  @OneToMany(() => CitaServicioEntity, (cs) => cs.cita, { cascade: true })
+  citasServicios: CitaServicioEntity[];
 }
