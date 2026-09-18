@@ -835,3 +835,133 @@ describe('WalkInModal — captura de gramos usable en móvil (PR4)', () => {
     expect(css).toMatch(/\.gramsInputWrap\s*\{[^}]*min-height:\s*44px/s);
   });
 });
+
+describe('WalkInModal — desglose del reparto visible (PR5)', () => {
+  // Caso canónico del dueño: precioBase 550.000, POR_GRAMO $800/g,
+  // ajuste a 300.000 y 30 g → insumo 24.000, a repartir 276.000, 60% = 165.600.
+  const ALISADO_550 = {
+    id: 9,
+    nombre: 'Alisado permanente brasileño',
+    descripcion: null,
+    precioFinal: 550000,
+    duracionMinutos: 180,
+    categoriaId: 1,
+    tipoCostoInsumo: 'POR_GRAMO',
+    precioPorGramo: 800,
+  };
+
+  const CORTE_FIJO = {
+    id: 1,
+    nombre: 'Corte',
+    descripcion: null,
+    precioFinal: 100000,
+    duracionMinutos: 60,
+    categoriaId: 1,
+    costoBaseInsumos: 15000,
+    tipoCostoInsumo: 'FIJO',
+    precioPorGramo: null,
+  };
+
+  function apiMockReparto(servicios: Array<Record<string, unknown>>) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) return Promise.resolve({ data: servicios });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'María', porcentajeComisionServicio: 60 }],
+        });
+      }
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  /** Cliente + empleada (60%) sin tocar el método de pago. */
+  function seleccionarClienteYEmpleada() {
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[0], { target: { value: '1' } });
+    fireEvent.change(combos[1], { target: { value: '1' } });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+  });
+
+  it('muestra Cobrado − Insumos = A repartir y el split por % de la empleada (caso canónico)', async () => {
+    apiMockReparto([ALISADO_550]);
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Alisado permanente brasileño'));
+    seleccionarClienteYEmpleada();
+    fireEvent.change(screen.getByLabelText('Gramos usados Alisado permanente brasileño'), {
+      target: { value: '30' },
+    });
+
+    // Ajuste del total: 550.000 → 300.000
+    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
+    fireEvent.change(screen.getByLabelText('Valor total ajustado'), {
+      target: { value: '300000' },
+    });
+
+    const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
+    expect(within(panel).getByText('Cobrado')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 300.000')).toBeInTheDocument();
+    expect(within(panel).getByText('− $ 24.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 276.000')).toBeInTheDocument();
+    expect(within(panel).getByText('Comisión empleada (60%)')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 165.600')).toBeInTheDocument();
+    expect(within(panel).getByText('Queda para el salón')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 110.400')).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        'El costo de insumos se descuenta del total cobrado y el resto se reparte entre la empleada y el salón.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('muestra el desglose también cuando solo hay ajuste de total (servicio FIJO)', async () => {
+    // 100.000 → 80.000, insumo fijo 15.000, comisión 60%: 65.000 × 0,6 = 39.000.
+    apiMockReparto([CORTE_FIJO]);
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte'));
+    seleccionarClienteYEmpleada();
+    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
+    fireEvent.change(screen.getByLabelText('Valor total ajustado'), {
+      target: { value: '80000' },
+    });
+
+    const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
+    expect(within(panel).getByText('$ 80.000')).toBeInTheDocument();
+    expect(within(panel).getByText('− $ 15.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 65.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 39.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 26.000')).toBeInTheDocument();
+  });
+
+  it('insumo mayor al cobrado: comisión $0 honesta y sin números negativos', async () => {
+    apiMockReparto([ALISADO_550]);
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Alisado permanente brasileño'));
+    seleccionarClienteYEmpleada();
+    fireEvent.change(screen.getByLabelText('Gramos usados Alisado permanente brasileño'), {
+      target: { value: '30' },
+    });
+    // Ajuste por debajo del costo de insumo: 20.000 < 24.000.
+    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
+    fireEvent.change(screen.getByLabelText('Valor total ajustado'), {
+      target: { value: '20000' },
+    });
+
+    const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
+    // A repartir y comisión quedan en 0 (el server clampa), nunca negativos.
+    expect(within(panel).getByLabelText('A repartir $ 0')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Comisión empleada $ 0')).toBeInTheDocument();
+    expect(
+      within(panel).getByText('La comisión queda en $0 porque el insumo supera el total cobrado.'),
+    ).toBeInTheDocument();
+  });
+});

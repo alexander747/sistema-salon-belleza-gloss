@@ -9,10 +9,12 @@ import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
+import { calcularDesgloseReparto, costoUnitarioLinea } from '../utils/reparto.js';
 import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
 import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
 import MoneyInput from './MoneyInput.js';
 import ReciboModal from './ReciboModal.js';
+import DesgloseReparto from './DesgloseReparto.js';
 import styles from './WalkInModal.module.css';
 
 /* ── Types ── */
@@ -71,6 +73,8 @@ interface Empleada {
   id: number;
   nombre: string;
   activo?: boolean;
+  /** % de comisión de la empleada (lo usa el desglose del reparto). */
+  porcentajeComisionServicio?: number | null;
 }
 
 type PaymentMethod = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
@@ -350,6 +354,60 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     if (hasAdjustment && notaAjuste.trim().length === 0) return false;
     return true;
   }, [cart, productCart, clienteId, empleadaId, paymentMethod, montoRecibido, finalTotal, hasAdjustment, notaAjuste, esFiado]);
+
+  /* ── PR5: desglose visible del reparto (espejo de la fórmula del server) ──
+   * El dueño quiere ver que el costo de insumos se descuenta del total cobrado
+   * y que el resto se reparte entre la empleada y el salón. Se muestra cuando
+   * hay un total ajustado o una línea POR_GRAMO. */
+  const empleadaSeleccionada = useMemo(
+    () => empleadas.find((e) => e.id === Number(empleadaId)) ?? null,
+    [empleadas, empleadaId],
+  );
+
+  const porcentajeComisionEmpleada = empleadaSeleccionada?.porcentajeComisionServicio ?? null;
+
+  const hayServicioPorGramo = useMemo(
+    () => cart.some((item) => item.tipoCostoInsumo === 'POR_GRAMO'),
+    [cart],
+  );
+
+  const totalCostoInsumos = useMemo(
+    () =>
+      cart.reduce(
+        (sum, item) =>
+          sum +
+          costoUnitarioLinea({
+            tipoCostoInsumo: item.tipoCostoInsumo,
+            gramosUsados: item.gramosUsados,
+            precioPorGramo: item.precioPorGramo,
+            costoBaseInsumos: item.costoBaseInsumos,
+          }) * item.cantidad,
+        0,
+      ),
+    [cart],
+  );
+
+  const desglose = useMemo(
+    () =>
+      calcularDesgloseReparto({
+        totalServicios,
+        totalProductos,
+        propina,
+        totalCostoInsumos,
+        valorFinal: finalTotal,
+        porcentajeComision: porcentajeComisionEmpleada ?? 0,
+      }),
+    [
+      totalServicios,
+      totalProductos,
+      propina,
+      totalCostoInsumos,
+      finalTotal,
+      porcentajeComisionEmpleada,
+    ],
+  );
+
+  const mostrarDesglose = hasAdjustment || hayServicioPorGramo;
 
   /* ── Fetch data on modal open ── */
 
@@ -1763,6 +1821,14 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     <span>{formatCurrency(finalTotal)}</span>
                   </div>
                 </div>
+
+                {/* ── PR5: ¿Cómo se reparte? (cobrado − insumos = a repartir) ── */}
+                {mostrarDesglose && (
+                  <DesgloseReparto
+                    desglose={desglose}
+                    porcentajeComision={porcentajeComisionEmpleada}
+                  />
+                )}
 
                 {/* ── Submit ── */}
                 <div className={styles.submitSection}>
