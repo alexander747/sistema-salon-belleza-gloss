@@ -101,6 +101,15 @@ Use `apps/api/src/shared/pagination.ts` — `PaginatedResult<T>` with `paginate(
 ### DB_PORT is 3307
 MySQL is exposed on port **3307** (not the default 3306). The `.env` in `apps/api/` must match.
 
+### Costo de insumos: modo FIJO vs POR_GRAMO
+A service has `tipoCostoInsumo` (`FIJO` | `POR_GRAMO`) plus `precioPorGramo`. For `POR_GRAMO`, the real supply cost is `gramosUsados × precioPorGramo` (or `precioPorGramo` from the catalog at sale time) and is derived **server-side from the catalog** — any client-supplied `costoBaseInsumos` on a `POR_GRAMO` line is **ignored** (anti-forgery: prevents shrinking the commission base). Commission stays `max(0, totalServicios − Σ costo real) × porcentaje`. The cost logic lives in `CostoInsumoService` (single point) and feeds `ComisionService`, `PyLMensualUseCase`, `ResumenDiaUseCase` and `FinanzasPage`.
+
+### Service quantity in a sale/cita
+`serviciosItems` accepts `cantidad` (int ≥ 1, default 1). A line with `cantidad = N` expands to N per-unit item rows server-side, and `totalServicios = Σ(precio × cantidad)`. In citas, `duracionTotalMinutos = Σ(duracionMinutos × cantidad)` (affects overlap/availability math).
+
+### `citas_servicios` column names (naming trap)
+The live table is `citas_servicios(citasId, serviciosId, cantidad)` — TypeORM `synchronize` naming. The names `citaId`/`servicioId` in `InitialSchema` are **STALE and were never applied**: production runs with `DB_SYNCHRONIZE=true` and does not run migrations. Any new entity or `ALTER` must use `citasId`/`serviciosId`, and migrations must be additive (`ADD COLUMN ... DEFAULT`), never a rename/recreate.
+
 ## Common workflows
 
 ### Debugging a cita creation flow

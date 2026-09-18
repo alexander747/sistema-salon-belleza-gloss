@@ -75,4 +75,4 @@ Each unit keeps tests with its code; each is independently shippable. Verify: `c
 
 ## Phase 4 — Documentation
 
-- [ ] 4.1 `AGENTS.md` gotchas: `tipoCostoInsumo`/`precioPorGramo`, quantity semantics, join-table naming, validation rebuild.
+- [x] 4.1 `AGENTS.md` gotchas: `tipoCostoInsumo`/`precioPorGramo`, quantity semantics, join-table naming, validation rebuild.
