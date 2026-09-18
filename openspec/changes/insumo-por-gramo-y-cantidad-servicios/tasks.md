@@ -87,3 +87,15 @@ Feedback del dueño en móvil (390×844): el input de gramos quedaba en 70×24 p
 - [x] 5.4 GREEN: `AgendaPage.tsx` + `AgendaPage.module.css` — `serviceCardMain` + `gramsField` de ancho completo.
 - [x] 5.5 Spec delta `finanzas-registros`: requirement "Captura de gramos usable en móvil" + 3 scenarios.
 - [x] 5.6 Verify: dashboard `vitest` + `tsc --noEmit`; api `vitest` sin regresión.
+
+## Phase 6 — PR5: Explicación visual del reparto
+
+Pedido del dueño: que la UI explique que el costo de insumos se descuenta del total cobrado y el resto se reparte entre la empleada y el salón.
+
+- [x] 6.1 RED→GREEN: `reparto.test.ts` — espejo puro de `CreateRegistroUseCase`/`ComisionService`: caso canónico (300.000/24.000/276.000/165.600/110.400), prorrateo con productos/propina, borde insumo > cobrado (0, nunca negativo) y `costoUnitarioLinea`.
+- [x] 6.2 GREEN: `apps/pos-dashboard/src/utils/reparto.ts` (`calcularDesgloseReparto`, `costoUnitarioLinea`).
+- [x] 6.3 RED→GREEN: `DesgloseReparto.tsx` + CSS — panel compartido (Cobrado − Insumos = A repartir, comisión %, queda salón, aviso y frase explicativa).
+- [x] 6.4 RED→GREEN: `WalkInModal.test.tsx` — caso canónico, solo ajuste (FIJO) y borde sin negativos; `WalkInModal.tsx` cablea el panel.
+- [x] 6.5 RED→GREEN: `AgendaPage.test.tsx` — caso canónico (números + payload) y borde; `AgendaPage.tsx` cablea el panel con el % de la empleada de la cita.
+- [x] 6.6 Spec delta `finanzas-registros`: requirement "Explicación visual del reparto" + 3 scenarios.
+- [x] 6.7 Verify: dashboard `vitest` + `tsc --noEmit`; api `vitest` sin regresión.

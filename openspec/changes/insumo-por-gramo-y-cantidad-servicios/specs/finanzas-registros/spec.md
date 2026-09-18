@@ -112,3 +112,28 @@ La UI de creación de registros (venta de mostrador y "completar cita") MUST pre
 - GIVEN una línea `POR_GRAMO` con el input de gramos vacío o en 0
 - WHEN la línea se renderiza
 - THEN la UI MUST NOT mostrar "Costo de insumo $ 0"
+
+### Requirement: Explicación visual del reparto (cobrado − insumos = a repartir)
+
+La UI de creación de registros (venta de mostrador y "completar cita") MUST explicar visualmente, con los mismos números que el servidor persiste, cómo se reparte el dinero cuando hay un total ajustado y/o una línea `POR_GRAMO`. SHALL mostrar `Cobrado` (la parte de servicios del total realmente cobrado, prorrateada igual que `CreateRegistroUseCase`), `Insumos` (el `totalCostoBaseInsumos` derivado por el servidor, restado COMPLETO — no prorrateado por el descuento) y `A repartir` (= `max(0, cobrado − insumos)`). Cuando la empleada seleccionada tiene un porcentaje de comisión, la UI MUST mostrar además `Comisión empleada ({porcentaje}%)` e MUST calcularla como `aRepartir × (porcentaje / 100)`, y `Queda para el salón` como `aRepartir − comisión`. La UI MUST incluir una frase corta en español que indique que el costo de insumos se descuenta del total cobrado y el resto se reparte entre la empleada y el salón.
+
+#### Scenario: Desglose canónico del dueño
+
+- GIVEN un servicio `POR_GRAMO` con `precioPorGramo=800`, un total cobrado ajustado a 300.000 y 30 gramos usados, con la empleada al 60%
+- WHEN la UI renderiza el desglose del reparto
+- THEN muestra `Cobrado $ 300.000`, `Insumos − $ 24.000`, `A repartir $ 276.000`, `Comisión empleada (60%) $ 165.600` y `Queda para el salón $ 110.400`
+- AND los valores MUST coincidir con la comisión y el costo que el servidor persiste para ese registro
+
+#### Scenario: Insumo mayor al total cobrado
+
+- GIVEN un total cobrado de 20.000 y un costo de insumos derivado de 24.000, con comisión del 60%
+- WHEN la UI renderiza el desglose del reparto
+- THEN `A repartir` es `$ 0` y `Comisión empleada` es `$ 0` (el servidor clampa en 0)
+- AND la UI muestra el aviso "La comisión queda en $0 porque el insumo supera el total cobrado."
+- AND la UI MUST NOT mostrar valores negativos
+
+#### Scenario: Productos y propina prorratean la parte de servicios
+
+- GIVEN `totalServicios=100.000`, `totalProductos=50.000`, `propina=10.000`, `valorFinal=120.000` e insumos por 20.000
+- WHEN la UI calcula el desglose
+- THEN `Cobrado` de servicios MUST ser 73.333 (mismo prorrateo del servidor) AND `A repartir` MUST ser 53.333
