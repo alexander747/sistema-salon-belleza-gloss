@@ -45,13 +45,15 @@ Owner decision (supersedes earlier field-omission on `pyl`):
 
 ## Phase 2: Frontend role gating (PR2)
 
-- [ ] 2.1 RED: extend `roles.test.ts`; add FinanzasPage card/export gate tests; update `FinanzasPage.test.tsx:475` to assert button absent.
-- [ ] 2.2 Extend `utils/roles.ts` with `PRIVILEGED_ROLES` + `isPrivilegedRole(user)`; `ROLES_CUENTAS` references it.
-- [ ] 2.3 `FinanzasPage.tsx`: optional HTTP types (`FinanzasResumen:30`, `PyLData:183-191`).
-- [ ] 2.4 Replace inline `isPrivileged` (`:642-646`, `:4153-4158`) with helper.
-- [ ] 2.5 Registros: render `🧴 Total insumos` only when privileged, value `resumen.totalCostoBaseInsumos ?? 0`.
-- [ ] 2.6 Reportes: hide the whole tab for non-privileged (owner decision: Reportes = privileged); hide `📥 Exportar Excel`.
-- [ ] 2.7 GREEN: `cd apps/pos-dashboard && npx vitest run` + type-check.
+- [x] 2.1 RED: extend `roles.test.ts`; add FinanzasPage card/export gate tests; update `FinanzasPage.test.tsx:475` to assert button absent.
+- [x] 2.2 Extend `utils/roles.ts` with `PRIVILEGED_ROLES` + `isPrivilegedRole(user)`; `ROLES_CUENTAS` references it.
+- [x] 2.3 `FinanzasPage.tsx`: optional HTTP types (`FinanzasResumen:30`, `PyLData:183-191`).
+- [x] 2.4 Replace inline `isPrivileged` (`:642-646`, `:4153-4158`) with helper.
+- [x] 2.5 Registros: render `🧴 Total insumos` only when privileged, value `resumen.totalCostoBaseInsumos ?? 0`.
+- [x] 2.6 Reportes: hide the whole tab for non-privileged (owner decision: Reportes = privileged); hide `📥 Exportar Excel`.
+- [x] 2.7 GREEN: `cd apps/pos-dashboard && npx vitest run` (384 passed / 2 fallas pre-existentes) + `tsc --noEmit` (0 errores).
+
+Commit: 907df06 (feat frontend).
 
 ## Phase 3: Nómina informational insumo (PR3)
 
