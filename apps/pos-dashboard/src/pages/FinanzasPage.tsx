@@ -16,7 +16,7 @@ import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { isPrivilegedRole } from '../utils/roles.js';
-import { buildAclaracionCobrado } from '../utils/aclaracionCobrado.js';
+import { buildTiraReconciliacion } from '../utils/tiraReconciliacion.js';
 import { formatCurrency } from '../utils/format.js';
 import type { ReciboSalon } from '../utils/recibo.js';
 import styles from './FinanzasPage.module.css';
@@ -41,6 +41,8 @@ interface FinanzasResumen {
   totalCobrado?: number;
   /** PR2 — Σ montoPendiente de registros NO ANULADO del período (fiado originado). */
   totalFiadoDia?: number;
+  /** PR6 revisión — pagos del período sobre ventas con registro anterior al período. */
+  cobrosDeudaAnterior?: number;
 }
 
 interface Pago {
@@ -832,8 +834,8 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
     registroClienteNombre ? `del cliente ${registroClienteNombre}` : '',
   ].filter(Boolean).join(' ');
 
-  /* PR6 — aclaración discreta de la diferencia Cobrado − Ingresos (texto, no tarjeta). */
-  const aclaracionCobrado = resumen ? buildAclaracionCobrado(resumen) : null;
+  /* PR6 revisión — tira de reconciliación (texto, fuera del summaryGrid). SIEMPRE presente. */
+  const tiraRows = buildTiraReconciliacion(resumen ?? {});
 
   /* ── Skeleton ── */
   if (loading) {
@@ -890,15 +892,15 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         initial="hidden"
         animate="show"
       >
-        <motion.div variants={itemVariants} className={styles.summaryCard}>
+        <motion.div variants={itemVariants} className={styles.summaryCard} data-testid="card-ventas-dia">
           <span className={styles.summaryLabel}>
-            💰 TOTAL INGRESOS
+            💰 Ventas del día
             <Tooltip
-              title="Ingresos = devengado del período (servicios y productos, sin propinas)."
+              title="Lo que facturaste en el período: servicios y productos, sin propinas. Incluye lo fiado (todavía no cobrado)."
               describeChild
               arrow
             >
-              <button type="button" className={styles.infoAffix} aria-label="Qué significa Ingresos">
+              <button type="button" className={styles.infoAffix} aria-label="Qué significa Ventas del día">
                 ⓘ
               </button>
             </Tooltip>
@@ -909,15 +911,15 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         </motion.div>
         {/* PR2 cash (decisión owner: el ingreso se cuenta cuando se cobra):
             totalCobrado = Σ pagos recibidos; totalFiadoDia = fiado originado en el período. */}
-        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
+        <motion.div variants={itemVariants} className={styles.summaryCard} data-testid="card-entro-caja" style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
           <span className={styles.summaryLabel}>
-            💰 Cobrado
+            💰 Entró a caja
             <Tooltip
-              title="Ingresos = devengado (servicios y productos, sin propinas). Cobrado = efectivo recibido (con propinas y abonos de deudas anteriores)."
+              title="La plata que realmente entró en el período: incluye propinas y cobros de deudas anteriores. No cuenta lo fiado."
               describeChild
               arrow
             >
-              <button type="button" className={styles.infoAffix} aria-label="Qué significa Cobrado">
+              <button type="button" className={styles.infoAffix} aria-label="Qué significa Entró a caja">
                 ⓘ
               </button>
             </Tooltip>
@@ -1010,12 +1012,29 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         */}
       </motion.div>
 
-      {/* PR6 — línea de aclaración (texto, no tarjeta). Solo cuando Cobrado ≠ Ingresos. */}
-      {aclaracionCobrado && (
-        <p role="note" data-testid="aclaracion-cobrado" className={styles.aclaracionCobrado}>
-          {aclaracionCobrado}
-        </p>
-      )}
+      {/* PR6 revisión — tira de reconciliación (solo texto, no es una tarjeta).
+          Filas de componente en 0 ocultas; filas de cierre siempre visibles. */}
+      <div className={styles.tiraReconciliacion} data-testid="tira-reconciliacion">
+        {tiraRows.map((row) =>
+          row.kind === 'divider' ? (
+            <hr key={row.key} className={styles.tiraDivider} data-testid={`tira-${row.key}`} />
+          ) : (
+            <div
+              key={row.key}
+              data-testid={`tira-row-${row.key}`}
+              className={`${styles.tiraRow} ${row.kind === 'closing' ? styles.tiraRowClosing : ''}`}
+            >
+              <span className={styles.tiraLabel}>{row.label}</span>
+              <span className={styles.tiraValueGroup}>
+                <span aria-hidden="true" className={styles.tiraSign}>
+                  {row.sign}
+                </span>
+                <span className={styles.tiraValue}>{formatCurrency(row.value)}</span>
+              </span>
+            </div>
+          ),
+        )}
+      </div>
 
       {/* ── Toolbar ── */}
       <div className={styles.toolbar}>

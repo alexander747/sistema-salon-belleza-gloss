@@ -118,13 +118,73 @@
   border-radius: 2px;
 }
 
-/* PR6 — línea única de aclaración Cobrado − Ingresos (texto, fuera del summaryGrid) */
-.aclaracionCobrado {
-  margin: -0.5rem 0 1.25rem;
+/* PR6 revisión — tira de reconciliación (texto, fuera del summaryGrid) */
+.tiraReconciliacion {
+  margin: -0.25rem 0 1.25rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   font-family: 'DM Sans', sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--text-secondary);
-  letter-spacing: 0.01em;
+}
+
+.tiraRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.15rem 0.75rem;
+  min-width: 0;
+  padding: 0.15rem 0;
+}
+
+.tiraRowClosing .tiraValue {
+  color: var(--accent);
+}
+
+.tiraLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tiraValueGroup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.tiraSign {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tiraValue {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.tiraDivider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.4rem 0;
+}
+
+/* Móvil (≤480px): apila label/valor y deja encoger el texto → sin scroll horizontal */
+@media (max-width: 480px) {
+  .tiraRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tiraValueGroup {
+    margin-left: 0;
+  }
 }
 
 .summaryEmoji {

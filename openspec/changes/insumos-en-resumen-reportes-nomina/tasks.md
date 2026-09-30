@@ -14,7 +14,7 @@
 
 (Historical: chained PRs `Yes`, chain `feature-branch-chain`, risk `High` — PR1–PR5 already landed.)
 
-## Review Workload Forecast — PR6 (active)
+## Review Workload Forecast — PR6 first pass (SUPERSEDED by the PR6 revision below)
 
 | Field | Value |
 |-------|-------|
@@ -25,10 +25,23 @@
 | Delivery strategy | auto-forecast |
 | Chain strategy | feature-branch-chain |
 
-Decision needed before apply: No
-Chained PRs recommended: No
+Historical (commit `b4967a9`): tooltip + conditional line, replaced by Phase 8.
+
+## Review Workload Forecast — PR6 revisión (active)
+
+| Field | Value |
+|-------|-------|
+| Estimated changed lines | ~550–700 (backend ~200, frontend ~450; deletes: old helper+test ~130, dead DTO ~12) |
+| 400-line budget risk | High |
+| Chained PRs recommended | Yes |
+| Suggested split | PR6a backend `cobrosDeudaAnterior` → PR6b frontend renombres + tira (base PR6a) |
+| Delivery strategy | ask-on-risk |
+| Chain strategy | feature-branch-chain |
+
+Decision needed before apply: Yes
+Chained PRs recommended: Yes
 Chain strategy: feature-branch-chain
-400-line budget risk: Low
+400-line budget risk: High
 
 ### Suggested Work Units
 
@@ -38,7 +51,9 @@ Chain strategy: feature-branch-chain
 | 2 | Frontend card/export gating | PR 2 | `feat/insumos-reportes-pr1-backend` | helper + types + cards |
 | 3 | Nómina informational insumo | PR 3 | `feat/insumos-reportes-pr2-frontend` | use case + UI + tests |
 | 4 | Registros pagination fix | PR 5 | `feat/insumos-reportes-pr3-nomina` | backend + frontend + spec |
-| 5 | Ingresos/Cobrado clarification (PR6) | PR 6 | `feat/insumos-reportes-pr6-aclaracion` (base PR5 `6c2106e`) | UI only + component tests + D7 |
+| 5 | Ingresos/Cobrado clarification (PR6 first pass) | PR 6 | `feat/insumos-reportes-pr6-aclaracion` | SUPERSEDED by Phase 8 |
+| 6 | `cobrosDeudaAnterior` backend (PR6a) | PR 6a | chain base (PR5 `6c2106e`) | repo + use case + tests; delete dead `ResumenDiaDTO.ts` |
+| 7 | Tira de reconciliación + renombres (PR6b) | PR 6b | PR 6a branch | pure builder + page + responsive CSS + tests |
 
 ## Phase 1: Backend role policy (PR1)
 
@@ -118,7 +133,10 @@ Bug reportado por el owner (verificado con data real): en el período 2026-09-04
 - [x] 6.11 GREEN: `cd apps/api && npx vitest run` (623 passed / 5 baseline) + `npx tsc --noEmit` (1 baseline `seed.ts`); `cd apps/pos-dashboard && npx vitest run` (391 passed / 2 baseline) + `npx tsc --noEmit` (0).
 - [x] 6.12 Prueba runtime (API :3001, DB local = prod): `GET /salones/1/registros` período 2026-09-04..09-29 → ACTIVOS `meta.total=15`/15 filas, ANULADOS `11`/11, TODOS `26`/26, SERVICIOS `25`, PRODUCTOS `1`; sin params `26` (compat). `meta.total == filas` en todos.
 
-## Phase 7: PR6 — aclaración Ingresos/Cobrado (sin tarjetas nuevas)
+## Phase 7: PR6 first pass — aclaración Ingresos/Cobrado (SUPERSEDED — ver Phase 8)
+
+> Superseded by the owner-approved UX revision (Phase 8). Phase 7 shipped in commit `b4967a9`; its
+> `utils/aclaracionCobrado.ts` (+ test) and the conditional line are removed in Phase 8. Kept for history.
 
 Scope: `apps/pos-dashboard/src/pages/FinanzasPage.tsx` summary de Registros + `__tests__/FinanzasPage.test.tsx`.
 Spec delta already in `specs/finanzas-registros/spec.md` (2 requirements). No new primitives, cards, metrics, rows or API fields.
@@ -132,4 +150,34 @@ Spec delta already in `specs/finanzas-registros/spec.md` (2 requirements). No ne
 - [x] 7.7 GREEN (línea): helper único que computa `gap`/`tips` con `Math.round` (valores enteros del API) y devuelve el texto según la tabla D7; renderizar una sola línea `role="note"` bajo `summaryGrid`, o `null` si `gap===0`/`resumen==null`. No altera ningún total.
 - [x] 7.8 GREEN: `cd apps/pos-dashboard && npx vitest run` (objetivo: 391 previos + tests PR6, ≤2 fallas baseline) y `npx tsc --noEmit` (0 errores).
 - [x] 7.9 Artifact sync: confirmar delta PR6 en `specs/finanzas-registros/spec.md`, addendum D7 en `design.md`, esta Phase 7 y Engram `sdd/insumos-en-resumen-reportes-nomina/tasks`.
+
+## Phase 8: PR6 revisión — tira de reconciliación + `cobrosDeudaAnterior`
+
+Supersedes Phase 7 (`b4967a9`). Two work units: **PR6a backend field**, **PR6b frontend UX**.
+Specs already revised: `finanzas-registros` ("Nombres y aclaración accesible…" + "Tira de reconciliación…"),
+`finanzas-reportes` ("Cobros de deuda anterior en el resumen"). PR6b base = PR6a branch; PR6a base = chain base.
+
+### Work unit PR6a — backend `cobrosDeudaAnterior`
+
+- [x] 8.1 RED repo: `TypeORMRegistroServicioRepository.test.ts` nuevo `describe('sumCobrosDeudaAnterior')` — Σ pagos con `FECHA_NEGOCIO_PAGO_SQL` en `[inicio, fin)` Y registro (`DATE_FORMAT(COALESCE(r.fechaHora,r.creadoEn),'%Y-%m-%d')`) `< fechaInicioStr`; ANULADO excluido; respeta `usuarioId`/`clienteId`; `SUM NULL` → 0.
+- [x] 8.2 GREEN domain+repo: agregar `sumCobrosDeudaAnterior(salonId, inicio, fin, usuarioId?, clienteId?)` a `IRegistroServicioRepository` e implementarlo en `TypeORMRegistroServicioRepository`, reusando `FECHA_NEGOCIO_PAGO_SQL` + `fechaColombiaStr`.
+- [x] 8.3 RED use case: `ResumenDiaUseCase.test.ts` — el mock agrega `sumCobrosDeudaAnterior`; asserta que el `Promise.all` lo llama, que `output.cobrosDeudaAnterior` refleja el valor y que es 0 sin deuda; identidad `Cobrado = Ventas − Fiado + CobrosDeudaAnterior + Propinas`.
+- [x] 8.4 GREEN use case: agregarlo al `Promise.all`, a `ResumenDiaOutput` (`cobrosDeudaAnterior: number`) y al `return`.
+- [x] 8.5 RED controller: `ReporteController.test.ts` — la respuesta NO privilegiada incluye `cobrosDeudaAnterior` (sobrevive al destructuring de omisión) y sigue omitiendo insumos+balanceNeto; la privilegiada lo incluye.
+- [x] 8.6 GREEN controller + dead code: el passthrough `res.json(result)` ya expone el campo a todos los roles (sin cambios de omisión). Eliminar `apps/api/src/modules/finanzas/application/dtos/ResumenDiaDTO.ts` (dead code: nunca importado — contrato vivo es `ResumenDiaOutput`; ver `exploration.md:237`).
+- [x] 8.7 TRIANGULATE backend: multi-pago en varios registros; un pago del período sobre un registro del período NO suma; período sin deuda → 0.
+- [x] 8.8 GREEN: `cd apps/api && npx vitest run` (+ `npx tsc --noEmit`, baseline 1 error `seed.ts`).
+
+### Work unit PR6b — frontend renombres + tira
+
+- [x] 8.9 RED builder: nuevo `apps/pos-dashboard/src/utils/tiraReconciliacion.test.ts` — filas en orden; componentes con valor 0 ocultos; filas de cierre siempre; `TU CAJA REAL = totalCobrado − totalPropinas`; redondeo a enteros; input vacío → cierres en $0.
+- [x] 8.10 GREEN builder + delete: crear `utils/tiraReconciliacion.ts` (`buildTiraReconciliacion(input): TiraRow[]`, unión discriminada component/divider/closing); ELIMINAR `utils/aclaracionCobrado.ts` y `aclaracionCobrado.test.ts` (superseded — sin código ni tests muertos).
+- [x] 8.11 RED page: actualizar el `describe` PR6 de `FinanzasPage.test.tsx` — "Ventas del día"/"Entró a caja" presentes y `TOTAL INGRESOS`/`Cobrado` (etiqueta exacta) ausentes; ⓘ re-formulado y enfocable; tira SIEMPRE presente (aunque `Cobrado===Ingresos`); filas 0 ocultas / cierres visibles; `TU CAJA REAL` = Cobrado−Propinas; NO tarjetas nuevas (7); visible para rol no privilegiado.
+- [x] 8.12 GREEN page: `FinanzasPage.tsx` — renombrar labels y reescribir títulos/`aria-label` del ⓘ; reemplazar `buildAclaracionCobrado` por el render de la tira (fuera de `summaryGrid`, texto explicativo); agregar `cobrosDeudaAnterior?: number` a `FinanzasResumen`; sin tarjetas nuevas.
+- [x] 8.13 GREEN responsive: `FinanzasPage.module.css` — `.tiraReconciliacion` + filas flex con `flex-wrap`, `min-width: 0`, `overflow-wrap: anywhere`; `@media (max-width: 480px)` apila label/valor sin scroll horizontal; borrar `.aclaracionCobrado`.
+- [x] 8.14 RED/GREEN responsive: component test de estructura (orden de filas + clases del wrapper); nota justificada de verificación manual mobile (jsdom no aplica layout/CSS).
+- [x] 8.15 Actualizar los demás tests que referencian `💰 TOTAL INGRESOS` (`FinanzasPage.test.tsx:370`, `:2225`) y los testids viejos.
+- [x] 8.16 TRIANGULATE frontend: `resumen` ausente/undefined → tira con cierres en $0; caso con todos los componentes en 0; no forzar `TU CAJA REAL` a positivo.
+- [x] 8.17 GREEN: `cd apps/pos-dashboard && npx vitest run` (+ `npx tsc --noEmit`, baseline 0).
+- [x] 8.18 Artifact sync: `design.md` D7 (NUEVA UX + campo backend), esta Phase 8, Engram `sdd/insumos-en-resumen-reportes-nomina/tasks`.
 

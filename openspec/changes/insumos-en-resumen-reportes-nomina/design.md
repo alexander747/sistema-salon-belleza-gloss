@@ -113,32 +113,54 @@ only correct fix is to make the backend own the filter and make total+rows share
 
 Invalid values fall back to `TODOS` (zod `.catch`). No migration; rollback is code-only.
 
-### D7 — PR6: aclaración Ingresos vs Cobrado (sin tarjetas nuevas)
+### D7 — PR6 revisión: nombres del dueño + tira de reconciliación + `cobrosDeudaAnterior`
 
-**Choice**:
-- **Affordance**: reuse the MUI `Tooltip` already shipped in the app (`LuxeLayout.tsx:18`) wrapping a
-  native, focusable `ⓘ` button inside the existing Ingresos and Cobrado cards. `describeChild` so the
-  tooltip becomes the button's accessible description; `aria-label` carries the accessible name. No new
-  cards, metrics or rows; no new dependency.
-- **Equality comparison**: `const gap = Math.round(resumen.totalCobrado ?? 0) - Math.round(resumen.totalIngresos)`
-  and `const tips = Math.round(resumen.totalPropinas)`. The line renders only when `resumen != null` and
-  `gap !== 0`.
-- **Wording rule** (one single `role="note"` line below `summaryGrid`, text only, never a card):
+**Supersedes** the first PR6 pass (`b4967a9`: tooltip + conditional line). The old
+`apps/pos-dashboard/src/utils/aclaracionCobrado.ts` (+ test) is **deleted** — no dead code, no dead tests.
 
-  | Condition | Copy |
-  |---|---|
-  | `gap === tips && tips > 0` | `Cobrado incluye {fmt(tips)} de propinas` |
-  | `gap > tips` | `Cobrado incluye {fmt(tips)} de propinas y otros cobros de caja (abonos de deudas anteriores / fiado del período)` — never prints the residual amount (API exposes no prior-debt field) |
-  | `gap > 0 && tips === 0` | `Cobrado incluye otros cobros de caja (abonos de deudas anteriores / fiado del período)` |
-  | `gap < 0` | `Parte de los ingresos del período aún no se cobró (fiado)` |
-  | `gap === 0` | render nothing |
+**Renames (owner language)**: `TOTAL INGRESOS` → **"Ventas del día"**; `Cobrado` → **"Entró a caja"**.
+"🧴 Total insumos" keeps its name and privileged gating. Both renamed cards keep a focusable "ⓘ" affix
+(MUI `Tooltip` + `describeChild`, distinct `aria-label`), re-worded:
+- Ventas del día: "Lo que facturaste en el período: servicios y productos, sin propinas. Incluye lo fiado (todavía no cobrado)."
+- Entró a caja: "La plata que realmente entró en el período: incluye propinas y cobros de deudas anteriores. No cuenta lo fiado."
 
-**Alternatives**: native `title` (not focus-reliable, not assertable in jsdom) and a bespoke CSS bubble
-(reinvents a primitive) — rejected. Uncommenting the existing `🎁 Propinas` card — rejected by the spec
-(no new cards).
+**Reconciliation strip** — `buildTiraReconciliacion` (pure builder → `TiraRow[]`): always rendered,
+text-only, **outside `summaryGrid`**, never a card. Components with value 0 are hidden; closing rows
+always render. Order:
 
-**Rationale**: one decision point over rounded API integers, an existing accessible primitive, and no
-fabricated amount for a component the `resumen` does not expose. Both cards remain visible to all roles.
+| Kind | Label | Value | Sign |
+|---|---|---|---|
+| component | Ventas del día | `totalIngresos` | + |
+| component | Quedó fiado | `totalFiadoDia` | − |
+| component | Deudas viejas que te pagaron | `cobrosDeudaAnterior` | + |
+| component | Propinas | `totalPropinas` | + |
+| divider | — | — | — |
+| closing | Entró a caja | `totalCobrado` | = |
+| closing | Propinas (van a las chicas) | `totalPropinas` | − |
+| divider | — | — | — |
+| closing | TU CAJA REAL (sin propinas) | `totalCobrado − totalPropinas` | = |
+
+Only client computation: `TU CAJA REAL = Math.round(totalCobrado) − Math.round(totalPropinas)`; every
+other row prints the API value. Built from `resumen ?? {}` so the strip is always present.
+
+**Responsive (owner requirement)**: rows are flex with `flex-wrap: wrap`, `min-width: 0`,
+`overflow-wrap: anywhere`; a `@media (max-width: 480px)` rule stacks label/value → no horizontal
+scroll. Covered by a component test on structure + a documented manual mobile check (jsdom has no
+layout engine).
+
+**Backend field `cobrosDeudaAnterior`** (non-sensitive → ALL roles, like `totalIngresos`/`totalCobrado`):
+new repo method `sumCobrosDeudaAnterior` = Σ pagos whose payment business date
+(`FECHA_NEGOCIO_PAGO_SQL`) is in the period AND whose REGISTRO business date
+(`DATE_FORMAT(COALESCE(r.fechaHora, r.creadoEn), '%Y-%m-%d')`) is `< fechaInicioStr`; excludes
+`ANULADO`, respects `usuarioId`/`clienteId`, `SUM NULL → 0`. Wired into `ResumenDiaUseCase`
+`Promise.all` + `ResumenDiaOutput`. The controller passthrough already returns it for every role
+(only `totalCostoBaseInsumos`/`balanceNeto` are omitted). The named `ResumenDiaDTO.ts` is **dead code**
+(never imported; the live contract is `ResumenDiaOutput`) → deleted in PR6a.
+
+**Alternatives**: native `title` / bespoke CSS bubble (not focus-reliable, not assertable in jsdom) —
+rejected; keeping the conditional line — superseded by the owner UX; uncommenting a `🎁 Propinas` card —
+rejected (spec forbids new cards). Result: one tested pure builder, one existing accessible primitive,
+no fabricated amounts.
 
 ## Data Flow
 

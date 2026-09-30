@@ -109,23 +109,33 @@ MUST NOT filtrar client-side, para que `meta.total` y las filas renderizadas coi
 - AND la tabla renderiza exactamente las filas devueltas por el servidor
 - AND el total de la paginación refleja `meta.total` (sin descuadre total/filas)
 
-### Requirement: Aclaración accesible de Ingresos vs Cobrado (sin tarjetas nuevas)
+### Requirement: Nombres y aclaración accesible de las tarjetas de venta y caja
 
-El resumen del período en Registros MUST explicar la diferencia semántica entre las tarjetas
-"Ingresos" y "Cobrado" mediante un afijo discreto "ⓘ" en cada tarjeta, alcanzable por teclado y con
-nombre/descripción accesible (no solo color). El texto MUST definir: `Ingresos` = devengado del
-período (servicios + productos, SIN propinas); `Cobrado` = efectivo recibido en el período (SÍ
-incluye propinas y abonos de deudas anteriores). El cambio MUST NOT agregar tarjetas, métricas ni
-filas nuevas al `summaryGrid`. Las tarjetas Ingresos y Cobrado —y por tanto el afijo y la línea
-condicional— MUST ser visibles para TODOS los roles, igual que hoy; para roles no privilegiados el
-`resumen` ya viene acotado a su propio `usuarioId` y la aclaración aplica igual.
+Las tarjetas del resumen de Registros MUST hablar en lenguaje del dueño: "TOTAL INGRESOS" SHALL
+renombrarse a **"Ventas del día"** (descripción: "servicios y productos, sin propinas") y "Cobrado"
+SHALL renombrarse a **"Entró a caja"** (descripción: "toda la plata que entró, con propinas y deudas
+viejas"). "Total insumos" NO se renombra y conserva su gating por rol privilegiado. Cada tarjeta
+renombrada MUST exponer un afijo "ⓘ" discreto, alcanzable por teclado y con nombre/descripción
+accesible (no solo color). Texto del ⓘ: Ventas del día = "Lo que facturaste en el período: servicios
+y productos, sin propinas. Incluye lo fiado (todavía no cobrado)."; Entró a caja = "La plata que
+realmente entró en el período: incluye propinas y cobros de deudas anteriores. No cuenta lo fiado.".
+El cambio MUST NOT agregar tarjetas ni métricas nuevas. Ambas tarjetas MUST ser visibles para TODOS
+los roles.
 
-#### Scenario: Afijo ⓘ explica la diferencia
+#### Scenario: Tarjetas renombradas
 
-- GIVEN FinanzasPage en Registros con `totalIngresos=935000` y `totalCobrado=940000`
-- WHEN el usuario enfoca o hace hover en el "ⓘ" de la tarjeta Cobrado
-- THEN muestra un texto que define Ingresos (devengado, sin propinas) y Cobrado (efectivo, con propinas y abonos)
-- AND el afijo es alcanzable por teclado y expone nombre/descripción accesible
+- GIVEN el resumen de Registros renderizado
+- WHEN se inspeccionan las tarjetas de venta y caja
+- THEN "Ventas del día" y "Entró a caja" están en el DOM
+- AND los textos "TOTAL INGRESOS" y "Cobrado" (etiqueta exacta) NO están
+
+#### Scenario: Afijo ⓘ accesible y re-formulado
+
+- GIVEN FinanzasPage en Registros con totalIngresos y totalCobrado
+- WHEN el usuario enfoca o hace hover en el "ⓘ" de cada tarjeta
+- THEN "Ventas del día" define devengado sin propinas e incluye lo fiado
+- AND "Entró a caja" define efectivo con propinas y deudas anteriores, y excluye lo fiado
+- AND ambos afijos son alcanzables por teclado con nombre/descripción accesible
 
 #### Scenario: Sin tarjetas nuevas
 
@@ -134,42 +144,65 @@ condicional— MUST ser visibles para TODOS los roles, igual que hoy; para roles
 - THEN la cantidad de tarjetas NO aumenta respecto de antes de PR6
 - AND NO aparece una tarjeta "Propinas" ni ninguna métrica nueva
 
-### Requirement: Línea condicional que explica la diferencia Cobrado − Ingresos
+### Requirement: Tira de reconciliación del resumen (sin tarjetas nuevas)
 
-Cuando `totalCobrado !== totalIngresos`, el resumen MUST mostrar UNA única línea discreta (texto, no
-tarjeta) que explique la diferencia usando SOLO campos expuestos por el API. `totalCobrado` incluye
-propinas y abonos de deuda anterior; `totalIngresos` NO incluye propinas. Por tanto: si
-`totalCobrado − totalIngresos === totalPropinas`, la línea MUST indicar que el Cobrado incluye
-`$totalPropinas` de propinas. Si la diferencia supera `totalPropinas`, la línea MUST reportar las
-propinas y describir el residual de forma genérica como otros cobros de caja (p. ej. abonos de deudas
-anteriores / fiado del período); MUST NOT inventar un monto exacto para un componente que el API no
-expone (el `resumen` de Registros NO devuelve un campo de abonos/deuda anterior). Cuando
-`totalCobrado === totalIngresos`, MUST NOT renderizarse línea alguna. La línea MUST usar el valor del
-API (sin recomputo cliente) y MUST NOT alterar ningún total.
+El resumen de Registros MUST mostrar SIEMPRE —sin condicionarla a `totalCobrado !== totalIngresos`—
+una tira de reconciliación de solo texto, fuera del `summaryGrid`, con una fila por componente. MUST
+NOT agregar tarjetas ni métricas nuevas: la tira es un bloque explicativo. Las filas de componentes
+cuyo valor sea 0 MUST ocultarse; las filas de cierre MUST renderizarse siempre. Filas, en orden:
 
-#### Scenario: Diferencia explicada por propinas (caso owner)
+| Etiqueta | Valor | Signo |
+|---|---|---|
+| Ventas del día | `totalIngresos` | + |
+| Quedó fiado | `totalFiadoDia` | − |
+| Deudas viejas que te pagaron | `cobrosDeudaAnterior` (API) | + |
+| Propinas | `totalPropinas` | + |
+| Entró a caja | `totalCobrado` | = |
+| Propinas (van a las chicas) | `totalPropinas` | − |
+| TU CAJA REAL (sin propinas) | `totalCobrado − totalPropinas` | = |
 
-- GIVEN `totalIngresos=935000`, `totalCobrado=940000`, `totalPropinas=5000`
+`TU CAJA REAL` MUST calcularse como `totalCobrado − totalPropinas` (plata que entró menos propinas;
+lo fiado ya está excluido porque nunca entró). Todo monto MUST formatearse con `formatCurrency`. La
+tira MUST usar los valores del API (el único cálculo cliente es la resta de cierre) y MUST ser
+responsive: en mobile MUST apilarse/encoger sin scroll horizontal y permanecer legible.
+
+#### Scenario: La tira siempre se renderiza
+
+- GIVEN un resumen con `totalCobrado === totalIngresos` (diferencia 0)
 - WHEN se renderiza el resumen de Registros
-- THEN aparece una sola línea que indica que Cobrado incluye $5.000 de propinas
-- AND no se agrega ni modifica ninguna tarjeta
+- THEN la tira de reconciliación está en el DOM (ya no hay línea condicional)
+- AND las filas de cierre "Entró a caja" y "TU CAJA REAL" están presentes
 
-#### Scenario: Cobrado e Ingresos iguales
+#### Scenario: Filas de componente en 0 se ocultan
 
-- GIVEN `totalIngresos=935000` y `totalCobrado=935000`
-- WHEN se renderiza el resumen
-- THEN NO existe línea de aclaración de diferencia en el DOM
+- GIVEN `totalFiadoDia=0`, `cobrosDeudaAnterior=0` y `totalPropinas=0`
+- WHEN se renderiza la tira
+- THEN "Quedó fiado", "Deudas viejas que te pagaron" y "Propinas" NO están en el DOM
+- AND las filas de cierre siguen presentes
 
-#### Scenario: Residual no atribuible a propinas
+#### Scenario: TU CAJA REAL = Entró a caja − Propinas
 
-- GIVEN `totalIngresos=935000`, `totalCobrado=955000`, `totalPropinas=5000` (residual 15000)
-- WHEN se renderiza el resumen
-- THEN la línea menciona $5.000 de propinas y describe el residual genéricamente (abonos de deudas anteriores / fiado del período)
-- AND NO se muestra un monto exacto fabricado para el residual
+- GIVEN `totalCobrado=940000` y `totalPropinas=5000`
+- WHEN se renderiza la tira
+- THEN "TU CAJA REAL (sin propinas)" muestra $935000
 
-#### Scenario: Diferencia sin propinas
+#### Scenario: Reconciliación del día (identidad del owner)
 
-- GIVEN `totalPropinas=0` y `totalCobrado !== totalIngresos`
-- WHEN se renderiza el resumen
-- THEN la línea aparece sin cláusula de propinas
-- AND `totalIngresos`, `totalCobrado` y demás totales no cambian
+- GIVEN `totalIngresos=100000`, `totalFiadoDia=40000`, `cobrosDeudaAnterior=20000`, `totalPropinas=5000` y `totalCobrado=85000`
+- WHEN se renderiza la tira
+- THEN muestra Ventas del día 100000, Quedó fiado −40000, Deudas viejas +20000, Propinas +5000
+- AND "Entró a caja" 85000 y "TU CAJA REAL" 80000
+- AND la identidad `Cobrado = Ventas − Fiado + CobrosDeudaAnterior + Propinas` se cumple
+
+#### Scenario: Período histórico con venta cobrada después
+
+- GIVEN un rango histórico donde una venta del período se pagó en un período posterior
+- WHEN se renderiza la tira
+- THEN cada fila muestra el valor del API tal cual, sin forzar igualdad ni inventar montos
+
+#### Scenario: Sin scroll horizontal en mobile
+
+- GIVEN un viewport mobile (≤ 480px)
+- WHEN se renderiza la tira
+- THEN se apila/encoge sin provocar scroll horizontal
+- AND el texto permanece legible
