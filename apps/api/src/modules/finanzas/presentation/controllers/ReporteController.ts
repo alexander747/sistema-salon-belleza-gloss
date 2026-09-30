@@ -1,7 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { Rol } from '@pos-final/types';
 import { ResumenDiaUseCase, type ResumenDiaInput } from '../../application/use-cases/reporte/ResumenDiaUseCase';
 import { ROIMensualUseCase } from '../../application/use-cases/reporte/ROIMensualUseCase';
 import { CierreTurnoUseCase } from '../../application/use-cases/reporte/CierreTurnoUseCase';
@@ -10,15 +9,7 @@ import { ResumenMensualUseCase } from '../../application/use-cases/reporte/Resum
 import { ExcelExportService } from '../../application/services/ExcelExportService';
 import { ValidationError } from '../../../../shared/errors';
 import { getColombiaDateString } from '../../../../shared/colombia-date';
-
-// Same role rule as RegistroController.list: only privileged roles can filter
-// the resumen by empleada/cliente; restricted roles see only their own records.
-const REGISTROS_PRIVILEGED_ROLES = new Set<number>([
-  Rol.SUPERADMIN,
-  Rol.DUEÑA,
-  Rol.ADMINISTRADOR,
-  Rol.CONTADOR,
-]);
+import { isPrivilegedRole } from '../../../../presentation/middleware/privilegedRoles';
 
 const TIPO_FILTER_VALUES = ['TODOS', 'SERVICIOS', 'PRODUCTOS'] as const;
 
@@ -52,9 +43,9 @@ export class ReporteController {
       const hasta = req.query.hasta as string | undefined;
       const fecha = req.query.fecha as string | undefined;
 
-      // Same role rule as RegistroController.list: restricted roles are forced
-      // to their own usuarioId and can never filter by clienteId.
-      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+      // Misma regla de roles compartida (privilegedRoles.ts): los roles
+      // restringidos son forzados a su propio usuarioId y nunca filtran por cliente.
+      const isPrivileged = isPrivilegedRole(req.user?.rol);
       const usuarioId = isPrivileged
         ? req.query.usuarioId ? Number(req.query.usuarioId) : undefined
         : req.user!.id;
@@ -75,7 +66,17 @@ export class ReporteController {
         ...(clienteId !== undefined ? { clienteId } : {}),
         ...(tipo !== 'TODOS' ? { tipo } : {}),
       });
-      res.json(result);
+
+      // Decisión owner: el Reportes es solo para roles privilegiados. Para el
+      // resto, `resumen` sigue alimentando la pestaña Registros pero se omite el
+      // costo de insumos Y `balanceNeto` (del que se derivaría: balance =
+      // ingresos − gastos − comisiones − insumos). Se omite la clave (no null/0).
+      if (isPrivileged) {
+        res.json(result);
+      } else {
+        const { totalCostoBaseInsumos: _insumos, balanceNeto: _balance, ...safe } = result;
+        res.json(safe);
+      }
     } catch (error) {
       next(error);
     }
@@ -130,7 +131,7 @@ export class ReporteController {
 
       // Misma regla de roles que resumenDia: roles privilegiados pueden filtrar
       // por empleada/cliente; roles restringidos son forzados a su propio usuarioId.
-      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+      const isPrivileged = isPrivilegedRole(req.user?.rol);
       const usuarioId = isPrivileged ? parsed.data.usuarioId : req.user!.id;
       const clienteId = isPrivileged ? parsed.data.clienteId : undefined;
 
@@ -173,7 +174,7 @@ export class ReporteController {
 
       // Misma regla de roles que pyl: privilegiados pueden filtrar por empleada;
       // roles restringidos son forzados a su propio usuarioId.
-      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+      const isPrivileged = isPrivilegedRole(req.user?.rol);
       const usuarioId = isPrivileged ? parsed.data.usuarioId : req.user!.id;
 
       const { buffer, filename } = await this.excelExportService.exportar({

@@ -272,4 +272,63 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     expect(result.totalCobrado).toBe(40000);
     expect(result.totalFiadoDia).toBe(60000);
   });
+
+  it('fixture lucía 2026-09-04..2026-09-29: insumos 84000 → balanceNeto 203400', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 555000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 555000,
+        comisionCalculada: 267600,
+        serviciosItems: [{ costoBaseInsumos: 84000 }],
+      }),
+    ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(555000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-09-04',
+      hasta: '2026-09-29',
+    });
+
+    expect(result.totalIngresos).toBe(555000);
+    expect(result.totalComisiones).toBe(267600);
+    expect(result.totalCostoBaseInsumos).toBe(84000);
+    expect(result.balanceNeto).toBe(203400);
+  });
+
+  it('registro ANULADO no aporta insumo ni altera el balance', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        estado: EstadoRegistro.ANULADO,
+        totalServicios: 100000,
+        montoTotal: 100000,
+        comisionCalculada: 40000,
+        serviciosItems: [{ costoBaseInsumos: 84000 }],
+      }),
+    ]);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-09-04',
+      hasta: '2026-09-29',
+    });
+
+    expect(result.totalCostoBaseInsumos).toBe(0);
+    expect(result.balanceNeto).toBe(0);
+  });
+
+  it('período sin registros → insumos 0 y balance 0', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([]);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-09-04',
+      hasta: '2026-09-29',
+    });
+
+    expect(result.totalCostoBaseInsumos).toBe(0);
+    expect(result.balanceNeto).toBe(0);
+  });
 });

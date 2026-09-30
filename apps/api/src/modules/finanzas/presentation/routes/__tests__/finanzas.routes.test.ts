@@ -111,4 +111,16 @@ describe('finanzas.routes — guards de rol en GETs sensibles', () => {
       Rol.RECEPCIONISTA,
     ]);
   });
+
+  it('GET /finanzas/pyl exige SUPERADMIN/DUEÑA/ADMINISTRADOR/CONTADOR (403 para el resto)', () => {
+    expect(guardsFor('/finanzas/pyl')).toContainEqual(NOMINA_ROLES);
+  });
+
+  it('GET /finanzas/exportar exige SUPERADMIN/DUEÑA/ADMINISTRADOR/CONTADOR (403 para el resto)', () => {
+    expect(guardsFor('/finanzas/exportar')).toContainEqual(NOMINA_ROLES);
+  });
+
+  it('GET /finanzas/resumen NO exige rol privilegiado (sigue accesible para la pestaña Registros)', () => {
+    expect(guardsFor('/finanzas/resumen')).toHaveLength(0);
+  });
 });

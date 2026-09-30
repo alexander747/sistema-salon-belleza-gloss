@@ -1,19 +1,12 @@
 import { injectable, inject } from 'tsyringe';
 import type { Request, Response, NextFunction } from 'express';
-import { Rol } from '@pos-final/types';
 import { CreateRegistroUseCase } from '../../application/use-cases/registro/CreateRegistroUseCase';
 import { ListRegistrosUseCase } from '../../application/use-cases/registro/ListRegistrosUseCase';
 import { GetRegistroUseCase } from '../../application/use-cases/registro/GetRegistroUseCase';
 import { AnularRegistroUseCase } from '../../application/use-cases/registro/AnularRegistroUseCase';
 import { AbonarDeudaUseCase } from '../../application/use-cases/registro/AbonarDeudaUseCase';
 import { paginationSchema } from '@pos-final/validation';
-
-const REGISTROS_PRIVILEGED_ROLES = new Set<number>([
-  Rol.SUPERADMIN,
-  Rol.DUEÑA,
-  Rol.ADMINISTRADOR,
-  Rol.CONTADOR,
-]);
+import { isPrivilegedRole } from '../../../../presentation/middleware/privilegedRoles';
 
 @injectable()
 export class RegistroController {
@@ -31,7 +24,7 @@ export class RegistroController {
       const page = pag.success ? pag.data.page : 1;
       const limit = pag.success ? pag.data.limit : 0;
 
-      const isPrivileged = req.user ? REGISTROS_PRIVILEGED_ROLES.has(req.user.rol) : false;
+      const isPrivileged = isPrivilegedRole(req.user?.rol);
 
       const usuarioId = isPrivileged
         ? req.query.usuarioId ? Number(req.query.usuarioId) : undefined

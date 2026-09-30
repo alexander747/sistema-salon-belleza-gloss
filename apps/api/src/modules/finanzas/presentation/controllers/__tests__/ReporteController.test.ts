@@ -188,6 +188,65 @@ describe('ReporteController', () => {
     });
   });
 
+  describe('resumenDia — omisión de costo de insumos por rol', () => {
+    const fullResumen = {
+      totalServicios: 400000,
+      totalProductos: 100000,
+      totalPropinas: 50000,
+      totalComisiones: 267600,
+      totalCostoBaseInsumos: 84000,
+      cantidadAtenciones: 3,
+      cantidadProductosVendidos: 1,
+      totalIngresos: 555000,
+      totalCobrado: 555000,
+      totalFiadoDia: 0,
+      totalGastos: 0,
+      balanceNeto: 203400,
+    };
+
+    it('rol privilegiado (DUEÑA) recibe totalCostoBaseInsumos y balanceNeto', async () => {
+      mockResumenDiaUseCase.execute.mockResolvedValue(fullResumen);
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-09-04', hasta: '2026-09-29' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenDia(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(fullResumen);
+      const payload = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(payload.totalCostoBaseInsumos).toBe(84000);
+      expect(payload.balanceNeto).toBe(203400);
+    });
+
+    it.each([Rol.MANICURISTA, Rol.RECEPCIONISTA])(
+      'rol no privilegiado (%s) NO recibe totalCostoBaseInsumos ni balanceNeto (clave ausente, ni null ni 0)',
+      async (rol) => {
+        mockResumenDiaUseCase.execute.mockResolvedValue(fullResumen);
+
+        const req = {
+          salonId: 1,
+          query: { desde: '2026-09-04', hasta: '2026-09-29' },
+          user: { id: 4, email: 'm@t.com', rol, salonId: 1, nombre: 'Empleada' },
+        } as unknown as Request;
+        const res = { json: vi.fn() } as unknown as Response;
+
+        await controller.resumenDia(req, res, next);
+
+        const payload = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        // Ausencia real de la clave (no undefined/null/0): no se puede derivar.
+        expect(Object.prototype.hasOwnProperty.call(payload, 'totalCostoBaseInsumos')).toBe(false);
+        expect(Object.prototype.hasOwnProperty.call(payload, 'balanceNeto')).toBe(false);
+        // El resto de la respuesta sigue disponible para la pestaña Registros.
+        expect(payload.totalComisiones).toBe(267600);
+        expect(payload.totalIngresos).toBe(555000);
+      },
+    );
+  });
+
   describe('roiMensual', () => {
     it('should return 200 with monthly ROI', async () => {
       const expected = {

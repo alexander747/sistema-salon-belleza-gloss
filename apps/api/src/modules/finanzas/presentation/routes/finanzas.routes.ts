@@ -9,6 +9,7 @@ import { CajaController } from '../controllers/CajaController';
 import { CuentasController } from '../controllers/CuentasController';
 import { validate } from '../../../../presentation/middleware/validate';
 import { requireRole } from '../../../../presentation/middleware/requireRole';
+import { PRIVILEGED_ROLES_LIST } from '../../../../presentation/middleware/privilegedRoles';
 import { Rol } from '@pos-final/types';
 import { createRegistroSchema, abrirCajaSchema, cerrarCajaSchema, abonarDeudaSchema } from '@pos-final/validation';
 
@@ -103,13 +104,22 @@ router.get(
 
 router.get('/finanzas/resumen', reporteController.resumenDia);
 router.get('/finanzas/roi', reporteController.roiMensual);
-router.get('/finanzas/pyl', reporteController.pyl);
+// Reportes/P&L y exportación son solo para roles privilegiados (decisión owner).
+router.get(
+  '/finanzas/pyl',
+  requireRole(...PRIVILEGED_ROLES_LIST),
+  reporteController.pyl,
+);
 router.get(
   '/finanzas/mensual',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
   reporteController.resumenMensual,
 );
-router.get('/finanzas/exportar', reporteController.exportar);
+router.get(
+  '/finanzas/exportar',
+  requireRole(...PRIVILEGED_ROLES_LIST),
+  reporteController.exportar,
+);
 router.get('/finanzas/turno/:id', reporteController.cierreTurno);
 
 // ── Caja (apertura / cierre / arqueo) ─────────────────────────
