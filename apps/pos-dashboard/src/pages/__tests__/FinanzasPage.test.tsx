@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
 import { setMobileMedia } from '../../test/setMobileMedia';
+import { formatCurrency } from '../../utils/format.js';
 
 const { mockGet, mockPost, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -2078,5 +2079,154 @@ describe('FinanzasPage — Registros: paginación server-side por estado/tipo (P
     const table = screen.getByRole('table');
     expect(within(table).getByText('7')).toBeInTheDocument();
     expect(within(table).getByText('8')).toBeInTheDocument();
+  });
+});
+
+describe('FinanzasPage — Registros: aclaración Ingresos vs Cobrado (PR6)', () => {
+  function mockResumen(user: IUser, resumen: Record<string, unknown>) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: user });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: resumen });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+  });
+
+  it('expone un ⓘ enfocable y accesible en Ingresos y Cobrado', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
+
+    renderPage();
+
+    const ingresosInfo = await screen.findByRole('button', { name: 'Qué significa Ingresos' });
+    const cobradoInfo = screen.getByRole('button', { name: 'Qué significa Cobrado' });
+
+    // Alcanzables por teclado (elementos nativos enfocables)
+    cobradoInfo.focus();
+    expect(document.activeElement).toBe(cobradoInfo);
+    ingresosInfo.focus();
+    expect(document.activeElement).toBe(ingresosInfo);
+  });
+
+  it('el Tooltip de Cobrado define ambas semánticas (devengado sin propinas vs efectivo con propinas y abonos)', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
+
+    renderPage();
+
+    const cobradoInfo = await screen.findByRole('button', { name: 'Qué significa Cobrado' });
+    fireEvent.mouseOver(cobradoInfo);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent(/devengado/i);
+    expect(tooltip).toHaveTextContent(/sin propinas/i);
+    expect(tooltip).toHaveTextContent(/propinas y abonos/i);
+  });
+
+  it('el Tooltip de Ingresos define el devengado sin propinas', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
+
+    renderPage();
+
+    const ingresosInfo = await screen.findByRole('button', { name: 'Qué significa Ingresos' });
+    fireEvent.mouseOver(ingresosInfo);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent(/devengado/i);
+    expect(tooltip).toHaveTextContent(/sin propinas/i);
+  });
+
+  it('gap === totalPropinas → una sola línea role="note" que nombra las propinas', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
+
+    renderPage();
+
+    const note = await screen.findByTestId('aclaracion-cobrado');
+    expect(note).toHaveAttribute('role', 'note');
+    expect(note.textContent).toContain(formatCurrency(5000));
+    expect(note).toHaveTextContent(/propinas/i);
+    expect(screen.getAllByRole('note')).toHaveLength(1);
+  });
+
+  it('Cobrado === Ingresos → NO existe línea de aclaración en el DOM', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 935000, totalPropinas: 5000 });
+
+    renderPage();
+
+    await screen.findByText('💰 TOTAL INGRESOS');
+    expect(screen.queryByTestId('aclaracion-cobrado')).not.toBeInTheDocument();
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+
+  it('gap con totalPropinas=0 → línea genérica sin cláusula de propinas', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 950000, totalPropinas: 0 });
+
+    renderPage();
+
+    const note = await screen.findByTestId('aclaracion-cobrado');
+    expect(note).toHaveTextContent(/abonos de deudas anteriores/i);
+    expect(note).not.toHaveTextContent(/propinas/i);
+  });
+
+  it('residual no atribuible a propinas → describe genérico y NO muestra un monto fabricado', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 955000, totalPropinas: 5000 });
+
+    renderPage();
+
+    const note = await screen.findByTestId('aclaracion-cobrado');
+    expect(note.textContent).toContain(formatCurrency(5000));
+    expect(note).toHaveTextContent(/abonos de deudas anteriores/i);
+    // El residual 15000 no es un campo del API → nunca se imprime
+    expect(screen.queryByText(formatCurrency(15000))).not.toBeInTheDocument();
+  });
+
+  it('gap negativo (Cobrado < Ingresos) → cláusula de fiado sin montos fabricados', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 930000, totalPropinas: 0 });
+
+    renderPage();
+
+    const note = await screen.findByTestId('aclaracion-cobrado');
+    expect(note).toHaveTextContent(/aún no se cobró \(fiado\)/i);
+    expect(note.textContent).not.toMatch(/\$/);
+  });
+
+  it('NO agrega tarjetas: la aclaración vive fuera del summaryGrid y no aparece "🎁 Propinas"', async () => {
+    mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
+
+    const { container } = renderPage();
+
+    const note = await screen.findByTestId('aclaracion-cobrado');
+    expect(note.closest('[class*="summaryCard"]')).toBeNull();
+    expect(screen.queryByText('🎁 Propinas')).not.toBeInTheDocument();
+    // Mismas tarjetas que antes de PR6 para DUEÑA (7 tarjetas del resumen)
+    expect(container.querySelectorAll('[class*="summaryCard"]')).toHaveLength(7);
+  });
+
+  it('las tarjetas Ingresos/Cobrado y la aclaración siguen visibles para rol no privilegiado', async () => {
+    const recepcionista: IUser = { ...duena, id: 5, rol: Rol.RECEPCIONISTA };
+    mockResumen(recepcionista, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
+
+    renderPage();
+
+    expect(await screen.findByText('💰 TOTAL INGRESOS')).toBeInTheDocument();
+    expect(screen.getByText('💰 Cobrado')).toBeInTheDocument();
+    expect(screen.getByTestId('aclaracion-cobrado')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Qué significa Cobrado' })).toBeInTheDocument();
+    // La tarjeta privilegiada sigue oculta
+    expect(screen.queryByText('🧴 Total insumos')).not.toBeInTheDocument();
   });
 });

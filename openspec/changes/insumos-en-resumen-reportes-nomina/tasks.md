@@ -1,6 +1,6 @@
 # Tasks: Insumos en resumen, reportes y nómina
 
-## Review Workload Forecast
+## Review Workload Forecast — PR1–PR5 (completed / historical)
 
 | Field | Value |
 |-------|-------|
@@ -12,10 +12,23 @@
 | Chain strategy | feature-branch-chain |
 | Decision needed before apply | Resolved — owner decision 2026-09-29 (Reportes = privileged vía 403; `resumen` omite insumos+balanceNeto; sin stripping) |
 
-Decision needed before apply: Resolved (owner decision)
-Chained PRs recommended: Yes
+(Historical: chained PRs `Yes`, chain `feature-branch-chain`, risk `High` — PR1–PR5 already landed.)
+
+## Review Workload Forecast — PR6 (active)
+
+| Field | Value |
+|-------|-------|
+| Estimated changed lines | ~150–200 (FinanzasPage ~45, tests ~100, docs ~50) |
+| 400-line budget risk | Low |
+| Chained PRs recommended | No |
+| Suggested split | Single PR on `feat/insumos-reportes-pr6-aclaracion` (base = PR5 `6c2106e`) |
+| Delivery strategy | auto-forecast |
+| Chain strategy | feature-branch-chain |
+
+Decision needed before apply: No
+Chained PRs recommended: No
 Chain strategy: feature-branch-chain
-400-line budget risk: High
+400-line budget risk: Low
 
 ### Suggested Work Units
 
@@ -24,6 +37,8 @@ Chain strategy: feature-branch-chain
 | 1 | Backend role-gating policy | PR 1 | `feat/insumos-reportes-tracker` | Branch `feat/insumos-reportes-pr1-backend`; tests with code |
 | 2 | Frontend card/export gating | PR 2 | `feat/insumos-reportes-pr1-backend` | helper + types + cards |
 | 3 | Nómina informational insumo | PR 3 | `feat/insumos-reportes-pr2-frontend` | use case + UI + tests |
+| 4 | Registros pagination fix | PR 5 | `feat/insumos-reportes-pr3-nomina` | backend + frontend + spec |
+| 5 | Ingresos/Cobrado clarification (PR6) | PR 6 | `feat/insumos-reportes-pr6-aclaracion` (base PR5 `6c2106e`) | UI only + component tests + D7 |
 
 ## Phase 1: Backend role policy (PR1)
 
@@ -102,4 +117,19 @@ Bug reportado por el owner (verificado con data real): en el período 2026-09-04
 - [x] 6.10 Artifact sync: delta `finanzas-registros` (requirement de paginación server-side + escenarios), `design.md` (D6) y esta Phase 6.
 - [x] 6.11 GREEN: `cd apps/api && npx vitest run` (623 passed / 5 baseline) + `npx tsc --noEmit` (1 baseline `seed.ts`); `cd apps/pos-dashboard && npx vitest run` (391 passed / 2 baseline) + `npx tsc --noEmit` (0).
 - [x] 6.12 Prueba runtime (API :3001, DB local = prod): `GET /salones/1/registros` período 2026-09-04..09-29 → ACTIVOS `meta.total=15`/15 filas, ANULADOS `11`/11, TODOS `26`/26, SERVICIOS `25`, PRODUCTOS `1`; sin params `26` (compat). `meta.total == filas` en todos.
+
+## Phase 7: PR6 — aclaración Ingresos/Cobrado (sin tarjetas nuevas)
+
+Scope: `apps/pos-dashboard/src/pages/FinanzasPage.tsx` summary de Registros + `__tests__/FinanzasPage.test.tsx`.
+Spec delta already in `specs/finanzas-registros/spec.md` (2 requirements). No new primitives, cards, metrics, rows or API fields.
+
+- [x] 7.1 RED (afijo ⓘ): en `FinanzasPage.test.tsx` nuevo `describe('... PR6')` — las cards Ingresos y Cobrado exponen un botón enfocable (`getByRole('button', { name })`) con nombre accesible; al `focus`/hover el Tooltip expone la descripción: Ingresos = devengado, sin propinas; Cobrado = efectivo recibido, con propinas y abonos.
+- [x] 7.2 RED (línea condicional): `totalIngresos=935000, totalCobrado=940000, totalPropinas=5000` → UNA línea (`role="note"`, testid `aclaracion-cobrado`) que menciona `$5.000` de propinas; `totalCobrado===totalIngresos` → NO existe la línea en el DOM; `totalPropinas=0` y gap≠0 → línea sin cláusula de propinas.
+- [x] 7.3 RED (residual no fabricado): `totalIngresos=935000, totalCobrado=955000, totalPropinas=5000` → línea menciona `$5.000` de propinas y describe el residual genéricamente (abonos/fiado); `fmt(15000)` NO está en el DOM.
+- [x] 7.4 RED (sin tarjetas nuevas): `queryByText('🎁 Propinas')` ausente; el nodo de la línea NO es descendiente de `[class*="summaryCard"]`; la grilla de tarjetas no cambia; Ingresos/Cobrado + aclaración siguen visibles para rol no privilegiado.
+- [x] 7.5 TRIANGULATE: gap negativo (`totalCobrado<totalIngresos`) → cláusula genérica "aún no cobró (fiado)" sin montos fabricados; `gap===tips` con `tips=0` → sin línea; `resumen` ausente → sin línea.
+- [x] 7.6 GREEN (afijo): en `FinanzasPage.tsx` envolver un botón `ⓘ` enfocable en cada card con el `Tooltip` MUI ya usado en `LuxeLayout.tsx` (`describeChild`, `aria-label`); sin nuevas cards ni dependencias (ver D7).
+- [x] 7.7 GREEN (línea): helper único que computa `gap`/`tips` con `Math.round` (valores enteros del API) y devuelve el texto según la tabla D7; renderizar una sola línea `role="note"` bajo `summaryGrid`, o `null` si `gap===0`/`resumen==null`. No altera ningún total.
+- [x] 7.8 GREEN: `cd apps/pos-dashboard && npx vitest run` (objetivo: 391 previos + tests PR6, ≤2 fallas baseline) y `npx tsc --noEmit` (0 errores).
+- [x] 7.9 Artifact sync: confirmar delta PR6 en `specs/finanzas-registros/spec.md`, addendum D7 en `design.md`, esta Phase 7 y Engram `sdd/insumos-en-resumen-reportes-nomina/tasks`.
 

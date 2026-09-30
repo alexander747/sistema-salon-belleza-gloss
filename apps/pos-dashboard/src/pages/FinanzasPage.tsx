@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Tooltip } from '@mui/material';
 import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
@@ -15,6 +16,7 @@ import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { isPrivilegedRole } from '../utils/roles.js';
+import { buildAclaracionCobrado } from '../utils/aclaracionCobrado.js';
 import { formatCurrency } from '../utils/format.js';
 import type { ReciboSalon } from '../utils/recibo.js';
 import styles from './FinanzasPage.module.css';
@@ -830,6 +832,9 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
     registroClienteNombre ? `del cliente ${registroClienteNombre}` : '',
   ].filter(Boolean).join(' ');
 
+  /* PR6 — aclaración discreta de la diferencia Cobrado − Ingresos (texto, no tarjeta). */
+  const aclaracionCobrado = resumen ? buildAclaracionCobrado(resumen) : null;
+
   /* ── Skeleton ── */
   if (loading) {
     return (
@@ -886,7 +891,18 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         animate="show"
       >
         <motion.div variants={itemVariants} className={styles.summaryCard}>
-          <span className={styles.summaryLabel}>💰 TOTAL INGRESOS</span>
+          <span className={styles.summaryLabel}>
+            💰 TOTAL INGRESOS
+            <Tooltip
+              title="Ingresos = devengado del período (servicios y productos, sin propinas)."
+              describeChild
+              arrow
+            >
+              <button type="button" className={styles.infoAffix} aria-label="Qué significa Ingresos">
+                ⓘ
+              </button>
+            </Tooltip>
+          </span>
           <span className={styles.summaryValueAccent}>
             {resumen ? formatCurrency(resumen.totalIngresos) : '$0'}
           </span>
@@ -894,7 +910,18 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         {/* PR2 cash (decisión owner: el ingreso se cuenta cuando se cobra):
             totalCobrado = Σ pagos recibidos; totalFiadoDia = fiado originado en el período. */}
         <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
-          <span className={styles.summaryLabel}>💰 Cobrado</span>
+          <span className={styles.summaryLabel}>
+            💰 Cobrado
+            <Tooltip
+              title="Ingresos = devengado (servicios y productos, sin propinas). Cobrado = efectivo recibido (con propinas y abonos de deudas anteriores)."
+              describeChild
+              arrow
+            >
+              <button type="button" className={styles.infoAffix} aria-label="Qué significa Cobrado">
+                ⓘ
+              </button>
+            </Tooltip>
+          </span>
           <span className={styles.summaryValue} style={{ color: '#34d399' }}>
             {resumen?.totalCobrado != null ? formatCurrency(resumen.totalCobrado) : '$0'}
           </span>
@@ -982,6 +1009,13 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         </motion.div>
         */}
       </motion.div>
+
+      {/* PR6 — línea de aclaración (texto, no tarjeta). Solo cuando Cobrado ≠ Ingresos. */}
+      {aclaracionCobrado && (
+        <p role="note" data-testid="aclaracion-cobrado" className={styles.aclaracionCobrado}>
+          {aclaracionCobrado}
+        </p>
+      )}
 
       {/* ── Toolbar ── */}
       <div className={styles.toolbar}>

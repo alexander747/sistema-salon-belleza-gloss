@@ -108,3 +108,68 @@ MUST NOT filtrar client-side, para que `meta.total` y las filas renderizadas coi
 - THEN el request incluye `estado` y `tipo` con el valor seleccionado
 - AND la tabla renderiza exactamente las filas devueltas por el servidor
 - AND el total de la paginación refleja `meta.total` (sin descuadre total/filas)
+
+### Requirement: Aclaración accesible de Ingresos vs Cobrado (sin tarjetas nuevas)
+
+El resumen del período en Registros MUST explicar la diferencia semántica entre las tarjetas
+"Ingresos" y "Cobrado" mediante un afijo discreto "ⓘ" en cada tarjeta, alcanzable por teclado y con
+nombre/descripción accesible (no solo color). El texto MUST definir: `Ingresos` = devengado del
+período (servicios + productos, SIN propinas); `Cobrado` = efectivo recibido en el período (SÍ
+incluye propinas y abonos de deudas anteriores). El cambio MUST NOT agregar tarjetas, métricas ni
+filas nuevas al `summaryGrid`. Las tarjetas Ingresos y Cobrado —y por tanto el afijo y la línea
+condicional— MUST ser visibles para TODOS los roles, igual que hoy; para roles no privilegiados el
+`resumen` ya viene acotado a su propio `usuarioId` y la aclaración aplica igual.
+
+#### Scenario: Afijo ⓘ explica la diferencia
+
+- GIVEN FinanzasPage en Registros con `totalIngresos=935000` y `totalCobrado=940000`
+- WHEN el usuario enfoca o hace hover en el "ⓘ" de la tarjeta Cobrado
+- THEN muestra un texto que define Ingresos (devengado, sin propinas) y Cobrado (efectivo, con propinas y abonos)
+- AND el afijo es alcanzable por teclado y expone nombre/descripción accesible
+
+#### Scenario: Sin tarjetas nuevas
+
+- GIVEN el resumen con cualquier combinación de valores
+- WHEN se renderiza la grilla de resumen
+- THEN la cantidad de tarjetas NO aumenta respecto de antes de PR6
+- AND NO aparece una tarjeta "Propinas" ni ninguna métrica nueva
+
+### Requirement: Línea condicional que explica la diferencia Cobrado − Ingresos
+
+Cuando `totalCobrado !== totalIngresos`, el resumen MUST mostrar UNA única línea discreta (texto, no
+tarjeta) que explique la diferencia usando SOLO campos expuestos por el API. `totalCobrado` incluye
+propinas y abonos de deuda anterior; `totalIngresos` NO incluye propinas. Por tanto: si
+`totalCobrado − totalIngresos === totalPropinas`, la línea MUST indicar que el Cobrado incluye
+`$totalPropinas` de propinas. Si la diferencia supera `totalPropinas`, la línea MUST reportar las
+propinas y describir el residual de forma genérica como otros cobros de caja (p. ej. abonos de deudas
+anteriores / fiado del período); MUST NOT inventar un monto exacto para un componente que el API no
+expone (el `resumen` de Registros NO devuelve un campo de abonos/deuda anterior). Cuando
+`totalCobrado === totalIngresos`, MUST NOT renderizarse línea alguna. La línea MUST usar el valor del
+API (sin recomputo cliente) y MUST NOT alterar ningún total.
+
+#### Scenario: Diferencia explicada por propinas (caso owner)
+
+- GIVEN `totalIngresos=935000`, `totalCobrado=940000`, `totalPropinas=5000`
+- WHEN se renderiza el resumen de Registros
+- THEN aparece una sola línea que indica que Cobrado incluye $5.000 de propinas
+- AND no se agrega ni modifica ninguna tarjeta
+
+#### Scenario: Cobrado e Ingresos iguales
+
+- GIVEN `totalIngresos=935000` y `totalCobrado=935000`
+- WHEN se renderiza el resumen
+- THEN NO existe línea de aclaración de diferencia en el DOM
+
+#### Scenario: Residual no atribuible a propinas
+
+- GIVEN `totalIngresos=935000`, `totalCobrado=955000`, `totalPropinas=5000` (residual 15000)
+- WHEN se renderiza el resumen
+- THEN la línea menciona $5.000 de propinas y describe el residual genéricamente (abonos de deudas anteriores / fiado del período)
+- AND NO se muestra un monto exacto fabricado para el residual
+
+#### Scenario: Diferencia sin propinas
+
+- GIVEN `totalPropinas=0` y `totalCobrado !== totalIngresos`
+- WHEN se renderiza el resumen
+- THEN la línea aparece sin cláusula de propinas
+- AND `totalIngresos`, `totalCobrado` y demás totales no cambian
