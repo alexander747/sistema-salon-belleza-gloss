@@ -55,16 +55,16 @@ Owner decision (supersedes earlier field-omission on `pyl`):
 
 Commit: 907df06 (feat frontend).
 
-## Phase 3: Nómina informational insumo (PR3)
+## Phase 3: Nómina informational insumo (PR3) — DONE
 
-- [ ] 3.1 RED: `NominaPendienteUseCase.test.ts` — 84000 (105 g × 800), out-of-period 50000 excluded, no items=0, `totalAPagar`=267600.
-- [ ] 3.2 Add optional `totalCostoBaseInsumos?: number` to `NominaPendienteEmpleada` and `NominaPendienteDTO`.
-- [ ] 3.3 `NominaPendienteUseCase`: reduce same `delPeriodo` (`:302`/`:316`), `Math.round`, push; `totalAPagar` untouched.
-- [ ] 3.4 `FinanzasPage.tsx`: optional `NominaEmpleado` type; employee card `Insumos (ya descontados de la comisión)` when present; summary card `🧴 Total insumos` over `pendientesFiltrados`.
-- [ ] 3.5 RED/GREEN component tests: label present with value, absent when field missing.
-- [ ] 3.6 GREEN: api + dashboard `npx vitest run` + both `tsc --noEmit`.
+- [x] 3.1 RED: `NominaPendienteUseCase.test.ts` — 84000 (fixture lucía), ANULADO/sin items=0, scoping por `delPeriodo`, fuera de período 50000 excluido, `totalAPagar` unchanged.
+- [x] 3.2 Add optional `totalCostoBaseInsumos?: number` to `NominaPendienteEmpleada` and `NominaPendienteDTO`.
+- [x] 3.3 `NominaPendienteUseCase`: reduce same `delPeriodo`, `Math.round`, push; `totalAPagar` untouched.
+- [x] 3.4 `FinanzasPage.tsx`: optional `NominaEmpleado` type; employee card `Insumos (ya descontados de la comisión)` when present; summary card `🧴 Total insumos` over `pendientesFiltrados`; ambas solo para roles privilegiados (`isPrivilegedRole`).
+- [x] 3.5 RED/GREEN component tests: label present with value (DUEÑA), absent for MANICURISTA, absent when field missing.
+- [x] 3.6 GREEN: api (611 passed / 5 pre-existentes) + dashboard (387 passed / 2 pre-existentes) `npx vitest run` + both `tsc --noEmit` (api: 1 pre-existente seed.ts; dashboard: 0).
 
 ## Phase 4: Spec sync + archive note
 
 - [x] 4.1 Update `specs/finanzas-reportes/spec.md`: `resumen` omite `totalCostoBaseInsumos`+`balanceNeto`; `pyl`/`exportar` 403; nuevo requirement de exportación. (Done in PR1.)
-- [ ] 4.2 Confirm rollback code-only (no migration) and proposal success criteria.
+- [x] 4.2 Confirm rollback code-only (no migration) and proposal success criteria.
