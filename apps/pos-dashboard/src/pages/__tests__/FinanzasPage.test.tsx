@@ -1829,3 +1829,94 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
     expect(habilitado).not.toBeDisabled();
   });
 });
+
+describe('FinanzasPage — Nómina: insumo informativo por rol (PR3)', () => {
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(n)
+      .replace(/\u00a0/g, ' ');
+
+  const etiqueta = 'Insumos (ya descontados de la comisión)';
+
+  const nominaRow = (overrides: Record<string, unknown> = {}) => ({
+    empleadaId: 1,
+    nombre: 'Lucía',
+    totalComisionesPendientes: 267600,
+    totalPropinas: 0,
+    bonoHorario: 0,
+    sueldoFijo: 0,
+    sueldoFijoMensual: 0,
+    porcentajeComisionServicio: 60,
+    totalAPagar: 267600,
+    cantidadRegistros: 1,
+    periodoInicio: '2026-09-01T05:00:00.000Z',
+    periodoFin: '2026-09-30T05:00:00.000Z',
+    frecuenciaPago: 'MENSUAL',
+    totalCostoBaseInsumos: 84000,
+    ...overrides,
+  });
+
+  function nominaApiMock(user: IUser, rows: unknown[]) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: user });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: [] });
+      if (url.includes('/finanzas/nomina')) return Promise.resolve({ data: rows });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  async function openNomina() {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+    await screen.findByText('Lucía');
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+  });
+
+  it('DUEÑA ve la etiqueta informativa con $84000 y la tarjeta resumen', async () => {
+    nominaApiMock(duena, [nominaRow()]);
+
+    await openNomina();
+
+    expect(screen.getByText(etiqueta)).toBeInTheDocument();
+    // El valor aparece en la fila de la empleada y en la tarjeta resumen.
+    expect(screen.getAllByText(fmt(84000)).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('🧴 Total insumos')).toBeInTheDocument();
+    // La comisión/total no cambian por mostrar el insumo.
+    expect(screen.getAllByText(fmt(267600)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('MANICURISTA (no privilegiada) ve la nómina pero NO el insumo informativo', async () => {
+    nominaApiMock({ ...duena, id: 4, rol: Rol.MANICURISTA }, [nominaRow()]);
+
+    await openNomina();
+
+    // La fila sí se renderiza: la compuerta es solo sobre el insumo.
+    expect(screen.getByText('Lucía')).toBeInTheDocument();
+    expect(screen.queryByText(etiqueta)).not.toBeInTheDocument();
+    expect(screen.queryByText('🧴 Total insumos')).not.toBeInTheDocument();
+  });
+
+  it('sin el campo totalCostoBaseInsumos la etiqueta NO se renderiza (consumidores viejos)', async () => {
+    nominaApiMock(duena, [nominaRow({ totalCostoBaseInsumos: undefined })]);
+
+    await openNomina();
+
+    expect(screen.queryByText(etiqueta)).not.toBeInTheDocument();
+  });
+});

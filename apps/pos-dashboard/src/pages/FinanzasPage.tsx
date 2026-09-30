@@ -143,6 +143,8 @@ interface NominaEmpleado {
   porcentajeComisionServicio: number;
   totalAPagar: number;
   cantidadRegistros: number;
+  /** PR3 — insumo informativo del período; ya descontado de la comisión (no se resta de totalAPagar). */
+  totalCostoBaseInsumos?: number;
   periodoInicio: string;
   periodoFin: string;
   frecuenciaPago: string;
@@ -595,7 +597,7 @@ const FinanzasPage: React.FC = () => {
           <DevolucionesTab key="devoluciones" salonId={salonId} />
         )}
         {activeTab === 'nomina' && puedeVerTab(user, 'nomina') && (
-          <NominaTab key="nomina" salonId={salonId} />
+          <NominaTab key="nomina" salonId={salonId} user={user} />
         )}
         {activeTab === 'reportes' && puedeVerTab(user, 'reportes') && (
           <ReportesTab key="reportes" salonId={salonId} user={user} />
@@ -2494,7 +2496,7 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 /*  NÓMINA TAB                                                       */
 /* ================================================================ */
 
-const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
+const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ salonId, user }) => {
   const [pendientes, setPendientes] = useState<NominaEmpleado[]>([]);
   const [historial, setHistorial] = useState<HistorialLiquidacion[]>([]);
   const [empleadasMap, setEmpleadasMap] = useState<Map<number, string>>(new Map());
@@ -2502,6 +2504,10 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+
+  // PR3 — el costo de insumos es una métrica sensible: solo roles privilegiados
+  // (DUEÑA/ADMINISTRADOR/CONTADOR/SUPERADMIN) la ven, igual que en Registros/Reportes.
+  const isPrivileged = isPrivilegedRole(user);
 
   // Total a cobrar del registro (misma lógica que RegistrosTab, usada por el modal de detalle)
   const calcTotal = (r: Registro): number => {
@@ -2561,6 +2567,14 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const pendientesFiltrados = useMemo(
     () => pendientes.filter((p) => p.totalAPagar > 0),
     [pendientes],
+  );
+
+  // PR3 — insumo informativo: Σ del costo base de insumos de las filas pendientes
+  // (mismo estilo de agregación que `totalComisiones`). No interviene en
+  // `totalProximoPago`: la comisión ya viene neteada de insumos.
+  const totalInsumos = useMemo(
+    () => pendientesFiltrados.reduce((sum, e) => sum + Number(e.totalCostoBaseInsumos ?? 0), 0),
+    [pendientesFiltrados],
   );
 
   // ── Helper: registros del detalle de auditoría filtrados por el período EDITADO ──
@@ -2921,6 +2935,13 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               <span className={styles.summaryLabel}>💰 Total comisiones</span>
               <span className={styles.summaryValueAccent}>{formatCurrency(totalComisiones)}</span>
             </div>
+            {/* PR3 — insumo informativo: solo roles privilegiados (métrica sensible). */}
+            {isPrivileged && (
+              <div className={styles.summaryCard}>
+                <span className={styles.summaryLabel}>🧴 Total insumos</span>
+                <span className={styles.summaryValue}>{formatCurrency(totalInsumos)}</span>
+              </div>
+            )}
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>📅 Próximo pago estimado</span>
               <span className={styles.summaryValueAccent}>{formatCurrency(totalProximoPago)}</span>
@@ -3037,6 +3058,18 @@ const NominaTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                       <span>Sueldo fijo</span>
                       <span style={{ fontWeight: 600 }}>{formatCurrency(emp.sueldoFijo)}</span>
                     </div>
+                    {/* PR3 — insumo informativo: ya descontado de la comisión (no se
+                        resta otra vez de `totalAPagar`). Solo roles privilegiados. */}
+                    {isPrivileged && emp.totalCostoBaseInsumos != null && (
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif",
+                        color: 'var(--text-dim)',
+                      }}>
+                        <span>Insumos (ya descontados de la comisión)</span>
+                        <span style={{ fontWeight: 600 }}>{formatCurrency(emp.totalCostoBaseInsumos)}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Divider */}
