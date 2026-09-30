@@ -4,18 +4,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockGetRawOne = vi.fn();
 const mockGetRawMany = vi.fn();
 const mockFind = vi.fn();
+const mockGetCount = vi.fn();
+const mockGetMany = vi.fn();
 
 interface MockQueryBuilder {
   select: ReturnType<typeof vi.fn>;
   addSelect: ReturnType<typeof vi.fn>;
   innerJoin: ReturnType<typeof vi.fn>;
   leftJoin: ReturnType<typeof vi.fn>;
+  leftJoinAndSelect: ReturnType<typeof vi.fn>;
   where: ReturnType<typeof vi.fn>;
   andWhere: ReturnType<typeof vi.fn>;
   groupBy: ReturnType<typeof vi.fn>;
   orderBy: ReturnType<typeof vi.fn>;
+  skip: ReturnType<typeof vi.fn>;
+  take: ReturnType<typeof vi.fn>;
   getRawOne: ReturnType<typeof vi.fn>;
   getRawMany: ReturnType<typeof vi.fn>;
+  getCount: ReturnType<typeof vi.fn>;
+  getMany: ReturnType<typeof vi.fn>;
 }
 
 const mockQueryBuilder = {
@@ -23,12 +30,17 @@ const mockQueryBuilder = {
   addSelect: vi.fn(() => mockQueryBuilder),
   innerJoin: vi.fn(() => mockQueryBuilder),
   leftJoin: vi.fn(() => mockQueryBuilder),
+  leftJoinAndSelect: vi.fn(() => mockQueryBuilder),
   where: vi.fn(() => mockQueryBuilder),
   andWhere: vi.fn(() => mockQueryBuilder),
   groupBy: vi.fn(() => mockQueryBuilder),
   orderBy: vi.fn(() => mockQueryBuilder),
+  skip: vi.fn(() => mockQueryBuilder),
+  take: vi.fn(() => mockQueryBuilder),
   getRawOne: mockGetRawOne,
   getRawMany: mockGetRawMany,
+  getCount: mockGetCount,
+  getMany: mockGetMany,
 } as unknown as MockQueryBuilder;
 
 vi.mock('../../../../../shared/database', () => ({
@@ -305,5 +317,98 @@ describe('TypeORMRegistroServicioRepository.findBySalon', () => {
         order: { creadoEn: 'DESC' },
       }),
     );
+  });
+});
+
+// Fix de paginación (PR5): `search` y `count` deben aplicar EXACTAMENTE los mismos
+// criterios de estado/tipo. Antes ninguno filtraba y el frontend filtraba client-side,
+// con lo que `meta.total` (server) y las filas renderizadas no coincidían.
+describe('TypeORMRegistroServicioRepository.search/count — filtros estado y tipo', () => {
+  let repo: TypeORMRegistroServicioRepository;
+
+  const desde = new Date('2026-09-04T05:00:00.000Z');
+  const hasta = new Date('2026-09-30T04:59:59.000Z');
+
+  const estadoClauses = () =>
+    mockQueryBuilder.andWhere.mock.calls.filter(([sql]) => String(sql).includes('r.estado'));
+  const tipoClauses = () =>
+    mockQueryBuilder.andWhere.mock.calls.filter(
+      ([sql]) => String(sql).includes('totalServicios') || String(sql).includes('totalProductos'),
+    );
+
+  beforeEach(() => {
+    repo = new TypeORMRegistroServicioRepository();
+    mockGetCount.mockReset();
+    mockGetMany.mockReset();
+    mockQueryBuilder.where.mockClear();
+    mockQueryBuilder.andWhere.mockClear();
+    mockQueryBuilder.skip.mockClear();
+    mockQueryBuilder.take.mockClear();
+  });
+
+  it('count con estado=ACTIVOS excluye ANULADO', async () => {
+    mockGetCount.mockResolvedValue(15);
+
+    const result = await repo.count({ salonId: 1, desde, hasta, estado: 'ACTIVOS' });
+
+    expect(result).toBe(15);
+    expect(estadoClauses()).toContainEqual(['r.estado != :anulado', { anulado: 'ANULADO' }]);
+    expect(estadoClauses().some(([sql]) => String(sql) === 'r.estado = :anulado')).toBe(false);
+  });
+
+  it('count con estado=ANULADOS deja solo los ANULADO', async () => {
+    mockGetCount.mockResolvedValue(11);
+
+    const result = await repo.count({ salonId: 1, desde, hasta, estado: 'ANULADOS' });
+
+    expect(result).toBe(11);
+    expect(estadoClauses()).toContainEqual(['r.estado = :anulado', { anulado: 'ANULADO' }]);
+  });
+
+  it('count con estado=TODOS (y con estado ausente) no agrega cláusula de estado', async () => {
+    mockGetCount.mockResolvedValue(26);
+
+    await repo.count({ salonId: 1, desde, hasta, estado: 'TODOS' });
+    expect(estadoClauses()).toHaveLength(0);
+
+    mockQueryBuilder.andWhere.mockClear();
+    await repo.count({ salonId: 1, desde, hasta });
+    expect(estadoClauses()).toHaveLength(0);
+  });
+
+  it('count filtra por tipo: SERVICIOS → totalServicios > 0, PRODUCTOS → totalProductos > 0', async () => {
+    mockGetCount.mockResolvedValue(25);
+
+    await repo.count({ salonId: 1, desde, hasta, tipo: 'SERVICIOS' });
+    expect(tipoClauses()).toContainEqual(['r.totalServicios > 0']);
+
+    mockQueryBuilder.andWhere.mockClear();
+    await repo.count({ salonId: 1, desde, hasta, tipo: 'PRODUCTOS' });
+    expect(tipoClauses()).toContainEqual(['r.totalProductos > 0']);
+
+    mockQueryBuilder.andWhere.mockClear();
+    await repo.count({ salonId: 1, desde, hasta, tipo: 'TODOS' });
+    expect(tipoClauses()).toHaveLength(0);
+  });
+
+  it('search y count aplican criterios idénticos para los mismos params (sin divergencia)', async () => {
+    mockGetMany.mockResolvedValue([]);
+    mockGetCount.mockResolvedValue(15);
+
+    const params = { salonId: 1, desde, hasta, estado: 'ACTIVOS' as const, tipo: 'SERVICIOS' as const };
+
+    await repo.search({ ...params, skip: 0, take: 12 });
+    const searchClauses = [...mockQueryBuilder.andWhere.mock.calls];
+
+    mockQueryBuilder.andWhere.mockClear();
+
+    await repo.count(params);
+    const countClauses = [...mockQueryBuilder.andWhere.mock.calls];
+
+    expect(countClauses).toEqual(searchClauses);
+    expect(searchClauses.length).toBeGreaterThan(0);
+    // El contrato cubre estado + tipo (además del rango de fechas del fixture).
+    expect(searchClauses).toContainEqual(['r.estado != :anulado', { anulado: 'ANULADO' }]);
+    expect(searchClauses).toContainEqual(['r.totalServicios > 0']);
   });
 });

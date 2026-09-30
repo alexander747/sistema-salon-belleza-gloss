@@ -1,5 +1,9 @@
 import { injectable, inject } from 'tsyringe';
-import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
+import type {
+  IRegistroServicioRepository,
+  EstadoRegistroFilter,
+  TipoRegistroFilter,
+} from '../../../domain/ports/IRegistroServicioRepository';
 import type { RegistroServicioDTO } from '../../dtos/RegistroServicioDTO';
 import { registroServicioToDTO } from '../../dtos/RegistroServicioDTO';
 import type { PaginationParams, PaginatedResult } from '../../../../../shared/pagination';
@@ -11,6 +15,10 @@ export interface ListRegistrosInput extends PaginationParams {
   hasta?: Date;
   usuarioId?: number;
   clienteId?: number;
+  /** Filtro server-side de estado; default TODOS (compatibilidad hacia atrás). */
+  estado?: EstadoRegistroFilter;
+  /** Filtro server-side de tipo; default TODOS. */
+  tipo?: TipoRegistroFilter;
 }
 
 @injectable()
@@ -23,6 +31,11 @@ export class ListRegistrosUseCase {
   async execute(input: ListRegistrosInput): Promise<PaginatedResult<RegistroServicioDTO>> {
     const skip = input.limit > 0 ? (input.page - 1) * input.limit : undefined;
 
+    // Defaults explícitos: `sin param` == TODOS, la semántica previa del API.
+    // Los MISMOS valores van a search y count para que total y filas coincidan.
+    const estado = input.estado ?? 'TODOS';
+    const tipo = input.tipo ?? 'TODOS';
+
     const [registros, total] = await Promise.all([
       this.registroRepo.search({
         salonId: input.salonId,
@@ -30,6 +43,8 @@ export class ListRegistrosUseCase {
         hasta: input.hasta,
         usuarioId: input.usuarioId,
         clienteId: input.clienteId,
+        estado,
+        tipo,
         skip,
         take: input.limit > 0 ? input.limit : undefined,
       }),
@@ -39,6 +54,8 @@ export class ListRegistrosUseCase {
         hasta: input.hasta,
         usuarioId: input.usuarioId,
         clienteId: input.clienteId,
+        estado,
+        tipo,
       }),
     ]);
 

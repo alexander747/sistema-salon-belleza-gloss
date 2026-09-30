@@ -1,6 +1,18 @@
 import type { QueryRunner } from 'typeorm';
 import type { RegistroServicioEntity } from '../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 
+/** Filtro de estado para el listado paginado de registros.
+ *  - ACTIVOS: excluye ANULADO
+ *  - ANULADOS: solo ANULADO
+ *  - TODOS: sin filtro (default; preserva la semántica previa del API) */
+export type EstadoRegistroFilter = 'ACTIVOS' | 'ANULADOS' | 'TODOS';
+
+/** Filtro de tipo para el listado paginado de registros.
+ *  - SERVICIOS: totalServicios > 0
+ *  - PRODUCTOS: totalProductos > 0
+ *  - TODOS: sin filtro (default) */
+export type TipoRegistroFilter = 'TODOS' | 'SERVICIOS' | 'PRODUCTOS';
+
 export interface IRegistroServicioRepository {
   create(data: Partial<RegistroServicioEntity>, queryRunner?: QueryRunner): Promise<RegistroServicioEntity>;
   findById(id: number): Promise<RegistroServicioEntity | null>;
@@ -8,6 +20,8 @@ export interface IRegistroServicioRepository {
   /** Registros con deuda pendiente (montoPendiente > 0, no ANULADO) con cliente cargado. */
   findConDeudaBySalon(salonId: number): Promise<RegistroServicioEntity[]>;
   findBySalonAndDateRange(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<RegistroServicioEntity[]>;
+  /** Página de registros. `search` y `count` MUST compartir los mismos criterios
+   *  (`estado`/`tipo` incluidos) para que `meta.total` coincida con las filas. */
   search(params: {
     salonId: number;
     desde?: Date;
@@ -15,9 +29,12 @@ export interface IRegistroServicioRepository {
     usuarioId?: number;
     clienteId?: number;
     cajaId?: number;
+    estado?: EstadoRegistroFilter;
+    tipo?: TipoRegistroFilter;
     skip?: number;
     take?: number;
   }): Promise<RegistroServicioEntity[]>;
+  /** Total de registros que cumplen los MISMOS filtros que `search`. */
   count(params: {
     salonId: number;
     desde?: Date;
@@ -25,6 +42,8 @@ export interface IRegistroServicioRepository {
     usuarioId?: number;
     clienteId?: number;
     cajaId?: number;
+    estado?: EstadoRegistroFilter;
+    tipo?: TipoRegistroFilter;
   }): Promise<number>;
   update(id: number, data: Partial<RegistroServicioEntity>, queryRunner?: QueryRunner): Promise<RegistroServicioEntity | null>;
   /** Σ pagos recibidos en el período por fecha de recepción (pago.creadoEn),

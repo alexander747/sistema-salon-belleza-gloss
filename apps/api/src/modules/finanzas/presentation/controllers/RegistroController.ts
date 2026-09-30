@@ -1,5 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import type { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { CreateRegistroUseCase } from '../../application/use-cases/registro/CreateRegistroUseCase';
 import { ListRegistrosUseCase } from '../../application/use-cases/registro/ListRegistrosUseCase';
 import { GetRegistroUseCase } from '../../application/use-cases/registro/GetRegistroUseCase';
@@ -7,6 +8,14 @@ import { AnularRegistroUseCase } from '../../application/use-cases/registro/Anul
 import { AbonarDeudaUseCase } from '../../application/use-cases/registro/AbonarDeudaUseCase';
 import { paginationSchema } from '@pos-final/validation';
 import { isPrivilegedRole } from '../../../../presentation/middleware/privilegedRoles';
+
+// Validación inline (mismo criterio que ReporteController: evita rebuild de dist de
+// @pos-final/validation). Valores inválidos o ausentes caen a TODOS, preservando la
+// semántica previa del listado (sin filtro server-side).
+const REGISTRO_FILTERS_SCHEMA = z.object({
+  estado: z.enum(['ACTIVOS', 'ANULADOS', 'TODOS']).catch('TODOS'),
+  tipo: z.enum(['TODOS', 'SERVICIOS', 'PRODUCTOS']).catch('TODOS'),
+});
 
 @injectable()
 export class RegistroController {
@@ -33,6 +42,8 @@ export class RegistroController {
         ? req.query.clienteId ? Number(req.query.clienteId) : undefined
         : undefined;
 
+      const { estado, tipo } = REGISTRO_FILTERS_SCHEMA.parse(req.query);
+
       const result = await this.listUseCase.execute({
         salonId: req.salonId!,
         page,
@@ -41,6 +52,8 @@ export class RegistroController {
         hasta: req.query.hasta ? new Date((req.query.hasta as string) + 'T23:59:59-05:00') : undefined,
         usuarioId,
         clienteId,
+        estado,
+        tipo,
       });
       res.json(result);
     } catch (error) {

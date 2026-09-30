@@ -82,6 +82,8 @@ describe('RegistroController', () => {
         hasta: undefined,
         usuarioId: undefined,
         clienteId: undefined,
+        estado: 'TODOS',
+        tipo: 'TODOS',
       });
     });
 
@@ -110,7 +112,43 @@ describe('RegistroController', () => {
         hasta: new Date('2026-05-30T23:59:59-05:00'),
         usuarioId: 3,
         clienteId: 7,
+        estado: 'TODOS',
+        tipo: 'TODOS',
       });
+    });
+
+    it('parsea estado y tipo válidos y los reenvía al use case', async () => {
+      mockListUseCase.execute.mockResolvedValue([]);
+
+      const req = {
+        salonId: 1,
+        query: { estado: 'ANULADOS', tipo: 'PRODUCTOS' },
+        user: { id: 2, nombre: 'Dueña', email: 'd@test.com', rol: Rol.DUEÑA, salonId: 1 },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.list(req, res, next);
+
+      expect(mockListUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ estado: 'ANULADOS', tipo: 'PRODUCTOS' }),
+      );
+    });
+
+    it('valores inválidos de estado/tipo caen a TODOS (no rompen el listado)', async () => {
+      mockListUseCase.execute.mockResolvedValue([]);
+
+      const req = {
+        salonId: 1,
+        query: { estado: 'FOO', tipo: 'BAR' },
+        user: { id: 2, nombre: 'Dueña', email: 'd@test.com', rol: Rol.DUEÑA, salonId: 1 },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.list(req, res, next);
+
+      expect(mockListUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ estado: 'TODOS', tipo: 'TODOS' }),
+      );
     });
   });
 

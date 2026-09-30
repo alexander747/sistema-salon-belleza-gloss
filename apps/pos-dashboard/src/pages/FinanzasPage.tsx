@@ -664,14 +664,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   const [registroEmpleadaNombre, setRegistroEmpleadaNombre] = useState('');
   const [registroClienteNombre, setRegistroClienteNombre] = useState('');
 
-  const filteredRegistros = useMemo(() => {
-    const estadoOk = (r: Registro) =>
-      registroEstadoFilter === 'TODOS' ? true : registroEstadoFilter === 'ACTIVOS' ? r.estado !== 'ANULADO' : r.estado === 'ANULADO';
-    const tipoOk = (r: Registro) =>
-      registroFilter === 'TODOS' ? true : registroFilter === 'SERVICIOS' ? r.totalServicios > 0 : r.totalProductos > 0;
-    return registros.filter((r) => estadoOk(r) && tipoOk(r));
-  }, [registros, registroFilter, registroEstadoFilter]);
-
   const fetchData = useCallback(async () => {
     // Rango incompleto: no buscar ni mostrar loading hasta tener desde Y hasta
     if ((registroDesde && !registroHasta) || (!registroDesde && registroHasta)) {
@@ -686,6 +678,11 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         regParams.desde = registroDesde;
         regParams.hasta = registroHasta;
       }
+      // Filtros de estado/tipo server-side: el total paginado y las filas derivan
+      // del mismo WHERE en el backend (antes se filtraba client-side y el total
+      // de `meta` no coincidía con las filas renderizadas).
+      regParams.estado = registroEstadoFilter;
+      regParams.tipo = registroFilter;
       if (!isPrivileged && user) {
         regParams.usuarioId = String(user.id);
       } else {
@@ -769,7 +766,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
     } finally {
       setLoading(false);
     }
-  }, [salonId, todayStr, registroDesde, registroHasta, registroPage, isPrivileged, user, registroUsuarioId, registroClienteId, registroFilter]);
+  }, [salonId, todayStr, registroDesde, registroHasta, registroPage, isPrivileged, user, registroUsuarioId, registroClienteId, registroFilter, registroEstadoFilter]);
 
   useEffect(() => {
     if (salonId) fetchData();
@@ -1152,7 +1149,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                 key={t}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => setRegistroFilter(t)}
+                onClick={() => {
+                  setRegistroFilter(t);
+                  setRegistroPage(1);
+                }}
                 style={{
                   background: isActive ? 'var(--accent)' : 'var(--bg-surface)',
                   color: isActive ? 'var(--bg-root)' : 'var(--text-secondary)',
@@ -1174,7 +1174,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
       </div>
 
       {/* ── Registros Table ── */}
-      {filteredRegistros.length === 0 ? (
+      {registros.length === 0 ? (
         <div className={styles.emptyState}>
           <span className={styles.emptyIcon}>📋</span>
           <h3 className={styles.emptyTitle}>No hay registros para este período</h3>
@@ -1203,7 +1203,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
               </tr>
             </thead>
             <tbody>
-              {filteredRegistros.map((reg, idx) => (
+              {registros.map((reg, idx) => (
                 <motion.tr
                   key={reg.id}
                   className={styles.tableRow}

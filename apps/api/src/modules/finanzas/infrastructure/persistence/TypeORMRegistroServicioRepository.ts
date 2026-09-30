@@ -1,9 +1,26 @@
 import { injectable } from 'tsyringe';
-import type { QueryRunner } from 'typeorm';
+import type { QueryRunner, SelectQueryBuilder } from 'typeorm';
 import { AppDataSource } from '../../../../shared/database';
 import { getColombiaDateString } from '../../../../shared/colombia-date';
 import { RegistroServicioEntity, EstadoRegistro } from '../../../../infrastructure/persistence/entities/RegistroServicioEntity';
-import type { IRegistroServicioRepository } from '../../domain/ports/IRegistroServicioRepository';
+import type {
+  IRegistroServicioRepository,
+  EstadoRegistroFilter,
+  TipoRegistroFilter,
+} from '../../domain/ports/IRegistroServicioRepository';
+
+/** Criterios compartidos por `search` y `count` para que el total paginado y las
+ *  filas servidas deriven SIEMPRE del mismo WHERE (fix de paginación PR5). */
+interface RegistroListFilters {
+  salonId: number;
+  desde?: Date;
+  hasta?: Date;
+  usuarioId?: number;
+  clienteId?: number;
+  cajaId?: number;
+  estado?: EstadoRegistroFilter;
+  tipo?: TipoRegistroFilter;
+}
 
 /** Fecha Colombia pura (YYYY-MM-DD) de un Date de rango (borde 05:00 UTC). */
 function fechaColombiaStr(d: Date): string {
@@ -26,6 +43,52 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       return queryRunner.manager.getRepository(RegistroServicioEntity);
     }
     return AppDataSource.getRepository(RegistroServicioEntity);
+  }
+
+  /**
+   * ÚNICA fuente de criterios para el listado de registros: `search` y `count`
+   * llaman a este método con los mismos params, de modo que `meta.total` no puede
+   * divergir de las filas (causa raíz del bug de paginación: antes ninguno filtraba
+   * por estado/tipo y el frontend filtraba client-side).
+   *
+   * `estado`/`tipo` ausentes o `TODOS` ⇒ sin cláusula (compatibilidad con llamadores
+   * que no envían los params).
+   */
+  private aplicarFiltrosRegistro(
+    query: SelectQueryBuilder<RegistroServicioEntity>,
+    params: RegistroListFilters,
+  ): void {
+    query.where('r.salonId = :salonId', { salonId: params.salonId });
+
+    if (params.desde) {
+      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :desde', { desde: params.desde });
+    }
+    if (params.hasta) {
+      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta: params.hasta });
+    }
+    if (params.usuarioId) {
+      query.andWhere('r.usuarioId = :usuarioId', { usuarioId: params.usuarioId });
+    }
+    if (params.clienteId) {
+      query.andWhere('r.clienteId = :clienteId', { clienteId: params.clienteId });
+    }
+    if (params.cajaId) {
+      query.andWhere('r.cajaId = :cajaId', { cajaId: params.cajaId });
+    }
+
+    // Estado: ACTIVOS excluye ANULADO; ANULADOS lo selecciona; TODOS/ausente no filtra.
+    if (params.estado === 'ACTIVOS') {
+      query.andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO });
+    } else if (params.estado === 'ANULADOS') {
+      query.andWhere('r.estado = :anulado', { anulado: EstadoRegistro.ANULADO });
+    }
+
+    // Tipo: la fila pertenece al grupo si tiene monto en esa categoría.
+    if (params.tipo === 'SERVICIOS') {
+      query.andWhere('r.totalServicios > 0');
+    } else if (params.tipo === 'PRODUCTOS') {
+      query.andWhere('r.totalProductos > 0');
+    }
   }
 
   async create(data: Partial<RegistroServicioEntity>, queryRunner?: QueryRunner): Promise<RegistroServicioEntity> {
@@ -97,6 +160,8 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     usuarioId?: number;
     clienteId?: number;
     cajaId?: number;
+    estado?: EstadoRegistroFilter;
+    tipo?: TipoRegistroFilter;
     skip?: number;
     take?: number;
   }): Promise<RegistroServicioEntity[]> {
@@ -109,24 +174,9 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       .leftJoinAndSelect('r.productosVendidos', 'rp')
       .leftJoinAndSelect('rp.producto', 'p')
       .leftJoinAndSelect('r.serviciosItems', 'si')
-      .leftJoinAndSelect('r.caja', 'rcaja')
-      .where('r.salonId = :salonId', { salonId: params.salonId });
+      .leftJoinAndSelect('r.caja', 'rcaja');
 
-    if (params.desde) {
-      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :desde', { desde: params.desde });
-    }
-    if (params.hasta) {
-      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta: params.hasta });
-    }
-    if (params.usuarioId) {
-      query.andWhere('r.usuarioId = :usuarioId', { usuarioId: params.usuarioId });
-    }
-    if (params.clienteId) {
-      query.andWhere('r.clienteId = :clienteId', { clienteId: params.clienteId });
-    }
-    if (params.cajaId) {
-      query.andWhere('r.cajaId = :cajaId', { cajaId: params.cajaId });
-    }
+    this.aplicarFiltrosRegistro(query, params);
 
     if (params.skip !== undefined) query.skip(params.skip);
     if (params.take !== undefined && params.take > 0) query.take(params.take);
@@ -147,27 +197,11 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     usuarioId?: number;
     clienteId?: number;
     cajaId?: number;
+    estado?: EstadoRegistroFilter;
+    tipo?: TipoRegistroFilter;
   }): Promise<number> {
-    const query = this.getRepo()
-      .createQueryBuilder('r')
-      .where('r.salonId = :salonId', { salonId: params.salonId });
-
-    if (params.desde) {
-      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) >= :desde', { desde: params.desde });
-    }
-    if (params.hasta) {
-      query.andWhere('COALESCE(r.fechaHora, r.creadoEn) <= :hasta', { hasta: params.hasta });
-    }
-    if (params.usuarioId) {
-      query.andWhere('r.usuarioId = :usuarioId', { usuarioId: params.usuarioId });
-    }
-    if (params.clienteId) {
-      query.andWhere('r.clienteId = :clienteId', { clienteId: params.clienteId });
-    }
-    if (params.cajaId) {
-      query.andWhere('r.cajaId = :cajaId', { cajaId: params.cajaId });
-    }
-
+    const query = this.getRepo().createQueryBuilder('r');
+    this.aplicarFiltrosRegistro(query, params);
     return query.getCount();
   }
 

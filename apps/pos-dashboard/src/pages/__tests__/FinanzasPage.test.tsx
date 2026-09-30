@@ -1734,9 +1734,17 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
     expect(panel).not.toBeNull();
   });
 
-  it('filtro por estado: default Activos oculta anulados; Anulados los muestra; Todos ambos', async () => {
+  it('filtro por estado server-side: Activos→sin anulados; Anulados→solo anulados; Todos→ambos', async () => {
     const anulado = { ...registroFila, id: 3, estado: 'ANULADO', _clienteNombre: 'Rosa Anulada' };
-    const mockWithAnulado = (url: string): Promise<unknown> => {
+    const responseFor = (rows: unknown[]) => ({
+      data: { data: rows, meta: { page: 1, limit: 12, total: rows.length, totalPages: 1 } },
+    });
+    // PR5: el filtro de estado es server-side. El mock responde según el param
+    // `estado` que envía el componente (antes filtraba client-side con 3 filas fijas).
+    const mockWithAnulado = (
+      url: string,
+      config?: { params?: Record<string, string> },
+    ): Promise<unknown> => {
       if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
       if (url.includes('/caja/actual')) return Promise.reject(error404);
       if (url.includes('/caja/cierres')) {
@@ -1747,7 +1755,10 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
       if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
       if (url.includes('/clientes')) return Promise.resolve({ data: [] });
       if (url.includes('/registros')) {
-        return Promise.resolve({ data: { data: [registroFila, registroFila2, anulado], meta: { page: 1, limit: 12, total: 3, totalPages: 1 } } });
+        const estado = config?.params?.estado;
+        if (estado === 'ACTIVOS') return Promise.resolve(responseFor([registroFila, registroFila2]));
+        if (estado === 'ANULADOS') return Promise.resolve(responseFor([anulado]));
+        return Promise.resolve(responseFor([registroFila, registroFila2, anulado]));
       }
       if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
       return Promise.resolve({ data: {} });
@@ -1760,19 +1771,19 @@ describe('FinanzasPage — móvil (cards ≤600px, D4/D5)', () => {
       </MemoryRouter>,
     );
 
-    // Default: Activos → Ana y Lina visibles, Rosa (anulada) oculta
+    // Default: Activos → el server no devuelve anulados
     const select = await screen.findByLabelText('Filtrar por estado de registro');
     expect(select).toHaveValue('ACTIVOS');
     await screen.findByText('Ana Gómez');
     expect(screen.getByText('Lina Pérez')).toBeInTheDocument();
     expect(screen.queryByText('Rosa Anulada')).toBeNull();
 
-    // Anulados → solo Rosa
+    // Anulados → el server devuelve solo anulados
     fireEvent.change(select, { target: { value: 'ANULADOS' } });
     expect(await screen.findByText('Rosa Anulada')).toBeInTheDocument();
-    expect(screen.queryByText('Ana Gómez')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Ana Gómez')).toBeNull());
 
-    // Todos → los 3
+    // Todos → el server devuelve los 3
     fireEvent.change(screen.getByLabelText('Filtrar por estado de registro'), { target: { value: 'TODOS' } });
     expect(await screen.findByText('Ana Gómez')).toBeInTheDocument();
     expect(screen.getByText('Rosa Anulada')).toBeInTheDocument();
@@ -1918,5 +1929,154 @@ describe('FinanzasPage — Nómina: insumo informativo por rol (PR3)', () => {
     await openNomina();
 
     expect(screen.queryByText(etiqueta)).not.toBeInTheDocument();
+  });
+});
+
+describe('FinanzasPage — Registros: paginación server-side por estado/tipo (PR5)', () => {
+  function registroRow(
+    overrides: Partial<{ id: number; estado: string }> = {},
+  ) {
+    return {
+      id: overrides.id ?? 1,
+      salonId: 1,
+      clienteId: 1,
+      usuarioId: 2,
+      totalServicios: 100000,
+      totalProductos: 0,
+      montoTotal: 100000,
+      montoPendiente: 0,
+      propina: 0,
+      comisionCalculada: 0,
+      esRetoque: false,
+      descripcionServicio: null,
+      estaPagadaEmpleada: false,
+      estado: overrides.estado ?? 'ACTIVO',
+      creadoEn: '2026-09-10T15:00:00.000Z',
+      actualizadoEn: '2026-09-10T15:00:00.000Z',
+      pagos: [],
+      divisiones: [],
+    };
+  }
+
+  function registrosResponse(rows: ReturnType<typeof registroRow>[]) {
+    return {
+      data: {
+        data: rows,
+        meta: {
+          page: 1,
+          limit: 12,
+          total: rows.length,
+          totalPages: Math.max(1, Math.ceil(rows.length / 12)),
+        },
+      },
+    };
+  }
+
+  // Fixture real del período 2026-09-04..2026-09-29 (salon 1): 15 activos,
+  // 11 anulados, 26 total.
+  const activos = Array.from({ length: 15 }, (_, i) => registroRow({ id: 100 + i }));
+  const anulados = Array.from({ length: 11 }, (_, i) => registroRow({ id: 200 + i, estado: 'ANULADO' }));
+  const todos = [...activos, ...anulados];
+
+  function registrosApiMock() {
+    mockGet.mockImplementation((url: string, config?: { params?: Record<string, string> }) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      if (url.includes('/registros')) {
+        // Simula el backend YA CORREGIDO: filtra por el param `estado`.
+        // Sin param (comportamiento viejo) devuelve los 26.
+        const estado = config?.params?.estado;
+        if (estado === 'ACTIVOS') return Promise.resolve(registrosResponse(activos));
+        if (estado === 'ANULADOS') return Promise.resolve(registrosResponse(anulados));
+        return Promise.resolve(registrosResponse(todos));
+      }
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  const registrosCall = () =>
+    mockGet.mock.calls.find(([u]) => String(u).endsWith('/registros'));
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+  });
+
+  it('pide al servidor con estado=ACTIVOS y tipo=TODOS (filtro server-side)', async () => {
+    registrosApiMock();
+
+    renderPage();
+
+    await waitFor(() => expect(registrosCall()).toBeTruthy());
+    const [, config] = registrosCall()!;
+    expect(config.params).toEqual(expect.objectContaining({ estado: 'ACTIVOS', tipo: 'TODOS' }));
+  });
+
+  it('la paginación muestra el total del servidor para el filtro activo (15), no el total sin filtrar', async () => {
+    registrosApiMock();
+
+    renderPage();
+
+    expect(await screen.findByText(/15 registros/)).toBeInTheDocument();
+    expect(screen.queryByText(/26 registros/)).not.toBeInTheDocument();
+  });
+
+  it('cambiar Activos→Anulados→Todos re-consulta y actualiza filas/total', async () => {
+    registrosApiMock();
+
+    renderPage();
+    await screen.findByText(/15 registros/);
+    const tableActivos = screen.getByRole('table');
+    expect(within(tableActivos).getByText('100')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filtrar por estado de registro'), {
+      target: { value: 'ANULADOS' },
+    });
+    await waitFor(() => {
+      expect(
+        mockGet.mock.calls.some(
+          ([u, c]) => String(u).endsWith('/registros') && c?.params?.estado === 'ANULADOS',
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      const tableAnulados = screen.getByRole('table');
+      expect(within(tableAnulados).getByText('200')).toBeInTheDocument();
+      expect(within(tableAnulados).queryByText('100')).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('Filtrar por estado de registro'), {
+      target: { value: 'TODOS' },
+    });
+    expect(await screen.findByText(/26 registros/)).toBeInTheDocument();
+  });
+
+  it('NO filtra client-side: renderiza todas las filas que devuelve el servidor (aunque venga una ANULADA)', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      if (url.includes('/registros')) {
+        return Promise.resolve(
+          registrosResponse([registroRow({ id: 7 }), registroRow({ id: 8, estado: 'ANULADO' })]),
+        );
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+
+    // Espera a que cargue la tabla real (el skeleton también es un <table>):
+    // header + 2 filas. El componente NO descarta la fila ANULADA (id 8).
+    await waitFor(() => {
+      expect(screen.getAllByRole('row')).toHaveLength(3);
+    });
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('7')).toBeInTheDocument();
+    expect(within(table).getByText('8')).toBeInTheDocument();
   });
 });
