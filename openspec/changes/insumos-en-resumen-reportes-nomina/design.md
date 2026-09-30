@@ -88,6 +88,31 @@ keep type-safety). Only `resumenDia` destructures-for-omit (two keys) at seriali
 the full output because it is route-gated. Only **HTTP-facing** frontend types become optional
 (`FinanzasResumen.totalCostoBaseInsumos?`, `balanceNeto?`), so existing consumers keep compiling.
 
+### D6 — Pagination filters are server-side (PR5 fix)
+
+**Choice**: `GET /registros` accepts `estado` (`ACTIVOS | ANULADOS | TODOS`) and `tipo`
+(`TODOS | SERVICIOS | PRODUCTOS`). The TypeORM repository applies them through a **single private
+method** (`aplicarFiltrosRegistro`) called by both `search` and `count`, so `meta.total` and the
+served rows derive from the same WHERE and cannot drift. The dashboard sends both params and applies
+**no** client-side filtering. `sin param` == `TODOS` (documented decision) for backwards compatibility.
+
+**Alternatives**: (a) keep client-side filtering and fetch all rows — rejected: breaks pagination and
+doesn't scale; (b) duplicate the WHERE in `search` and `count` — rejected: that was the root cause
+(two code paths, easy to diverge); (c) add the filters only to `count` — rejected: rows and total
+would disagree.
+
+**Rationale**: the bug was server pagination (`meta.total`) combined with client-side filtering. The
+only correct fix is to make the backend own the filter and make total+rows share one criteria builder.
+
+**Contract**:
+
+| Param | Values | Semantics |
+|---|---|---|
+| `estado` | `ACTIVOS` \| `ANULADOS` \| `TODOS` (default) | `ACTIVOS` → `estado != ANULADO`; `ANULADOS` → `estado = ANULADO`; `TODOS`/ausente → sin cláusula |
+| `tipo` | `TODOS` (default) \| `SERVICIOS` \| `PRODUCTOS` | `SERVICIOS` → `totalServicios > 0`; `PRODUCTOS` → `totalProductos > 0`; `TODOS`/ausente → sin cláusula |
+
+Invalid values fall back to `TODOS` (zod `.catch`). No migration; rollback is code-only.
+
 ## Data Flow
 
 ```

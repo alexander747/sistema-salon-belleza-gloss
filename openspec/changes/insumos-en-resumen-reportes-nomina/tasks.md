@@ -82,3 +82,24 @@ sobre los registros que devuelve `findBySalon`, pero esa consulta no cargaba la 
 - [x] 5.4 TRIANGULATE: segundo caso (salonId distinto) que fija `where: { salonId }` + `order: { creadoEn: 'DESC' }`.
 - [x] 5.5 Prueba runtime: `docker restart posfinal-api`; `GET /api/salones/1/finanzas/nomina` (DUEÑA) → lucía período `2026-09-01→09-16`: `totalCostoBaseInsumos = 84000` (antes `0`), `totalAPagar = 297600` sin cambios.
 - [x] 5.6 GREEN: `cd apps/api && npx vitest run` (613 passed / 5 fallas baseline en `NominaPendienteUseCase.test.ts`) + `npx tsc --noEmit` (exit 2, 1 error baseline `seed.ts`).
+
+## Phase 6: Fix paginación de Registros (PR5) — DONE
+
+Bug reportado por el owner (verificado con data real): en el período 2026-09-04..2026-09-29
+(salón 1) hay **26** registros (15 activos + 11 anulados), pero la pestaña Registros mostraba
+"26 registros" en la paginación y ~15 filas: el backend (`search`/`count`) no filtraba por
+`estado`/`tipo` y el frontend filtraba client-side sobre una página paginada en servidor.
+
+- [x] 6.1 RED backend: `TypeORMRegistroServicioRepository.test.ts` — `count` ACTIVOS excluye ANULADO, ANULADOS solo ANULADO, TODOS/ausente sin cláusula, `tipo` SERVICIOS/PRODUCTOS; **`search` y `count` aplican criterios idénticos**.
+- [x] 6.2 RED backend: `ListRegistrosUseCase.test.ts` (nuevo) — reenvía `estado`/`tipo` a `search` Y `count`; sin params usa `TODOS`; `meta.total` = count del filtro (independiente del recorte de página).
+- [x] 6.3 RED backend: `RegistroController.test.ts` — parsea `estado`/`tipo` válidos; inválidos/ausentes ⇒ `TODOS`.
+- [x] 6.4 Domain: `IRegistroServicioRepository` — tipos `EstadoRegistroFilter`/`TipoRegistroFilter` y params `estado`/`tipo` en `search` y `count`.
+- [x] 6.5 Repo: método privado único `aplicarFiltrosRegistro` usado por `search` y `count` (imposible divergir). Default (`TODOS`/ausente) = sin cláusula.
+- [x] 6.6 Use case: `ListRegistrosInput.estado/tipo`, default `TODOS`, mismos valores a `search` y `count`.
+- [x] 6.7 Controller: zod inline `REGISTRO_FILTERS_SCHEMA` (`.catch('TODOS')`), defaults y reenvío.
+- [x] 6.8 RED/GREEN frontend: `FinanzasPage.test.tsx` (nuevo describe) — envía `estado`/`tipo`; total = `meta.total` del filtro (15/11/26); cambiar Activos→Anulados→Todos re-consulta; NO filtra client-side (renderiza la ANULADA si el server la manda).
+- [x] 6.9 Frontend: `regParams.estado/tipo`; eliminado el `useMemo` `filteredRegistros` (se usa `registros`); `registroEstadoFilter` agregado a deps de `fetchData`; el botón de tipo resetea a página 1.
+- [x] 6.10 Artifact sync: delta `finanzas-registros` (requirement de paginación server-side + escenarios), `design.md` (D6) y esta Phase 6.
+- [x] 6.11 GREEN: `cd apps/api && npx vitest run` (623 passed / 5 baseline) + `npx tsc --noEmit` (1 baseline `seed.ts`); `cd apps/pos-dashboard && npx vitest run` (391 passed / 2 baseline) + `npx tsc --noEmit` (0).
+- [x] 6.12 Prueba runtime (API :3001, DB local = prod): `GET /salones/1/registros` período 2026-09-04..09-29 → ACTIVOS `meta.total=15`/15 filas, ANULADOS `11`/11, TODOS `26`/26, SERVICIOS `25`, PRODUCTOS `1`; sin params `26` (compat). `meta.total == filas` en todos.
+
