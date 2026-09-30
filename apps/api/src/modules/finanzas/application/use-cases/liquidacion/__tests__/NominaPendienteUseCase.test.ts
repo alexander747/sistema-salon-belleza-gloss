@@ -668,3 +668,153 @@ describe('NominaPendienteUseCase — frecuencia SEMANAL', () => {
     expect(result.map((f) => f.periodoInicio.getUTCMonth())).toEqual([5, 6, 7]); // jun, jul, ago
   });
 });
+
+describe('NominaPendienteUseCase — insumos del período (informativo, PR3)', () => {
+  let useCase: NominaPendienteUseCase;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    useCase = new NominaPendienteUseCase(
+      mockUsuarioRepo as never,
+      mockRegistroRepo as never,
+      mockLiquidacionRepo as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fixture lucía: insumo del período = 84000 y NO se resta otra vez de totalAPagar', async () => {
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z')); // 07:00 COT = 10/09
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({ id: 1, nombre: 'Lucía', frecuenciaPago: 'MENSUAL', sueldoFijo: 0 }),
+    ]);
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      makeRegistro({
+        id: 189,
+        usuarioId: 1,
+        comisionCalculada: 267600, // comisión YA neteada de insumos
+        propina: 0,
+        creadoEn: new Date('2026-09-05T10:00:00'),
+        // item fixture: 105 g × $800 = 84000 de costo base de insumos
+        serviciosItems: [{ costoBaseInsumos: 84000 }],
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].totalCostoBaseInsumos).toBe(84000);
+    // Reconciliación: el insumo es informativo, la comisión no se toca.
+    expect(result[0].totalComisionesPendientes).toBe(267600);
+    expect(result[0].totalAPagar).toBe(267600);
+  });
+
+  it('ANULADO y registros sin items → insumo 0 (no se omite la fila)', async () => {
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z'));
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({ id: 3, nombre: 'Vacía', frecuenciaPago: 'MENSUAL', sueldoFijo: 200000 }),
+    ]);
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      makeRegistro({
+        id: 1,
+        usuarioId: 3,
+        estado: 'ANULADO',
+        comisionCalculada: 0,
+        creadoEn: new Date('2026-09-05T10:00:00'),
+        serviciosItems: [{ costoBaseInsumos: 84000 }],
+      }),
+      makeRegistro({
+        id: 2,
+        usuarioId: 3,
+        estado: 'ACTIVO',
+        comisionCalculada: 0,
+        creadoEn: new Date('2026-09-06T10:00:00'),
+        // sin serviciosItems → se trata como []
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].totalCostoBaseInsumos).toBe(0);
+  });
+
+  it('cada fila de período solo suma los insumos de su propio delPeriodo', async () => {
+    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08 → quincena [1,15]
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({
+        id: 20,
+        nombre: 'Q-insumos',
+        frecuenciaPago: 'QUINCENAL',
+        sueldoFijo: 200000,
+      }),
+    ]);
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      // Quincena de julio [16,31]: item 50000
+      makeRegistro({
+        id: 1,
+        usuarioId: 20,
+        comisionCalculada: 0,
+        creadoEn: new Date('2026-07-20T10:00:00'),
+        serviciosItems: [{ costoBaseInsumos: 50000 }],
+      }),
+      // Quincena de agosto [1,15]: item 84000
+      makeRegistro({
+        id: 2,
+        usuarioId: 20,
+        comisionCalculada: 267600,
+        creadoEn: new Date('2026-08-05T10:00:00'),
+        serviciosItems: [{ costoBaseInsumos: 84000 }],
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(2);
+    expect(result[0].totalCostoBaseInsumos).toBe(50000); // julio
+    expect(result[1].totalCostoBaseInsumos).toBe(84000); // agosto
+  });
+
+  it('un registro fuera del delPeriodo (item 50000) NO suma al insumo', async () => {
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z')); // período vigente: septiembre
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({ id: 21, nombre: 'Fuera', frecuenciaPago: 'MENSUAL', sueldoFijo: 200000 }),
+    ]);
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      makeRegistro({
+        id: 1,
+        usuarioId: 21,
+        comisionCalculada: 267600,
+        creadoEn: new Date('2026-09-05T10:00:00'),
+        serviciosItems: [{ costoBaseInsumos: 84000 }],
+      }),
+      // Agosto: cubierto por la última liquidación → fuera del período vigente
+      makeRegistro({
+        id: 2,
+        usuarioId: 21,
+        comisionCalculada: 0,
+        creadoEn: new Date('2026-08-20T10:00:00'),
+        serviciosItems: [{ costoBaseInsumos: 50000 }],
+      }),
+    ]);
+    // Última liquidación hasta fin de agosto → solo septiembre queda pendiente
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([
+      {
+        id: 50,
+        fechaHasta: new Date('2026-08-31T05:00:00.000Z'),
+        creadoEn: new Date('2026-08-31T12:00:00'),
+      },
+    ]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].totalCostoBaseInsumos).toBe(84000);
+  });
+});

@@ -21,6 +21,13 @@ export interface NominaPendienteEmpleada {
   porcentajeComisionServicio: number;
   totalAPagar: number;
   cantidadRegistros: number;
+  /**
+   * PR3 — costo base de insumos del período (Σ serviciosItems[].costoBaseInsumos).
+   * INFORMATIVO: la comisión (`totalComisionesPendientes`) YA está neteada de
+   * insumos, por lo que este valor NO se resta de `totalAPagar`. Opcional para no
+   * romper consumidores existentes. Computado on-demand (sin columna ni migración).
+   */
+  totalCostoBaseInsumos?: number;
   periodoInicio: Date;
   periodoFin: Date;
   frecuenciaPago: FrecuenciaPago;
@@ -315,6 +322,18 @@ export class NominaPendienteUseCase {
           diasMes > 0 ? Math.round((Number(empleada.sueldoFijo) * diasTramo) / diasMes) : 0;
         const totalComisiones = delPeriodo.reduce((sum, r) => sum + Number(r.comisionCalculada), 0);
         const totalPropinas = delPeriodo.reduce((sum, r) => sum + Number(r.propina), 0);
+        // PR3 — insumo informativo del período: se computa sobre el MISMO `delPeriodo`
+        // que la comisión para no divergir (misma fecha de negocio, ANULADO ya excluido).
+        // NO se suma a `totalAPagar`: la comisión ya está neteada de insumos.
+        const totalCostoBaseInsumos = delPeriodo.reduce(
+          (sum, r) =>
+            sum +
+            (r.serviciosItems ?? []).reduce(
+              (s, si) => s + Number(si.costoBaseInsumos ?? 0),
+              0,
+            ),
+          0,
+        );
 
         // Una fila solo si el período tiene algo liquidable: registros o comp fijo
         if (
@@ -336,6 +355,7 @@ export class NominaPendienteUseCase {
           porcentajeComisionServicio: Number(empleada.porcentajeComisionServicio),
           totalAPagar: totalComisiones + totalPropinas + bonoHorarioPeriodo + sueldoFijoPeriodo,
           cantidadRegistros: delPeriodo.length,
+          totalCostoBaseInsumos: Math.round(totalCostoBaseInsumos),
           periodoInicio: periodo.inicio,
           periodoFin: periodo.fin,
           frecuenciaPago,
