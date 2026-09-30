@@ -52,7 +52,10 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
   async findBySalon(salonId: number): Promise<RegistroServicioEntity[]> {
     return this.getRepo().find({
       where: { salonId },
-      relations: ['pagos', 'divisiones'],
+      // `serviciosItems` es necesario para la nómina: suma
+      // `serviciosItems[].costoBaseInsumos` del período. Sin la relación el total
+      // es siempre 0 (regresión B-1). Único consumidor: NominaPendienteUseCase.
+      relations: ['pagos', 'divisiones', 'serviciosItems'],
       order: { creadoEn: 'DESC' },
     });
   }

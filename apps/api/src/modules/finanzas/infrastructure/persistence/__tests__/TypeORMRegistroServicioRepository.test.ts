@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGetRawOne = vi.fn();
 const mockGetRawMany = vi.fn();
+const mockFind = vi.fn();
 
 interface MockQueryBuilder {
   select: ReturnType<typeof vi.fn>;
@@ -34,6 +35,7 @@ vi.mock('../../../../../shared/database', () => ({
   AppDataSource: {
     getRepository: vi.fn(() => ({
       createQueryBuilder: vi.fn(() => mockQueryBuilder),
+      find: mockFind,
     })),
   },
 }));
@@ -265,5 +267,43 @@ describe('TypeORMRegistroServicioRepository.sumPagosPorMes', () => {
     );
 
     expect(result).toEqual([]);
+  });
+});
+
+// Regresión B-1 (PR4): la nómina suma `serviciosItems[].costoBaseInsumos` sobre los
+// registros que devuelve `findBySalon`. Si la relación no se carga, el total es
+// siempre 0. Este test fija el contrato de la consulta en el borde del repositorio.
+describe('TypeORMRegistroServicioRepository.findBySalon', () => {
+  let repo: TypeORMRegistroServicioRepository;
+
+  beforeEach(() => {
+    repo = new TypeORMRegistroServicioRepository();
+    mockFind.mockReset();
+  });
+
+  it('carga la relación serviciosItems además de pagos y divisiones', async () => {
+    mockFind.mockResolvedValue([]);
+
+    await repo.findBySalon(7);
+
+    expect(mockFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { salonId: 7 },
+        relations: expect.arrayContaining(['pagos', 'divisiones', 'serviciosItems']),
+      }),
+    );
+  });
+
+  it('conserva el filtro por salonId y el orden por creadoEn DESC al agregar la relación', async () => {
+    mockFind.mockResolvedValue([]);
+
+    await repo.findBySalon(42);
+
+    expect(mockFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { salonId: 42 },
+        order: { creadoEn: 'DESC' },
+      }),
+    );
   });
 });
