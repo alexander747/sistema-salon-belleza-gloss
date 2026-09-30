@@ -49,6 +49,11 @@ export interface IRegistroServicioRepository {
   /** Σ pagos recibidos en el período por fecha de recepción (pago.creadoEn),
    *  solo de registros NO ANULADO del salón. `usuarioId`/`clienteId` filtran. */
   sumPagosPorPeriodo(salonId: number, fechaInicio: Date, fechaFin: Date, usuarioId?: number, clienteId?: number): Promise<number>;
+  /** Σ pagos recibidos en el período (misma "fecha de negocio del pago" que
+   *  `sumPagosPorPeriodo`) cuyo REGISTRO tiene fecha de negocio ANTERIOR al inicio
+   *  del período — cobros de deuda vieja. Excluye ANULADO y respeta
+   *  `usuarioId`/`clienteId`. Sin deuda anterior cobrada → 0. */
+  sumCobrosDeudaAnterior(salonId: number, fechaInicio: Date, fechaFin: Date, usuarioId?: number, clienteId?: number): Promise<number>;
   /** Σ pagos agrupados por mes (YYYY-MM, fecha de negocio = caja del pago),
    *  solo de registros NO ANULADO del salón, en el rango dado (Colombia). */
   sumPagosPorMes(salonId: number, fechaInicio: Date, fechaFin: Date): Promise<Array<{ mes: string; total: number }>>;

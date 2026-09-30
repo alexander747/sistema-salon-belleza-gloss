@@ -130,6 +130,87 @@ describe('TypeORMRegistroServicioRepository.sumPagosPorPeriodo', () => {
   });
 });
 
+// PR6a — cobros de DEUDA ANTERIOR: pagos recibidos en el período cuya venta
+// original (fecha de negocio del REGISTRO) es previa al inicio del período.
+describe('TypeORMRegistroServicioRepository.sumCobrosDeudaAnterior', () => {
+  let repo: TypeORMRegistroServicioRepository;
+
+  const PAGO_SQL =
+    "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d'))";
+
+  beforeEach(() => {
+    repo = new TypeORMRegistroServicioRepository();
+    mockGetRawOne.mockReset();
+    mockQueryBuilder.select.mockClear();
+    mockQueryBuilder.innerJoin.mockClear();
+    mockQueryBuilder.leftJoin.mockClear();
+    mockQueryBuilder.where.mockClear();
+    mockQueryBuilder.andWhere.mockClear();
+  });
+
+  it('suma los pagos del período cuyo registro es ANTERIOR al inicio (deuda vieja), excluye ANULADO', async () => {
+    mockGetRawOne.mockResolvedValue({ total: '20000.00' });
+
+    const inicio = new Date('2026-05-01T05:00:00.000Z');
+    const fin = new Date('2026-06-01T05:00:00.000Z');
+
+    const result = await repo.sumCobrosDeudaAnterior(1, inicio, fin);
+
+    expect(result).toBe(20000);
+    expect(mockQueryBuilder.select).toHaveBeenCalledWith('COALESCE(SUM(p.monto), 0)', 'total');
+    expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith('r.pagos', 'p');
+    expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith('p.caja', 'pc');
+    expect(mockQueryBuilder.where).toHaveBeenCalledWith('r.salonId = :salonId', { salonId: 1 });
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('r.estado != :anulado', {
+      anulado: 'ANULADO',
+    });
+    // Ventana del PAGO: misma "fecha de negocio del pago" que sumPagosPorPeriodo.
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(`${PAGO_SQL} >= :fechaInicioStr`, {
+      fechaInicioStr: '2026-05-01',
+    });
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(`${PAGO_SQL} < :fechaFinStr`, {
+      fechaFinStr: '2026-06-01',
+    });
+    // "Anterior": fecha de negocio del REGISTRO (sin caja del pago) < inicio.
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+      "DATE_FORMAT(COALESCE(r.fechaHora, r.creadoEn), '%Y-%m-%d') < :fechaRegistroAnteriorStr",
+      { fechaRegistroAnteriorStr: '2026-05-01' },
+    );
+  });
+
+  it('respeta los filtros usuarioId y clienteId', async () => {
+    mockGetRawOne.mockResolvedValue({ total: '5000.00' });
+
+    const result = await repo.sumCobrosDeudaAnterior(
+      1,
+      new Date('2026-05-01T05:00:00.000Z'),
+      new Date('2026-06-01T05:00:00.000Z'),
+      4,
+      7,
+    );
+
+    expect(result).toBe(5000);
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('r.usuarioId = :usuarioId', {
+      usuarioId: 4,
+    });
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('r.clienteId = :clienteId', {
+      clienteId: 7,
+    });
+  });
+
+  it('devuelve 0 cuando no hay cobros de deuda anterior (SUM NULL)', async () => {
+    mockGetRawOne.mockResolvedValue({ total: null });
+
+    const result = await repo.sumCobrosDeudaAnterior(
+      2,
+      new Date('2026-01-01T05:00:00.000Z'),
+      new Date('2026-02-01T05:00:00.000Z'),
+    );
+
+    expect(result).toBe(0);
+  });
+});
+
 describe('TypeORMRegistroServicioRepository.sumMontoPendientePorPeriodo', () => {
   let repo: TypeORMRegistroServicioRepository;
 

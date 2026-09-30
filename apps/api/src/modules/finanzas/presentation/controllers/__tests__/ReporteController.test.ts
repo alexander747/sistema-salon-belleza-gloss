@@ -200,6 +200,7 @@ describe('ReporteController', () => {
       totalIngresos: 555000,
       totalCobrado: 555000,
       totalFiadoDia: 0,
+      cobrosDeudaAnterior: 20000,
       totalGastos: 0,
       balanceNeto: 203400,
     };
@@ -220,10 +221,11 @@ describe('ReporteController', () => {
       const payload = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(payload.totalCostoBaseInsumos).toBe(84000);
       expect(payload.balanceNeto).toBe(203400);
+      expect(payload.cobrosDeudaAnterior).toBe(20000);
     });
 
     it.each([Rol.MANICURISTA, Rol.RECEPCIONISTA])(
-      'rol no privilegiado (%s) NO recibe totalCostoBaseInsumos ni balanceNeto (clave ausente, ni null ni 0)',
+      'rol no privilegiado (%s) NO recibe totalCostoBaseInsumos ni balanceNeto (clave ausente, ni null ni 0) pero SÍ cobrosDeudaAnterior',
       async (rol) => {
         mockResumenDiaUseCase.execute.mockResolvedValue(fullResumen);
 
@@ -240,6 +242,8 @@ describe('ReporteController', () => {
         // Ausencia real de la clave (no undefined/null/0): no se puede derivar.
         expect(Object.prototype.hasOwnProperty.call(payload, 'totalCostoBaseInsumos')).toBe(false);
         expect(Object.prototype.hasOwnProperty.call(payload, 'balanceNeto')).toBe(false);
+        // PR6a: cobrosDeudaAnterior es caja (NO sensible) → presente para todos los roles.
+        expect(payload.cobrosDeudaAnterior).toBe(20000);
         // El resto de la respuesta sigue disponible para la pestaña Registros.
         expect(payload.totalComisiones).toBe(267600);
         expect(payload.totalIngresos).toBe(555000);

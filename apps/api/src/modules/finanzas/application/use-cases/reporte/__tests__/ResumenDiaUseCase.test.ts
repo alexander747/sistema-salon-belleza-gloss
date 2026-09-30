@@ -40,6 +40,7 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     search: ReturnType<typeof vi.fn>;
     sumPagosPorPeriodo: ReturnType<typeof vi.fn>;
     sumMontoPendientePorPeriodo: ReturnType<typeof vi.fn>;
+    sumCobrosDeudaAnterior: ReturnType<typeof vi.fn>;
   };
   let mockGastoRepo: { sumBySalonAndDateRange: ReturnType<typeof vi.fn> };
 
@@ -49,12 +50,14 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
       search: vi.fn(),
       sumPagosPorPeriodo: vi.fn(),
       sumMontoPendientePorPeriodo: vi.fn(),
+      sumCobrosDeudaAnterior: vi.fn(),
     };
     mockGastoRepo = { sumBySalonAndDateRange: vi.fn() };
     useCase = new ResumenDiaUseCase(mockRegistroRepo as never, mockGastoRepo as never);
     mockGastoRepo.sumBySalonAndDateRange.mockResolvedValue(0);
     mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(0);
     mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
+    mockRegistroRepo.sumCobrosDeudaAnterior.mockResolvedValue(0);
   });
 
   it('aplica la proporción del descuento a servicios y productos en modo período', async () => {
@@ -330,5 +333,69 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
 
     expect(result.totalCostoBaseInsumos).toBe(0);
     expect(result.balanceNeto).toBe(0);
+  });
+
+  it('PR6a — expone cobrosDeudaAnterior y cumple la identidad de reconciliación del owner', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 100000,
+        totalProductos: 0,
+        propina: 5000,
+        montoTotal: 105000,
+        comisionCalculada: 0,
+      }),
+    ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(85000);
+    mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(40000);
+    mockRegistroRepo.sumCobrosDeudaAnterior.mockResolvedValue(20000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.totalIngresos).toBe(100000);
+    expect(result.totalPropinas).toBe(5000);
+    expect(result.totalFiadoDia).toBe(40000);
+    expect(result.totalCobrado).toBe(85000);
+    expect(result.cobrosDeudaAnterior).toBe(20000);
+    // Identidad del owner: Cobrado = Ventas − Fiado + CobrosDeudaAnterior + Propinas
+    expect(result.totalCobrado).toBe(
+      result.totalIngresos - result.totalFiadoDia + result.cobrosDeudaAnterior + result.totalPropinas,
+    );
+  });
+
+  it('PR6a — llama a sumCobrosDeudaAnterior con el período y los filtros de persona', async () => {
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockRegistroRepo.sumCobrosDeudaAnterior.mockResolvedValue(5000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      fecha: '2026-05-15',
+      usuarioId: 4,
+    });
+
+    expect(mockRegistroRepo.sumCobrosDeudaAnterior).toHaveBeenCalledWith(
+      1,
+      expect.any(Date),
+      expect.any(Date),
+      4,
+      undefined,
+    );
+    expect(result.cobrosDeudaAnterior).toBe(5000);
+  });
+
+  it('PR6a — sin cobros de deuda anterior → cobrosDeudaAnterior 0', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([]);
+    mockRegistroRepo.sumCobrosDeudaAnterior.mockResolvedValue(0);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-09-04',
+      hasta: '2026-09-29',
+    });
+
+    expect(result.cobrosDeudaAnterior).toBe(0);
   });
 });

@@ -61,6 +61,51 @@ ver "Insumo del resumen condicionado al rol").
 - WHEN se calcula el resumen
 - THEN `balanceNeto`=60000
 
+### Requirement: Cobros de deuda anterior en el resumen
+
+`GET /api/salones/:salonId/finanzas/resumen` MUST devolver un campo `cobrosDeudaAnterior` =
+Σ montos de los pagos recibidos en el período —misma "fecha de negocio del pago" que usa
+`sumPagosPorPeriodo` (la caja del pago, con fallback a `COALESCE(r.fechaHora, r.creadoEn)`) — cuyos
+registros tienen fecha de negocio (`COALESCE(r.fechaHora, r.creadoEn)`) ANTERIOR al inicio del
+período. El cómputo MUST respetar los mismos filtros `usuarioId`/`clienteId` y excluir registros
+`ANULADO`, igual que `sumPagosPorPeriodo`; los pagos sobre registros del propio período MUST NOT
+contar. El campo SHALL ser NO sensible (es caja, no margen): MUST estar presente para TODOS los
+roles, igual que `totalIngresos`/`totalCobrado`, incluso cuando la respuesta omite
+`totalCostoBaseInsumos` y `balanceNeto`. Sin deuda anterior cobrada → `0`. MUST agregarse a
+`ResumenDiaOutput` y al tipo HTTP del frontend.
+
+#### Scenario: Definición exacta (no derivada en el frontend)
+
+- GIVEN pagos del período por 20000 sobre registros con fecha de negocio anterior al inicio del período
+- WHEN GET /finanzas/resumen
+- THEN `cobrosDeudaAnterior`=20000
+- AND `totalCobrado` no cambia por exponer este campo
+
+#### Scenario: Un pago sobre un registro del período no cuenta
+
+- GIVEN un pago del período sobre un registro cuya fecha de negocio es del mismo período
+- WHEN GET /finanzas/resumen
+- THEN ese pago NO suma a `cobrosDeudaAnterior`
+
+#### Scenario: Mismos filtros y exclusión de ANULADO
+
+- GIVEN `usuarioId`/`clienteId` y un registro `ANULADO` con pagos en el período
+- WHEN GET /finanzas/resumen con esos filtros
+- THEN `cobrosDeudaAnterior` respeta `usuarioId`/`clienteId` y el `ANULADO` no aporta
+
+#### Scenario: Visible para todos los roles
+
+- GIVEN un usuario no privilegiado (MANICURISTA)
+- WHEN GET /finanzas/resumen
+- THEN la respuesta incluye `cobrosDeudaAnterior`
+- AND sigue omitiendo `totalCostoBaseInsumos` y `balanceNeto`
+
+#### Scenario: Sin deuda anterior cobrada
+
+- GIVEN un período sin pagos de registros anteriores
+- WHEN GET /finanzas/resumen
+- THEN `cobrosDeudaAnterior`=0
+
 ### Requirement: ReportesTab — tarjeta Insumos solo para roles privilegiados
 
 El dashboard ReportesTab MUST renderizar la tarjeta "📦 Insumos" del P&L SOLO cuando el usuario es

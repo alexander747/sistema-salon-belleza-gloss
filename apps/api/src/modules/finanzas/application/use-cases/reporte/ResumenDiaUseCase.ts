@@ -28,6 +28,9 @@ export interface ResumenDiaOutput {
   totalCobrado: number;
   /** Σ montoPendiente de registros NO ANULADO del período (fiado del día). */
   totalFiadoDia: number;
+  /** Σ pagos del período sobre ventas cuyo registro es anterior al período
+   *  (cobros de deuda vieja). Campo NO sensible: presente para todos los roles. */
+  cobrosDeudaAnterior: number;
   totalGastos: number;
   balanceNeto: number;
 }
@@ -71,7 +74,7 @@ export class ResumenDiaUseCase {
     // The sum keeps spanning the full date range regardless of the input filters.
     const hasFiltroPersona = input.usuarioId !== undefined || input.clienteId !== undefined;
 
-    const [registros, totalGastos, totalCobrado, totalFiadoDia] = await Promise.all([
+    const [registros, totalGastos, totalCobrado, totalFiadoDia, cobrosDeudaAnterior] = await Promise.all([
       hasFiltroPersona
         ? this.registroRepo.search({
             salonId: input.salonId,
@@ -87,6 +90,8 @@ export class ResumenDiaUseCase {
       this.registroRepo.sumPagosPorPeriodo(input.salonId, inicio, fin, input.usuarioId, input.clienteId),
       // Fiado originado en el período (fecha de negocio de los registros).
       this.registroRepo.sumMontoPendientePorPeriodo(input.salonId, inicio, fin, input.usuarioId, input.clienteId),
+      // Cobros de deuda ANTERIOR recibidos en el período (caja), mismo filtro de persona.
+      this.registroRepo.sumCobrosDeudaAnterior(input.salonId, inicio, fin, input.usuarioId, input.clienteId),
     ]);
 
     // ── Calcular valores ajustados por descuentos ──────────────
@@ -161,6 +166,7 @@ export class ResumenDiaUseCase {
       totalIngresos,
       totalCobrado,
       totalFiadoDia,
+      cobrosDeudaAnterior,
       totalGastos,
       balanceNeto,
     };

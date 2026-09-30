@@ -36,6 +36,11 @@ function fechaColombiaStr(d: Date): string {
 const FECHA_NEGOCIO_PAGO_SQL =
   "COALESCE(DATE_FORMAT(pc.fechaCaja, '%Y-%m-%d'), DATE_FORMAT(r.fechaHora, '%Y-%m-%d'), DATE_FORMAT(r.creadoEn, '%Y-%m-%d'))";
 
+/** Fecha de negocio del REGISTRO como string YYYY-MM-DD (COALESCE fechaHora,
+ *  creadoEn) — usada para detectar si la venta original es previa al período. */
+const FECHA_NEGOCIO_REGISTRO_SQL =
+  "DATE_FORMAT(COALESCE(r.fechaHora, r.creadoEn), '%Y-%m-%d')";
+
 @injectable()
 export class TypeORMRegistroServicioRepository implements IRegistroServicioRepository {
   private getRepo(queryRunner?: QueryRunner) {
@@ -244,6 +249,50 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
       })
       .andWhere(`${FECHA_NEGOCIO_PAGO_SQL} < :fechaFinStr`, {
         fechaFinStr: fechaColombiaStr(fechaFin),
+      });
+
+    if (usuarioId !== undefined) {
+      query.andWhere('r.usuarioId = :usuarioId', { usuarioId });
+    }
+    if (clienteId !== undefined) {
+      query.andWhere('r.clienteId = :clienteId', { clienteId });
+    }
+
+    const result = await query.getRawOne();
+    return Number(result?.total ?? 0);
+  }
+
+  /**
+   * Cobros de DEUDA ANTERIOR: Σ pagos recibidos en el período (misma fecha de
+   * negocio del pago que `sumPagosPorPeriodo`) cuya venta original — fecha de
+   * negocio del REGISTRO (COALESCE fechaHora, creadoEn) — es ANTERIOR al inicio
+   * del período. Excluye ANULADO y respeta `usuarioId`/`clienteId`, igual que
+   * `sumPagosPorPeriodo`; los pagos sobre registros del propio período no cuentan.
+   */
+  async sumCobrosDeudaAnterior(
+    salonId: number,
+    fechaInicio: Date,
+    fechaFin: Date,
+    usuarioId?: number,
+    clienteId?: number,
+  ): Promise<number> {
+    const query = this.getRepo()
+      .createQueryBuilder('r')
+      .select('COALESCE(SUM(p.monto), 0)', 'total')
+      .innerJoin('r.pagos', 'p')
+      .leftJoin('p.caja', 'pc')
+      .where('r.salonId = :salonId', { salonId })
+      .andWhere('r.estado != :anulado', { anulado: EstadoRegistro.ANULADO })
+      // Ventana del PAGO: [inicio, fin) como fecha Colombia pura (evita 05:00 UTC).
+      .andWhere(`${FECHA_NEGOCIO_PAGO_SQL} >= :fechaInicioStr`, {
+        fechaInicioStr: fechaColombiaStr(fechaInicio),
+      })
+      .andWhere(`${FECHA_NEGOCIO_PAGO_SQL} < :fechaFinStr`, {
+        fechaFinStr: fechaColombiaStr(fechaFin),
+      })
+      // La VENTA original es anterior al período (sin la caja del pago).
+      .andWhere(`${FECHA_NEGOCIO_REGISTRO_SQL} < :fechaRegistroAnteriorStr`, {
+        fechaRegistroAnteriorStr: fechaColombiaStr(fechaInicio),
       });
 
     if (usuarioId !== undefined) {
