@@ -68,3 +68,17 @@ Commit: 907df06 (feat frontend).
 
 - [x] 4.1 Update `specs/finanzas-reportes/spec.md`: `resumen` omite `totalCostoBaseInsumos`+`balanceNeto`; `pyl`/`exportar` 403; nuevo requirement de exportación. (Done in PR1.)
 - [x] 4.2 Confirm rollback code-only (no migration) and proposal success criteria.
+
+## Phase 5: Fix B-1 — nómina insumo siempre 0 (PR4) — DONE
+
+`sdd-verify` bloqueó el deploy: `NominaPendienteUseCase` suma `serviciosItems[].costoBaseInsumos`
+sobre los registros que devuelve `findBySalon`, pero esa consulta no cargaba la relación →
+`totalCostoBaseInsumos` era siempre 0 en runtime. Los tests de PR3 lo enmascaraban inyectando
+`serviciosItems` en el mock del repositorio.
+
+- [x] 5.1 Listar consumidores de `IRegistroServicioRepository.findBySalon`: **único** consumidor `NominaPendienteUseCase` (`ResumenDiaUseCase` usa `findBySalonAndDateRange`, que ya carga `serviciosItems`). Opción (a) — agregar la relación — es segura y la menos invasiva.
+- [x] 5.2 RED: test de borde de repositorio que asserta que `findBySalon` pasa `relations` incluyendo `serviciosItems` (`TypeORMRegistroServicioRepository.test.ts`).
+- [x] 5.3 GREEN: agregar `'serviciosItems'` a las `relations` de `findBySalon` (sin migración, una sola línea + comentario).
+- [x] 5.4 TRIANGULATE: segundo caso (salonId distinto) que fija `where: { salonId }` + `order: { creadoEn: 'DESC' }`.
+- [x] 5.5 Prueba runtime: `docker restart posfinal-api`; `GET /api/salones/1/finanzas/nomina` (DUEÑA) → lucía período `2026-09-01→09-16`: `totalCostoBaseInsumos = 84000` (antes `0`), `totalAPagar = 297600` sin cambios.
+- [x] 5.6 GREEN: `cd apps/api && npx vitest run` (613 passed / 5 fallas baseline en `NominaPendienteUseCase.test.ts`) + `npx tsc --noEmit` (exit 2, 1 error baseline `seed.ts`).
