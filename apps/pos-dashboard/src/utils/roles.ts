@@ -1,6 +1,6 @@
 /* ── Utilidades de roles: navegación y rutas filtradas por rol ── */
 
-import { Rol } from '@pos-final/types';
+import { Rol, type IUser } from '@pos-final/types';
 
 /** Etiqueta legible por rol (misma fuente que ROL_LABELS en EmpleadasPage). */
 export const ROL_LABELS: Record<number, string> = {
@@ -14,6 +14,24 @@ export const ROL_LABELS: Record<number, string> = {
 
 export function rolLabel(rol: number | null | undefined): string {
   return rol != null ? (ROL_LABELS[rol] ?? 'Usuario') : 'Usuario';
+}
+
+/* ── Roles privilegiados: reportes, P&L, export y cuentas ── */
+
+/**
+ * Espeja `PRIVILEGED_ROLES_LIST` del backend
+ * (apps/api/src/presentation/middleware/privilegedRoles.ts). Única fuente para
+ * las compuertas de UI: no duplicar la lista en las páginas.
+ */
+export const PRIVILEGED_ROLES: Rol[] = [
+  Rol.SUPERADMIN,
+  Rol.DUEÑA,
+  Rol.ADMINISTRADOR,
+  Rol.CONTADOR,
+];
+
+export function isPrivilegedRole(user: IUser | null | undefined): boolean {
+  return !!user && PRIVILEGED_ROLES.includes(user.rol);
 }
 
 /* ── Páginas permitidas por rol (href de cada ruta del dashboard) ── */

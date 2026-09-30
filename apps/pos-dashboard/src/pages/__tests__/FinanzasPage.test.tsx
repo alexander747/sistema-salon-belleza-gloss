@@ -286,26 +286,6 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(resumenCall[1].params).toMatchObject({ desde: firstOfMonthStr, hasta: todayStr });
   });
 
-  it('rol restringido es forzado a su propio usuarioId y no muestra el filtro de empleada', async () => {
-    await openReportesTab((url) => {
-      if (url.includes('/auth/me')) return Promise.resolve({ data: manicurista });
-      if (url.includes('/caja/actual')) return Promise.reject(error404);
-      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
-      if (url.includes('/finanzas/roi')) {
-        return Promise.resolve({
-          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
-        });
-      }
-      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
-      return Promise.resolve({ data: {} });
-    });
-
-    const pylCall = getPylCall()!;
-    expect(pylCall[1].params).toMatchObject({ desde: firstOfMonthStr, hasta: todayStr, usuarioId: '4' });
-    expect(await screen.findByText('👤 Solo mis registros')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('🔍 Buscar empleada...')).toBeNull();
-  });
-
   it('rol privilegiado ve el filtro de empleada y lo envía al P&L', async () => {
     await openReportesTab((url) => {
       if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
@@ -395,6 +375,70 @@ describe('FinanzasPage — resumen cash del día (Cobrado / Fiado del período, 
   });
 });
 
+describe('FinanzasPage — Registros: tarjeta Total insumos por rol (PR2)', () => {
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(n)
+      .replace(/\u00a0/g, ' ');
+
+  function resumenApiMock(user: IUser, resumen: Record<string, unknown>) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: user });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: resumen });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+  });
+
+  it('DUEÑA ve la tarjeta "Total insumos" con el valor del resumen', async () => {
+    resumenApiMock(duena, { totalIngresos: 555000, totalCostoBaseInsumos: 84000 });
+
+    renderPage();
+
+    expect(await screen.findByText('🧴 Total insumos')).toBeInTheDocument();
+    expect(screen.getByText(fmt(84000))).toBeInTheDocument();
+  });
+
+  it('RECEPCIONISTA no ve la tarjeta "Total insumos" ni el tab Reportes', async () => {
+    resumenApiMock(
+      { ...duena, id: 5, rol: Rol.RECEPCIONISTA },
+      { totalIngresos: 555000, totalCostoBaseInsumos: 84000 },
+    );
+
+    renderPage();
+
+    // El resumen sí se consultó: la tarjeta ausente se decide con datos reales.
+    await waitFor(() =>
+      expect(
+        mockGet.mock.calls.some(([url]) => String(url).includes('/finanzas/resumen')),
+      ).toBe(true),
+    );
+    expect(screen.queryByText('🧴 Total insumos')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '📊 Reportes' })).not.toBeInTheDocument();
+  });
+});
+
 describe('FinanzasPage — Exportar Excel', () => {
   const todayStr = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10); // fecha Colombia (UTC-5)
   const firstOfMonthStr = todayStr.slice(0, 8) + '01';
@@ -472,27 +516,20 @@ describe('FinanzasPage — Exportar Excel', () => {
     expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 
-  it('rol restringido exporta con su propio usuarioId', async () => {
+  it('rol no privilegiado no ve el tab Reportes ni el botón Exportar Excel', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url.includes('/auth/me')) return Promise.resolve({ data: manicurista });
-      if (url.includes('/finanzas/exportar')) {
-        return Promise.resolve({ data: new Blob(['xlsx']) });
-      }
       return baseMock(url);
     });
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '📊 Reportes' }));
-    await screen.findByText('👤 Solo mis registros');
 
-    fireEvent.click(screen.getByRole('button', { name: /exportar excel/i }));
-
-    await waitFor(() => {
-      const exportCall = mockGet.mock.calls.find(([url]) =>
-        String(url).includes('/finanzas/exportar'),
-      );
-      expect(exportCall![1].params).toMatchObject({ usuarioId: '4' });
-    });
+    expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '📊 Reportes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /exportar excel/i })).not.toBeInTheDocument();
+    expect(
+      mockGet.mock.calls.some(([url]) => String(url).includes('/finanzas/exportar')),
+    ).toBe(false);
   });
 
   it('un error blob del servidor muestra un mensaje de fallo (no crashea)', async () => {
@@ -1426,13 +1463,15 @@ describe('FinanzasPage — tabs filtrados por rol', () => {
     expect(screen.queryByRole('button', { name: '💰 Caja' })).not.toBeInTheDocument();
   });
 
-  it('MANICURISTA sin acceso directo (rol aislado): no rompe — el guard de rutas la bloquea antes', async () => {
+  it('MANICURISTA (no privilegiado): no ve el tab Reportes y cae al tab por defecto', async () => {
     rolApiMock({ ...duena, id: 4, rol: Rol.MANICURISTA });
 
     renderPage();
 
-    // Comportamiento defensivo: si entra igual, ve al menos el tab por defecto
+    // Comportamiento defensivo: si entra igual (el guard de rutas la bloquea antes),
+    // ve el tab por defecto y NO el de Reportes.
     expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '📊 Reportes' })).not.toBeInTheDocument();
   });
 });
 

@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { Rol } from '@pos-final/types';
+import { Rol, type IUser } from '@pos-final/types';
 import {
   ROL_LABELS,
   rolLabel,
   ALL_PAGES,
   canAccessPage,
   resolveRouteGuard,
+  PRIVILEGED_ROLES,
+  isPrivilegedRole,
 } from './roles';
 
 describe('roles — etiquetas legibles', () => {
@@ -84,5 +86,28 @@ describe('roles — resolveRouteGuard (redirección de rutas)', () => {
   it('no redirige mientras el usuario aún no cargó (rol null → null)', () => {
     expect(resolveRouteGuard(null, '/finanzas')).toBeNull();
     expect(resolveRouteGuard(undefined, '/')).toBeNull();
+  });
+});
+
+describe('roles — roles privilegiados (reportes / cuentas)', () => {
+  const userConRol = (rol: Rol): IUser => ({ rol } as IUser);
+
+  it('isPrivilegedRole es true para SUPERADMIN, DUEÑA, ADMINISTRADOR y CONTADOR', () => {
+    for (const rol of [Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR]) {
+      expect(isPrivilegedRole(userConRol(rol))).toBe(true);
+    }
+  });
+
+  it('isPrivilegedRole es false para MANICURISTA, RECEPCIONISTA y usuario ausente', () => {
+    expect(isPrivilegedRole(userConRol(Rol.MANICURISTA))).toBe(false);
+    expect(isPrivilegedRole(userConRol(Rol.RECEPCIONISTA))).toBe(false);
+    expect(isPrivilegedRole(null)).toBe(false);
+    expect(isPrivilegedRole(undefined)).toBe(false);
+  });
+
+  it('PRIVILEGED_ROLES contiene exactamente los 4 roles financieros (espeja el backend)', () => {
+    expect(new Set(PRIVILEGED_ROLES)).toEqual(
+      new Set([Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR]),
+    );
   });
 });

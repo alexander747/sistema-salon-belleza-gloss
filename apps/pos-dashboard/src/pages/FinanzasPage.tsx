@@ -14,6 +14,7 @@ import MoneyInput from '../components/MoneyInput.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
+import { isPrivilegedRole } from '../utils/roles.js';
 import { formatCurrency } from '../utils/format.js';
 import type { ReciboSalon } from '../utils/recibo.js';
 import styles from './FinanzasPage.module.css';
@@ -27,7 +28,8 @@ interface FinanzasResumen {
   totalProductos: number;
   totalPropinas: number;
   totalComisiones: number;
-  totalCostoBaseInsumos: number;
+  /** PR2 — omitido por la API para roles no privilegiados (clave ausente). */
+  totalCostoBaseInsumos?: number;
   cantidadAtenciones: number;
   cantidadProductosVendidos: number;
   totalIngresos: number;
@@ -180,15 +182,16 @@ interface PyLData {
   totalServicios: number;
   totalProductos: number;
   propinas: number;
-  costoBaseInsumos: number;
-  margenBruto: number;
+  /** PR2 — opcionales: la API puede omitirlos según el rol del solicitante. */
+  costoBaseInsumos?: number;
+  margenBruto?: number;
   comisiones: number;
   gastosFijos: number;
   gastosOperativos: number;
   gastosPorCategoria: Record<string, number>;
   totalGastos: number;
   devoluciones: number;
-  utilidadNeta: number;
+  utilidadNeta?: number;
   /** PR2 — cash: Σ pagos recibidos en el período (fecha de recepción, no ANULADO). */
   cobrado?: number;
   /** PR2 — Σ montoPendiente de registros NO ANULADO del período (fiado originado). */
@@ -241,21 +244,22 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'cuentas', label: '💳 Cuentas' },
 ];
 
-/* ── Tab Cuentas: roles con acceso (misma lista que requireRole del backend) ── */
-const ROLES_CUENTAS: Rol[] = [Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR];
-
+/* ── Tab Cuentas: mismos roles privilegiados que reportes y export ── */
 function puedeVerCuentas(user: IUser | null | undefined): boolean {
-  return !!user && ROLES_CUENTAS.includes(user.rol);
+  return isPrivilegedRole(user);
 }
 
 /**
  * Acceso por tab según rol:
+ * - Reportes (P&L + export): solo roles privilegiados (decisión del owner). Los
+ *   no privilegiados nunca ven el tab, así que jamás disparan el 403 del backend.
  * - RECEPCIONISTA: solo Registros y Caja (front desk; sin nómina/cuentas/reportes/gastos).
  * - CONTADOR: todos salvo Caja (la caja es operativa, no contable).
  * - ADMIN/DUEÑA/SUPERADMIN: todos (Cuentas adicionalmente gated por puedeVerCuentas).
  */
 function puedeVerTab(user: IUser | null | undefined, tabKey: TabKey): boolean {
   if (!user) return false;
+  if (tabKey === 'reportes') return isPrivilegedRole(user);
   if (user.rol === Rol.RECEPCIONISTA) {
     return tabKey === 'registros' || tabKey === 'caja';
   }
@@ -639,12 +643,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const isPrivileged = !!user && (
-    user.rol === Rol.SUPERADMIN ||
-    user.rol === Rol.DUEÑA ||
-    user.rol === Rol.ADMINISTRADOR ||
-    user.rol === Rol.CONTADOR
-  );
+  const isPrivileged = isPrivilegedRole(user);
 
   const todayStr = useMemo(() => colombiaTodayISO(), []);
   // Default del rango: mes actual (1° del mes → hoy), consistente con Reportes.
@@ -933,6 +932,15 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
             {resumen ? formatCurrency(resumen.totalProductos) : '$0'}
           </span>
         </motion.div>
+        {/* PR2 — insumos: solo roles privilegiados (la API omite la clave al resto) */}
+        {isPrivileged && (
+          <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
+            <span className={styles.summaryLabel}>🧴 Total insumos</span>
+            <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
+              {formatCurrency(resumen?.totalCostoBaseInsumos ?? 0)}
+            </span>
+          </motion.div>
+        )}
         {/* Comentado por decisión de negocio: no mostrar métricas sensibles a todo rol
         <motion.div variants={itemVariants} className={styles.summaryCard}>
           <span className={styles.summaryLabel}>💸 Comisiones</span>
@@ -4150,12 +4158,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
   const [reporteUsuarioId, setReporteUsuarioId] = useState('');
   const [reporteEmpleadaNombre, setReporteEmpleadaNombre] = useState('');
 
-  const isPrivileged = !!user && (
-    user.rol === Rol.SUPERADMIN ||
-    user.rol === Rol.DUEÑA ||
-    user.rol === Rol.ADMINISTRADOR ||
-    user.rol === Rol.CONTADOR
-  );
+  const isPrivileged = isPrivilegedRole(user);
 
   // Params compartidos P&L + export: desde + hasta + usuarioId role-scoped.
   // Los roles restringidos son forzados a su propio usuarioId.
@@ -4475,10 +4478,13 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
             📉 Costos y resultado
           </div>
           <div className={styles.summaryGrid}>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>📦 Insumos</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos)}</span>
-            </div>
+            {/* PR2 — insumos del P&L: solo roles privilegiados */}
+            {isPrivileged && (
+              <div className={styles.summaryCard}>
+                <span className={styles.summaryLabel}>📦 Insumos</span>
+                <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
+              </div>
+            )}
             <div className={styles.summaryCard}>
               <span className={styles.summaryLabel}>👥 Comisiones</span>
               <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
@@ -4496,7 +4502,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
             <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.utilidadNeta ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
               <span className={styles.summaryLabel}>📊 Utilidad neta</span>
               <span className={styles.summaryValue} style={{ color: (pyl.utilidadNeta ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
-                {formatCurrency(pyl.utilidadNeta)}
+                {formatCurrency(pyl.utilidadNeta ?? 0)}
               </span>
             </div>
           </div>
