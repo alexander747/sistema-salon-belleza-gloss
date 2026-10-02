@@ -64,8 +64,10 @@ export const ALL_PAGES = [
 
 /**
  * Matriz rol → páginas permitidas.
- * MANICURISTA: atención (sin finanzas/ventas/administración).
- * RECEPCIONISTA: front desk (ventas, finanzas básicas; sin nómina/prestamos).
+ * MANICURISTA: atención (citas, clientes, servicios y finanzas básicas; sin
+ *   dashboard, ventas ni administración).
+ * RECEPCIONISTA: front desk (citas, clientes, ventas y finanzas básicas; sin
+ *   dashboard, servicios, nómina ni administración).
  * CONTADOR: finanzas y catálogo (sin ventas ni gestión de citas).
  * ADMINISTRADOR / DUEÑA / SUPERADMIN: todo.
  */
@@ -74,19 +76,16 @@ export const ROLE_PAGES: Record<number, string[]> = {
   [Rol.DUEÑA]: ALL_PAGES,
   [Rol.ADMINISTRADOR]: ALL_PAGES,
   [Rol.MANICURISTA]: [
-    PAGE_DASHBOARD,
     PAGE_CITAS,
     PAGE_CLIENTES,
     PAGE_SERVICIOS,
-    PAGE_HORARIOS,
+    PAGE_FINANZAS,
   ],
   [Rol.RECEPCIONISTA]: [
-    PAGE_DASHBOARD,
     PAGE_CITAS,
     PAGE_CLIENTES,
     PAGE_VENTAS,
     PAGE_FINANZAS,
-    PAGE_HORARIOS,
   ],
   [Rol.CONTADOR]: [
     PAGE_DASHBOARD,
@@ -104,11 +103,21 @@ export function canAccessPage(rol: number | null | undefined, href: string): boo
 }
 
 /**
+ * Página de aterrizaje por rol. Los roles operativos
+ * (MANICURISTA/RECEPCIONISTA) no pueden ver el Dashboard, así que aterrizan en
+ * `/finanzas`; el resto mantiene el Dashboard como landing.
+ */
+export function defaultPageForRol(rol: number | null | undefined): string {
+  if (rol === Rol.MANICURISTA || rol === Rol.RECEPCIONISTA) return PAGE_FINANZAS;
+  return PAGE_DASHBOARD;
+}
+
+/**
  * Guard de rutas: devuelve la ruta de redirección si el rol NO puede ver la
- * página actual, o null si está permitida. El dashboard ("/") es el destino
- * por defecto de roles sin permiso.
+ * página actual, o null si está permitida. El destino es el landing del rol
+ * (`/finanzas` para operativos, `/` para el resto).
  */
 export function resolveRouteGuard(rol: number | null | undefined, pathname: string): string | null {
   if (rol == null) return null;
-  return canAccessPage(rol, pathname) ? null : '/';
+  return canAccessPage(rol, pathname) ? null : defaultPageForRol(rol);
 }

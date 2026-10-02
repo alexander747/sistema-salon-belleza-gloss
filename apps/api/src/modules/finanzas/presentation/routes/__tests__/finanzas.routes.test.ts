@@ -33,6 +33,7 @@ vi.mock('../../controllers/CajaController', () => ({ CajaController: class { abr
 vi.mock('../../controllers/CuentasController', () => ({ CuentasController: class { cobrar = stub; pagar = stub; } }));
 
 import { finanzasRouter } from '../finanzas.routes';
+import { PRIVILEGED_ROLES_LIST } from '../../../../../presentation/middleware/privilegedRoles';
 
 /** Roles exigidos por requireRole en la ruta GET dada (en orden de registro). */
 function guardsFor(path: string): Rol[][] {
@@ -93,14 +94,36 @@ describe('finanzas.routes — guards de rol en GETs sensibles', () => {
     expect(guardsFor('/finanzas/mensual')).toContainEqual(NOMINA_ROLES);
   });
 
-  it('GET /caja/:id/cierre permite también a CONTADOR y RECEPCIONISTA (vista read-only)', () => {
+  it('GET /gastos exige PRIVILEGED_ROLES_LIST (403 para roles operativos)', () => {
+    expect(guardsFor('/gastos')).toContainEqual(PRIVILEGED_ROLES_LIST);
+  });
+
+  it('GET /devoluciones exige PRIVILEGED_ROLES_LIST (403 para roles operativos)', () => {
+    expect(guardsFor('/devoluciones')).toContainEqual(PRIVILEGED_ROLES_LIST);
+  });
+
+  it('GET /caja/:id/cierre permite a CONTADOR pero ya NO a RECEPCIONISTA (vista read-only)', () => {
     expect(guardsFor('/caja/:id/cierre')).toContainEqual([
       Rol.SUPERADMIN,
       Rol.DUEÑA,
       Rol.ADMINISTRADOR,
       Rol.CONTADOR,
-      Rol.RECEPCIONISTA,
     ]);
+    expect(guardsFor('/caja/:id/cierre').flat()).not.toContain(Rol.RECEPCIONISTA);
+  });
+
+  it('las rutas de Caja excluyen a RECEPCIONISTA (apertura, cierre, reapertura y lecturas)', () => {
+    const operativos = [Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR];
+    for (const path of ['/caja/actual', '/caja/actual/esperado', '/caja/cierres']) {
+      const guards = guardsFor(path);
+      expect(guards).toContainEqual(operativos);
+      expect(guards.flat()).not.toContain(Rol.RECEPCIONISTA);
+    }
+    for (const path of ['/caja/abrir', '/caja/cerrar', '/caja/reabrir']) {
+      const guards = guardsForPost(path);
+      expect(guards).toContainEqual(operativos);
+      expect(guards.flat()).not.toContain(Rol.RECEPCIONISTA);
+    }
   });
 
   it('POST /registros/:id/pagos (abono) exige SUPERADMIN/DUEÑA/ADMINISTRADOR/RECEPCIONISTA — mismos roles que POST /registros', () => {

@@ -257,18 +257,20 @@ function puedeVerCuentas(user: IUser | null | undefined): boolean {
 
 /**
  * Acceso por tab según rol:
+ * - MANICURISTA/RECEPCIONISTA: solo Registros (operativos; sin gastos,
+ *   devoluciones, nómina, caja, cuentas ni reportes). Nunca disparan el 403
+ *   de los endpoints sensibles del backend.
  * - Reportes (P&L + export): solo roles privilegiados (decisión del owner). Los
  *   no privilegiados nunca ven el tab, así que jamás disparan el 403 del backend.
- * - RECEPCIONISTA: solo Registros y Caja (front desk; sin nómina/cuentas/reportes/gastos).
  * - CONTADOR: todos salvo Caja (la caja es operativa, no contable).
  * - ADMIN/DUEÑA/SUPERADMIN: todos (Cuentas adicionalmente gated por puedeVerCuentas).
  */
 function puedeVerTab(user: IUser | null | undefined, tabKey: TabKey): boolean {
   if (!user) return false;
-  if (tabKey === 'reportes') return isPrivilegedRole(user);
-  if (user.rol === Rol.RECEPCIONISTA) {
-    return tabKey === 'registros' || tabKey === 'caja';
+  if (user.rol === Rol.MANICURISTA || user.rol === Rol.RECEPCIONISTA) {
+    return tabKey === 'registros';
   }
+  if (tabKey === 'reportes') return isPrivilegedRole(user);
   if (user.rol === Rol.CONTADOR) {
     return tabKey !== 'caja';
   }

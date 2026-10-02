@@ -48,7 +48,7 @@ router.post(
 
 // ── Gastos ────────────────────────────────────────────────────
 
-router.get('/gastos', gastoController.list);
+router.get('/gastos', requireRole(...PRIVILEGED_ROLES_LIST), gastoController.list);
 router.post(
   '/gastos',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
@@ -62,7 +62,7 @@ router.delete(
 
 // ── Devoluciones ──────────────────────────────────────────────
 
-router.get('/devoluciones', devolucionController.list);
+router.get('/devoluciones', requireRole(...PRIVILEGED_ROLES_LIST), devolucionController.list);
 router.post(
   '/devoluciones',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
@@ -126,40 +126,40 @@ router.get('/finanzas/turno/:id', reporteController.cierreTurno);
 
 router.post(
   '/caja/abrir',
-  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   validate(abrirCajaSchema),
   cajaController.abrir,
 );
 router.post(
   '/caja/cerrar',
-  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   validate(cerrarCajaSchema),
   cajaController.cerrar,
 );
 router.post(
   '/caja/reabrir',
-  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   cajaController.reabrir,
 );
 router.get(
   '/caja/actual',
-  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   cajaController.actual,
 );
 router.get(
   '/caja/actual/esperado',
-  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   cajaController.actualEsperado,
 );
 router.get(
   '/caja/cierres',
-  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.RECEPCIONISTA),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   cajaController.cierres,
 );
 // Detalle read-only de un cierre (historial): incluye CONTADOR — no modifica nada
 router.get(
   '/caja/:id/cierre',
-  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR, Rol.RECEPCIONISTA),
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR),
   cajaController.detalleCierre,
 );
 
