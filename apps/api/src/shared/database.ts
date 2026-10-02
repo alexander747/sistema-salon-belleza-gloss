@@ -40,6 +40,18 @@ export async function initializeDatabase(): Promise<void> {
     logger.info({ component: 'database' }, 'Connecting to MySQL...');
     await AppDataSource.initialize();
     logger.info({ component: 'database' }, 'Database connection established successfully');
+
+    // Production runs with DB_SYNCHRONIZE=true (migrations are skipped), so the
+    // sync-added `tipoPrecio` column defaults every legacy row to 'MARGEN'.
+    // Backfill zero-cost/fixed-price legacy rows to 'FIJO' at startup.
+    // Fail-safe: a backfill problem must never block boot.
+    try {
+      const { backfillTipoPrecio } = await import('../infrastructure/persistence/backfill/tipoPrecioBackfill');
+      const affected = await backfillTipoPrecio(AppDataSource);
+      logger.info({ component: 'database', affected }, 'tipoPrecio backfill completed');
+    } catch (error) {
+      logger.error({ component: 'database', err: error }, 'tipoPrecio backfill failed (non-fatal)');
+    }
   } catch (error) {
     logger.error({ component: 'database', err: error }, 'Failed to connect to MySQL');
     process.exit(1);
