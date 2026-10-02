@@ -2,6 +2,7 @@ import { injectable, inject } from 'tsyringe';
 import type { IProductoRepository } from '../../../domain/ports/IProductoRepository';
 import { ProductoDTO } from '../../dtos/ProductoDTO';
 import { NotFoundError, ConflictError } from '../../../../../shared/errors';
+import { TipoPrecio } from '../../../../../infrastructure/persistence/entities/ProductoEntity';
 import { normalizeCodigoBarras } from './codigoBarras';
 
 interface UpdateProductoInput {
@@ -17,6 +18,7 @@ interface UpdateProductoInput {
   precioCompra?: number;
   margenGanancia?: number;
   precioVenta?: number;
+  tipoPrecio?: TipoPrecio;
   cantidadStock?: number;
   stockMinimo?: number;
   tipoInventario?: string;
@@ -56,17 +58,24 @@ export class UpdateProductoUseCase {
     if (input.urlFoto !== undefined) data.urlFoto = input.urlFoto;
     if (input.precioCompra !== undefined) data.precioCompra = input.precioCompra;
     if (input.margenGanancia !== undefined) data.margenGanancia = input.margenGanancia;
+    if (input.tipoPrecio !== undefined) data.tipoPrecio = input.tipoPrecio;
     if (input.cantidadStock !== undefined) data.cantidadStock = input.cantidadStock;
     if (input.stockMinimo !== undefined) data.stockMinimo = input.stockMinimo;
     if (input.tipoInventario !== undefined) data.tipoInventario = input.tipoInventario;
 
-    // Recalculate precioVenta if precioCompra or margen changed and precioVenta not explicitly provided
+    // Derive precioVenta from the stored (or incoming) mode. An explicit price
+    // always wins; only MARGEN recomputes when a factor changed. FIJO never
+    // recalculates on a cost/margin change.
+    const effectiveMode = input.tipoPrecio ?? producto.tipoPrecio ?? TipoPrecio.MARGEN;
     const precioCompra = input.precioCompra ?? Number(producto.precioCompra);
     const margenGanancia = input.margenGanancia ?? producto.margenGanancia;
 
     if (input.precioVenta !== undefined) {
       data.precioVenta = input.precioVenta;
-    } else if (input.precioCompra !== undefined || input.margenGanancia !== undefined) {
+    } else if (
+      effectiveMode === TipoPrecio.MARGEN &&
+      (input.precioCompra !== undefined || input.margenGanancia !== undefined)
+    ) {
       // Only auto-calculate if one of the factors changed
       data.precioVenta = Math.round(precioCompra * (1 + margenGanancia / 100) * 100) / 100;
     }

@@ -3,12 +3,15 @@ import { AppDataSource } from '../../../../../shared/database';
 import type { IProductoRepository } from '../../../domain/ports/IProductoRepository';
 import { ProductoDTO } from '../../dtos/ProductoDTO';
 import { NotFoundError } from '../../../../../shared/errors';
+import { TipoPrecio } from '../../../../../infrastructure/persistence/entities/ProductoEntity';
 
 interface RestockProductoInput {
   salonId: number;
   id: number;
   cantidad: number;
   precioCompra: number;
+  /** Only meaningful for FIJO products: an explicit new fixed sale price. */
+  precioVenta?: number;
   registradoPorId?: number;
 }
 
@@ -37,8 +40,13 @@ export class RestockProductoUseCase {
         ) / 100
       : precioCompraNuevo;
 
-    // Calculate new precioVenta
-    const nuevoPrecioVenta = Math.round(nuevoPrecioCompra * (1 + margenGanancia / 100) * 100) / 100;
+    // Derive the new precioVenta from the persisted mode:
+    // - FIJO keeps the configured price (or an explicit incoming one).
+    // - MARGEN recomputes from the fresh PMP.
+    const tipoPrecio = producto.tipoPrecio ?? TipoPrecio.MARGEN;
+    const nuevoPrecioVenta = tipoPrecio === TipoPrecio.FIJO
+      ? (input.precioVenta ?? Number(producto.precioVenta))
+      : Math.round(nuevoPrecioCompra * (1 + margenGanancia / 100) * 100) / 100;
 
     // Update product in a transaction
     const queryRunner = AppDataSource.createQueryRunner();

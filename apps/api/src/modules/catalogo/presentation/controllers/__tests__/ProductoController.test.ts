@@ -201,6 +201,31 @@ describe('ProductoController', () => {
     });
   });
 
+  describe('restock', () => {
+    it('forwards cantidad, precioCompra and precioVenta to the use case', async () => {
+      mockRestockUseCase.execute.mockResolvedValue({ id: 1, precioVenta: 650 });
+
+      const req = {
+        salonId: 1,
+        params: { id: '5' },
+        body: { cantidad: 5, precioCompra: 100, precioVenta: 650 },
+        user: { id: 2 },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.restock(req, res, next);
+
+      expect(mockRestockUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        id: 5,
+        cantidad: 5,
+        precioCompra: 100,
+        precioVenta: 650,
+        registradoPorId: 2,
+      });
+    });
+  });
+
   describe('delete', () => {
     it('should return 200 with success status', async () => {
       mockDeleteUseCase.execute.mockResolvedValue({ success: true });
