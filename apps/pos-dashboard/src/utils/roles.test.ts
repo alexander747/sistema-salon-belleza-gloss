@@ -6,6 +6,7 @@ import {
   ALL_PAGES,
   canAccessPage,
   resolveRouteGuard,
+  defaultPageForRol,
   PRIVILEGED_ROLES,
   isPrivilegedRole,
 } from './roles';
@@ -28,20 +29,20 @@ describe('roles — etiquetas legibles', () => {
 });
 
 describe('roles — matriz de páginas permitidas', () => {
-  it('MANICURISTA: atención (dashboard, citas, clientes, servicios, horarios) sin finanzas/ventas', () => {
-    for (const href of ['/', '/agenda', '/clientes', '/servicios', '/horarios']) {
+  it('MANICURISTA: atención (citas, clientes, servicios, finanzas) sin administración ni dashboard', () => {
+    for (const href of ['/agenda', '/clientes', '/servicios', '/finanzas']) {
       expect(canAccessPage(Rol.MANICURISTA, href)).toBe(true);
     }
-    for (const href of ['/finanzas', '/ventas', '/empleadas', '/productos', '/categorias', '/prestamos']) {
+    for (const href of ['/', '/ventas', '/empleadas', '/productos', '/categorias', '/prestamos', '/horarios']) {
       expect(canAccessPage(Rol.MANICURISTA, href)).toBe(false);
     }
   });
 
-  it('RECEPCIONISTA: front desk (ventas, finanzas) sin nómina ni préstamos ni administración', () => {
-    for (const href of ['/', '/agenda', '/clientes', '/ventas', '/finanzas', '/horarios']) {
+  it('RECEPCIONISTA: front desk (citas, clientes, ventas, finanzas) sin administración ni dashboard', () => {
+    for (const href of ['/agenda', '/clientes', '/ventas', '/finanzas']) {
       expect(canAccessPage(Rol.RECEPCIONISTA, href)).toBe(true);
     }
-    for (const href of ['/empleadas', '/productos', '/categorias', '/prestamos', '/servicios']) {
+    for (const href of ['/', '/servicios', '/empleadas', '/productos', '/categorias', '/prestamos', '/horarios']) {
       expect(canAccessPage(Rol.RECEPCIONISTA, href)).toBe(false);
     }
   });
@@ -69,6 +70,26 @@ describe('roles — matriz de páginas permitidas', () => {
   });
 });
 
+describe('roles — defaultPageForRol (landing por rol)', () => {
+  it('operativos (MANICURISTA/RECEPCIONISTA) aterrizan en /finanzas', () => {
+    expect(defaultPageForRol(Rol.MANICURISTA)).toBe('/finanzas');
+    expect(defaultPageForRol(Rol.RECEPCIONISTA)).toBe('/finanzas');
+  });
+
+  it('el resto de roles aterrizan en el dashboard "/"', () => {
+    expect(defaultPageForRol(Rol.DUEÑA)).toBe('/');
+    expect(defaultPageForRol(Rol.ADMINISTRADOR)).toBe('/');
+    expect(defaultPageForRol(Rol.SUPERADMIN)).toBe('/');
+    expect(defaultPageForRol(Rol.CONTADOR)).toBe('/');
+  });
+
+  it('rol null/undefined/desconocido cae en el dashboard "/"', () => {
+    expect(defaultPageForRol(null)).toBe('/');
+    expect(defaultPageForRol(undefined)).toBe('/');
+    expect(defaultPageForRol(99)).toBe('/');
+  });
+});
+
 describe('roles — resolveRouteGuard (redirección de rutas)', () => {
   it('permite la ruta cuando el rol la tiene en la matriz (null = sin redirección)', () => {
     expect(resolveRouteGuard(Rol.MANICURISTA, '/clientes')).toBeNull();
@@ -76,11 +97,16 @@ describe('roles — resolveRouteGuard (redirección de rutas)', () => {
     expect(resolveRouteGuard(Rol.RECEPCIONISTA, '/ventas')).toBeNull();
   });
 
-  it('redirige al dashboard cuando el rol NO tiene permiso', () => {
-    expect(resolveRouteGuard(Rol.MANICURISTA, '/finanzas')).toBe('/');
-    expect(resolveRouteGuard(Rol.MANICURISTA, '/empleadas')).toBe('/');
+  it('operativos NO van al root: se les redirige a /finanzas cuando la página no está permitida', () => {
+    expect(resolveRouteGuard(Rol.MANICURISTA, '/empleadas')).toBe('/finanzas');
+    expect(resolveRouteGuard(Rol.MANICURISTA, '/')).toBe('/finanzas');
+    expect(resolveRouteGuard(Rol.RECEPCIONISTA, '/productos')).toBe('/finanzas');
+    expect(resolveRouteGuard(Rol.RECEPCIONISTA, '/prestamos')).toBe('/finanzas');
+  });
+
+  it('otros roles siguen redirigidos al dashboard "/"', () => {
     expect(resolveRouteGuard(Rol.CONTADOR, '/ventas')).toBe('/');
-    expect(resolveRouteGuard(Rol.RECEPCIONISTA, '/prestamos')).toBe('/');
+    expect(resolveRouteGuard(Rol.DUEÑA, '/ruta-desconocida')).toBe('/');
   });
 
   it('no redirige mientras el usuario aún no cargó (rol null → null)', () => {

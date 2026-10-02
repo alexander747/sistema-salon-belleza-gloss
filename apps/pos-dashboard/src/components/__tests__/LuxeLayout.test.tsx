@@ -45,36 +45,39 @@ function renderLayoutWithRoutes(rol: Rol, initialEntry = '/clientes') {
 }
 
 describe('LuxeLayout — navegación filtrada por rol', () => {
-  it('MANICURISTA: ve solo las páginas de atención (sin Finanzas, Ventas, Empleados, Productos...)', () => {
+  it('MANICURISTA: ve atención + Finanzas, sin Dashboard/Empleados/Productos/Préstamos/Horarios', () => {
     renderLayout(Rol.MANICURISTA);
 
-    // Permitidas
     // Permitidas (pueden aparecer en sidebar + título del header en /clientes)
-    for (const label of ['Dashboard', 'Citas', 'Clientes', 'Servicios', 'Horarios']) {
+    for (const label of ['Citas', 'Clientes', 'Servicios', 'Finanzas']) {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
 
     // Prohibidas: NO deben aparecer en el sidebar
-    expect(screen.queryAllByText('Finanzas')).toHaveLength(0);
+    expect(screen.queryAllByText('Dashboard')).toHaveLength(0);
     expect(screen.queryAllByText('Ventas')).toHaveLength(0);
     expect(screen.queryAllByText('Empleados')).toHaveLength(0);
     expect(screen.queryAllByText('Productos')).toHaveLength(0);
     expect(screen.queryAllByText('Categorías')).toHaveLength(0);
     expect(screen.queryAllByText('Préstamos')).toHaveLength(0);
+    expect(screen.queryAllByText('Horarios')).toHaveLength(0);
     expect(screen.queryAllByText('Configuración')).toHaveLength(0);
   });
 
-  it('RECEPCIONISTA: ve Ventas y Finanzas pero no Préstamos ni Empleados', () => {
+  it('RECEPCIONISTA: ve Citas, Clientes, Ventas y Finanzas, sin Dashboard/Servicios/Horarios', () => {
     renderLayout(Rol.RECEPCIONISTA);
 
-    for (const label of ['Dashboard', 'Citas', 'Clientes', 'Ventas', 'Finanzas', 'Horarios']) {
+    for (const label of ['Citas', 'Clientes', 'Ventas', 'Finanzas']) {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
 
+    expect(screen.queryAllByText('Dashboard')).toHaveLength(0);
     expect(screen.queryAllByText('Préstamos')).toHaveLength(0);
     expect(screen.queryAllByText('Empleados')).toHaveLength(0);
     expect(screen.queryAllByText('Servicios')).toHaveLength(0);
     expect(screen.queryAllByText('Productos')).toHaveLength(0);
+    expect(screen.queryAllByText('Categorías')).toHaveLength(0);
+    expect(screen.queryAllByText('Horarios')).toHaveLength(0);
   });
 
   it('CONTADOR: ve Finanzas y catálogo, sin Ventas/Citas/Empleados', () => {

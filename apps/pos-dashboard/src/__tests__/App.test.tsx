@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { Rol, type IUser } from '@pos-final/types';
 
 const { mockGet } = vi.hoisted(() => ({
@@ -61,20 +61,28 @@ describe('App — route guard por rol', () => {
     window.history.replaceState({}, '', '/');
   });
 
-  it('MANICURISTA en /finanzas es redirigida al Dashboard (no ve el tab Registros)', async () => {
+  it('MANICURISTA en /finanzas (permitida) NO es redirigida: ve el tab Registros', async () => {
     window.history.pushState({}, '', '/finanzas');
     apiMock(manicurista);
 
     render(<App />);
 
-    // El dashboard de una manicurista (salón vacío) se renderiza tras el redirect
-    expect(await screen.findByText('Tu salón está listo', {}, { timeout: 5000 })).toBeInTheDocument();
-    // La página de Finanzas NO debe montarse (nunca aparece su tab de Registros)
-    expect(screen.queryByText('📋 Registros')).not.toBeInTheDocument();
-    // Y el sidebar filtrado no ofrece Finanzas
-    await waitFor(() => {
-      expect(screen.queryByText('Finanzas')).not.toBeInTheDocument();
-    });
+    // Finanzas es ahora su landing: monta la página y su tab de Registros
+    expect(await screen.findByText('📋 Registros', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getAllByText('Finanzas').length).toBeGreaterThanOrEqual(1);
+    // No se renderiza el Dashboard
+    expect(screen.queryByText('Tu salón está listo')).not.toBeInTheDocument();
+  }, 15000);
+
+  it('MANICURISTA en / es redirigida a /finanzas (no ve el Dashboard)', async () => {
+    window.history.pushState({}, '', '/');
+    apiMock(manicurista);
+
+    render(<App />);
+
+    // El guard reemplaza la ruta raíz por el landing del rol
+    expect(await screen.findByText('📋 Registros', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByText('Tu salón está listo')).not.toBeInTheDocument();
   }, 15000);
 
   it('MANICURISTA en /clientes (permitida) NO es redirigida: ve el sidebar filtrado', async () => {
@@ -85,11 +93,12 @@ describe('App — route guard por rol', () => {
 
     // La página de clientes carga su propio /auth/me y lista (vacía → estado vacío)
     expect(await screen.findByText('No hay clientes registrados', {}, { timeout: 5000 })).toBeInTheDocument();
-    // El sidebar está filtrado: sin Finanzas/Ventas, con Servicios y Horarios
-    expect(screen.queryByText('Finanzas')).not.toBeInTheDocument();
+    // El sidebar está filtrado: con Finanzas/Servicios, sin Ventas ni Dashboard ni Horarios
+    expect(screen.getAllByText('Finanzas').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('Ventas')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
+    expect(screen.queryByText('Horarios')).not.toBeInTheDocument();
     expect(screen.getAllByText('Servicios').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Horarios').length).toBeGreaterThanOrEqual(1);
   }, 15000);
 
   it('DUEÑA en /finanzas: la página se monta (rol con permiso completo)', async () => {

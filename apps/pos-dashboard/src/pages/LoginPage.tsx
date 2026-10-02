@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Box, Paper, Typography, TextField, Button } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import api from '../services/api.js';
+import { defaultPageForRol } from '../utils/roles.js';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const LoginPage: React.FC = () => {
       const { data } = await api.post('/auth/login', { email, password });
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
-      navigate('/');
+      navigate(defaultPageForRol(data.user.rol));
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {
         const axiosErr = err as { response?: { data?: { error?: { message?: string; details?: Record<string, string[]> } } } };

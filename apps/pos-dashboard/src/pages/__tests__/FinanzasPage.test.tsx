@@ -51,6 +51,22 @@ const manicurista: IUser = {
   rol: Rol.MANICURISTA,
 };
 
+const recepcionista: IUser = {
+  ...duena,
+  id: 5,
+  nombre: 'Recepcionista Test',
+  email: 'recepcionista@test.com',
+  rol: Rol.RECEPCIONISTA,
+};
+
+const contador: IUser = {
+  ...duena,
+  id: 6,
+  nombre: 'Contador Test',
+  email: 'contador@test.com',
+  rol: Rol.CONTADOR,
+};
+
 const error404 = {
   response: {
     status: 404,
@@ -1439,14 +1455,14 @@ describe('FinanzasPage — tabs filtrados por rol', () => {
     });
   }
 
-  it('RECEPCIONISTA: ve solo los tabs Registros y Caja (sin Nómina/Cuentas/Reportes/Gastos)', async () => {
-    rolApiMock({ ...duena, id: 5, rol: Rol.RECEPCIONISTA });
+  it('RECEPCIONISTA: ve SOLO el tab Registros (sin Caja/Nómina/Cuentas/Reportes/Gastos)', async () => {
+    rolApiMock(recepcionista);
 
     renderPage();
 
     expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '💰 Caja' })).toBeInTheDocument();
 
+    expect(screen.queryByRole('button', { name: '💰 Caja' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '👩‍💼 Nómina' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '📊 Reportes' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '💳 Cuentas' })).not.toBeInTheDocument();
@@ -1455,7 +1471,7 @@ describe('FinanzasPage — tabs filtrados por rol', () => {
   });
 
   it('CONTADOR: ve todos los tabs excepto Caja', async () => {
-    rolApiMock({ ...duena, id: 6, rol: Rol.CONTADOR });
+    rolApiMock(contador);
 
     renderPage();
 
@@ -1469,14 +1485,14 @@ describe('FinanzasPage — tabs filtrados por rol', () => {
     expect(screen.queryByRole('button', { name: '💰 Caja' })).not.toBeInTheDocument();
   });
 
-  it('MANICURISTA (no privilegiado): no ve el tab Reportes y cae al tab por defecto', async () => {
-    rolApiMock({ ...duena, id: 4, rol: Rol.MANICURISTA });
+  it('MANICURISTA: ve SOLO el tab Registros (sin Caja/Gastos/Reportes)', async () => {
+    rolApiMock(manicurista);
 
     renderPage();
 
-    // Comportamiento defensivo: si entra igual (el guard de rutas la bloquea antes),
-    // ve el tab por defecto y NO el de Reportes.
     expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '💰 Caja' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '💸 Gastos' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '📊 Reportes' })).not.toBeInTheDocument();
   });
 });
@@ -1918,13 +1934,15 @@ describe('FinanzasPage — Nómina: insumo informativo por rol (PR3)', () => {
     expect(screen.getAllByText(fmt(267600)).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('MANICURISTA (no privilegiada) ve la nómina pero NO el insumo informativo', async () => {
-    nominaApiMock({ ...duena, id: 4, rol: Rol.MANICURISTA }, [nominaRow()]);
+  it('MANICURISTA (operativa) no accede al tab Nómina ni ve el insumo informativo', async () => {
+    nominaApiMock(manicurista, [nominaRow()]);
 
-    await openNomina();
+    renderPage();
 
-    // La fila sí se renderiza: la compuerta es solo sobre el insumo.
-    expect(screen.getByText('Lucía')).toBeInTheDocument();
+    // El tab Nómina ya no está disponible: la operativa solo ve Registros
+    expect(await screen.findByRole('button', { name: '📋 Registros' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '👩‍💼 Nómina' })).toBeNull();
+    // Ni la etiqueta informativa ni la tarjeta resumen de insumos
     expect(screen.queryByText(etiqueta)).not.toBeInTheDocument();
     expect(screen.queryByText('🧴 Total insumos')).not.toBeInTheDocument();
   });
