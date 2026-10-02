@@ -2,6 +2,8 @@
 
 Monorepo for a salon SaaS management system. Hexagonal architecture (Clean Architecture) on the backend, React+Vite on the frontend.
 
+> **Retomando el proyecto (otra PC / otra sesión):** leé [`docs/TRASPASO.md`](docs/TRASPASO.md) — estado actual, dónde quedamos, deploy, cómo restaurar la memoria de Engram desde `docs/engram/`, y checklist de puesta en marcha. Última actualización: 2026-10-02.
+
 ## Quick start
 
 ```bash

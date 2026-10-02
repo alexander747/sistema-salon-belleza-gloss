@@ -16,3 +16,6 @@ apps/api/coverage/
 apps/pos-dashboard/test-results/
 apps/pos-dashboard/playwright-report/
 backups/
+
+# CodeGraph local index
+.codegraph/
