@@ -9,6 +9,7 @@ import { ReabastecerStockUseCase } from '../../application/use-cases/producto/Re
 import { DeleteProductoUseCase } from '../../application/use-cases/producto/DeleteProductoUseCase';
 import { RestockProductoUseCase } from '../../application/use-cases/producto/RestockProductoUseCase';
 import { ObtenerHistorialPreciosUseCase } from '../../application/use-cases/producto/ObtenerHistorialPreciosUseCase';
+import { ProductoExcelExportService } from '../../application/services/ProductoExcelExportService';
 import type { TipoInventario } from '../../../../infrastructure/persistence/entities/ProductoEntity';
 
 @injectable()
@@ -23,6 +24,7 @@ export class ProductoController {
     @inject('DeleteProductoUseCase') private readonly deleteUseCase: DeleteProductoUseCase,
     @inject('RestockProductoUseCase') private readonly restockUseCase: RestockProductoUseCase,
     @inject('ObtenerHistorialPreciosUseCase') private readonly historialPreciosUseCase: ObtenerHistorialPreciosUseCase,
+    @inject(ProductoExcelExportService) private readonly excelExportService: ProductoExcelExportService,
   ) {}
 
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -148,6 +150,24 @@ export class ProductoController {
         id: Number(req.params.id),
       });
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  exportar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { buffer, filename } = await this.excelExportService.exportar({
+        salonId: req.salonId!,
+        userRol: req.user?.rol,
+      });
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(buffer);
     } catch (error) {
       next(error);
     }

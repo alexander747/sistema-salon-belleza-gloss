@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Rol, type IUser } from '@pos-final/types';
@@ -9,6 +9,11 @@ const { mockGet, mockPost, mockPut, mockDelete } = vi.hoisted(() => ({
   mockPost: vi.fn(),
   mockPut: vi.fn(),
   mockDelete: vi.fn(),
+}));
+
+const { mockCreateObjectURL, mockRevokeObjectURL } = vi.hoisted(() => ({
+  mockCreateObjectURL: vi.fn(),
+  mockRevokeObjectURL: vi.fn(),
 }));
 
 vi.mock('../../services/api.js', () => ({
@@ -83,6 +88,13 @@ function renderPage() {
 
 const WAIT = { timeout: 4000 };
 
+/** Espera a que la fila esté renderizada y abre el trigger "⋮" (Acciones). */
+async function openRowActions(): Promise<void> {
+  await screen.findByText('Shampoo Profesional', {}, WAIT);
+  const triggers = screen.getAllByRole('button', { name: 'Acciones' });
+  fireEvent.click(triggers[0]);
+}
+
 describe('ProductosPage — listado y operaciones', () => {
   beforeEach(() => {
     mockGet.mockReset();
@@ -156,7 +168,8 @@ describe('ProductosPage — listado y operaciones', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Editar' }, WAIT));
 
     expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
 
@@ -221,7 +234,8 @@ describe('ProductosPage — listado y operaciones', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Editar' }, WAIT));
     expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
 
     // El código escaneado al crear queda precargado en el formulario
@@ -243,7 +257,8 @@ describe('ProductosPage — listado y operaciones', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Editar' }, WAIT));
     expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
 
     fireEvent.change(screen.getByDisplayValue('7701234567890'), { target: { value: '' } });
@@ -284,7 +299,8 @@ describe('ProductosPage — listado y operaciones', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Re-stock inteligente' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Re-stock' }, WAIT));
 
     expect(await screen.findByText('Re-stock inteligente', {}, WAIT)).toBeInTheDocument();
     // El número de stock va dentro de un <strong>, el texto del párrafo se parte
@@ -312,7 +328,8 @@ describe('ProductosPage — listado y operaciones', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Historial' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Historial' }, WAIT));
 
     expect(
       await screen.findByText('Historial de precios — Shampoo Profesional', {}, WAIT),
@@ -354,16 +371,28 @@ describe('ProductosPage — listado y operaciones', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Eliminar' }, WAIT));
 
     expect(await screen.findByText(/¿Eliminar producto\?/i, {}, WAIT)).toBeInTheDocument();
 
-    const eliminarButtons = screen.getAllByRole('button', { name: 'Eliminar' });
-    fireEvent.click(eliminarButtons[eliminarButtons.length - 1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }));
 
     await waitFor(() => {
       expect(mockDelete).toHaveBeenCalledWith('/salones/1/productos/1');
     });
+  }, 20000);
+
+  it('desktop: el trigger ⋮ abre un Menu MUI con las 5 acciones etiquetadas', async () => {
+    defaultApiMock();
+
+    renderPage();
+
+    await openRowActions();
+
+    for (const label of ['Re-stock', 'Descontar', 'Editar', 'Historial', 'Eliminar']) {
+      expect(await screen.findByRole('menuitem', { name: label }, WAIT)).toBeInTheDocument();
+    }
   }, 20000);
 });
 
@@ -410,7 +439,8 @@ describe('ProductosPage — tipoPrecio (precio fijo)', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Editar' }, WAIT));
     expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
 
     // FIJO precarga el precio como input editable (MoneyInput), no como sugerencia estática
@@ -433,7 +463,8 @@ describe('ProductosPage — tipoPrecio (precio fijo)', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Re-stock inteligente' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Re-stock' }, WAIT));
     expect(await screen.findByText('Re-stock inteligente', {}, WAIT)).toBeInTheDocument();
 
     // [0] cantidad, [1] nuevo precio de compra, [2] precio de venta opcional (FIJO)
@@ -463,7 +494,8 @@ describe('ProductosPage — tipoPrecio (precio fijo)', () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Re-stock inteligente' }, WAIT));
+    await openRowActions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Re-stock' }, WAIT));
 
     const stockInputs = screen.getAllByPlaceholderText('0');
     fireEvent.change(stockInputs[0], { target: { value: '5' } });
@@ -529,5 +561,123 @@ describe('ProductosPage — móvil (grid apilado ≤640px)', () => {
     expect(panel).not.toBeNull();
     // El panel con la clase bottom-sheet es el modal real, con su título
     expect(within(panel as HTMLElement).getByText('Nuevo Producto')).toBeInTheDocument();
+  });
+
+  it('móvil: el trigger ⋮ abre el bottom sheet con las 5 acciones; elegir una la ejecuta y cierra', async () => {
+    defaultApiMock();
+    mockPut.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    await openRowActions();
+
+    const sheet = await waitFor(() => {
+      const el = document.querySelector('.mobileBottomSheet');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+
+    for (const label of ['Re-stock', 'Descontar', 'Editar', 'Historial', 'Eliminar']) {
+      expect(within(sheet).getByRole('button', { name: label })).toBeInTheDocument();
+    }
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Editar' }));
+
+    expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Descontar' })).not.toBeInTheDocument();
+    });
+  }, 20000);
+});
+
+describe('ProductosPage — Exportar Excel', () => {
+  beforeAll(() => {
+    URL.createObjectURL = mockCreateObjectURL;
+    URL.revokeObjectURL = mockRevokeObjectURL;
+    // jsdom no navega con <a download>; spiar click para verificar el disparo
+    HTMLAnchorElement.prototype.click = vi.fn();
+  });
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockDelete.mockReset();
+    mockCreateObjectURL.mockReset();
+    mockRevokeObjectURL.mockReset();
+    mockCreateObjectURL.mockReturnValue('blob:mock-url');
+    setMobileMedia(false);
+  });
+
+  /** API base + una implementación custom para /productos/exportar. */
+  function apiWithExport(exportImpl: (url: string) => Promise<unknown>) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/productos/exportar')) return exportImpl(url);
+      if (url.includes('historial-precios')) return Promise.resolve({ data: [] });
+      if (url.includes('/productos')) return Promise.resolve(productoPaginated([producto], 1));
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  it('descarga un blob con responseType blob y dispara la descarga', async () => {
+    apiWithExport(() =>
+      Promise.resolve({
+        data: new Blob(['xlsx-fake'], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }),
+      }),
+    );
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /exportar excel/i }, WAIT));
+
+    await waitFor(() => {
+      const exportCall = mockGet.mock.calls.find(([url]) =>
+        String(url).includes('/productos/exportar'),
+      );
+      expect(exportCall).toBeTruthy();
+      expect(String(exportCall![0])).toContain('/salones/1/productos/exportar');
+      expect(exportCall![1]).toMatchObject({ responseType: 'blob' });
+    });
+
+    // Descarga real: createObjectURL + anchor download + revoke
+    expect(mockCreateObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+    expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+  });
+
+  it('un error blob del servidor muestra el mensaje y no descarga', async () => {
+    apiWithExport(() => {
+      const errorBlob = new Blob(
+        [JSON.stringify({ error: { message: 'Sin permisos' } })],
+        { type: 'application/json' },
+      );
+      return Promise.reject({ response: { data: errorBlob } });
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /exportar excel/i }, WAIT));
+
+    expect(await screen.findByText(/sin permisos/i, {}, WAIT)).toBeInTheDocument();
+    expect(mockCreateObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('rol no privilegiado no ve el botón Exportar Excel', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: { ...duena, rol: Rol.MANICURISTA } });
+      if (url.includes('/productos/exportar')) return Promise.resolve({ data: new Blob(['x']) });
+      if (url.includes('historial-precios')) return Promise.resolve({ data: [] });
+      if (url.includes('/productos')) return Promise.resolve(productoPaginated([producto], 1));
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    await screen.findByText('Shampoo Profesional', {}, WAIT);
+
+    expect(screen.queryByRole('button', { name: /exportar excel/i })).not.toBeInTheDocument();
+    expect(
+      mockGet.mock.calls.some(([url]) => String(url).includes('/productos/exportar')),
+    ).toBe(false);
   });
 });

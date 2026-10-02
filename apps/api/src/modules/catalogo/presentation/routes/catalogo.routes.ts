@@ -5,6 +5,7 @@ import { ServicioController } from '../controllers/ServicioController';
 import { ProductoController } from '../controllers/ProductoController';
 import { validate } from '../../../../presentation/middleware/validate';
 import { requireRole } from '../../../../presentation/middleware/requireRole';
+import { PRIVILEGED_ROLES_LIST } from '../../../../presentation/middleware/privilegedRoles';
 import { Rol } from '@pos-final/types';
 import {
   createCategoriaSchema,
@@ -70,6 +71,13 @@ router.delete(
 // ── Productos ────────────────────────────────────────────────
 
 router.get('/productos', productoController.list);
+// `/productos/exportar` DEBE registrarse antes de `/productos/:id`, o
+// Express captura "exportar" como un id de producto.
+router.get(
+  '/productos/exportar',
+  requireRole(...PRIVILEGED_ROLES_LIST),
+  productoController.exportar,
+);
 router.get('/productos/:id', productoController.get);
 router.post(
   '/productos',

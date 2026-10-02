@@ -1,14 +1,8 @@
 import 'reflect-metadata';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Rol } from '@pos-final/types';
 
-/**
- * Productos y Categorías exponen lecturas SIN guard de rol: Ventas, Agenda y
- * Registros dependen de `GET /productos` y `GET /categorias`. Este test fija esa
- * invariante a nivel de stack de rutas (no requiere montar la app) y usa rutas
- * hermanas sí guardadas como control positivo para probar que la detección de
- * `requireRole` no es trivial.
- */
+/* ── Mocks: evitamos DI real y registramos los roles que exige requireRole ── */
 
 const { requireRoleMock, stub } = vi.hoisted(() => ({
   requireRoleMock: vi.fn((...roles: Rol[]) => {
@@ -39,13 +33,23 @@ vi.mock('../../controllers/ServicioController', () => ({
 vi.mock('../../controllers/ProductoController', () => ({
   ProductoController: class {
     list = stub; get = stub; create = stub; update = stub; descontar = stub;
-    reabastecer = stub; restock = stub; historialPrecios = stub; delete = stub;
+    reabastecer = stub; restock = stub; historialPrecios = stub; delete = stub; exportar = stub;
   },
 }));
 
 import { catalogoRouter } from '../catalogo.routes';
 
 type Method = 'get' | 'post' | 'put' | 'delete';
+
+/** Índice de la capa de una ruta (método + path) dentro del stack del router. */
+function layerIndex(path: string, method: Method): number {
+  const router = catalogoRouter as unknown as {
+    stack: { route?: { path: string; methods: Record<string, boolean> } }[];
+  };
+  return router.stack.findIndex(
+    (l) => l.route && l.route.path === path && l.route.methods[method],
+  );
+}
 
 /** Roles exigidos por requireRole en la ruta (método + path) dada. */
 function guardsFor(method: Method, path: string): Rol[][] {
@@ -66,6 +70,8 @@ function guardsFor(method: Method, path: string): Rol[][] {
   }
   return roles;
 }
+
+const PRIVILEGED = [Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR];
 
 describe('catalogo.routes — lecturas de Productos y Categorías sin guard', () => {
   it('GET /productos y GET /productos/:id no exigen rol', () => {
@@ -89,11 +95,24 @@ describe('catalogo.routes — lecturas de Productos y Categorías sin guard', ()
       Rol.DUEÑA,
       Rol.ADMINISTRADOR,
     ]);
-    expect(guardsFor('get', '/productos/:id/historial-precios')).toContainEqual([
-      Rol.SUPERADMIN,
-      Rol.DUEÑA,
-      Rol.ADMINISTRADOR,
-      Rol.CONTADOR,
-    ]);
+    expect(guardsFor('get', '/productos/:id/historial-precios')).toContainEqual(PRIVILEGED);
+  });
+});
+
+describe('catalogo.routes — exportar productos', () => {
+  beforeEach(() => {
+    requireRoleMock.mockClear();
+  });
+
+  it('GET /productos/exportar se registra ANTES de /productos/:id (no es un :id)', () => {
+    const exportarIdx = layerIndex('/productos/exportar', 'get');
+    const detalleIdx = layerIndex('/productos/:id', 'get');
+    expect(exportarIdx).toBeGreaterThanOrEqual(0);
+    expect(detalleIdx).toBeGreaterThanOrEqual(0);
+    expect(exportarIdx).toBeLessThan(detalleIdx);
+  });
+
+  it('GET /productos/exportar exige SUPERADMIN/DUEÑA/ADMINISTRADOR/CONTADOR', () => {
+    expect(guardsFor('get', '/productos/exportar')).toContainEqual(PRIVILEGED);
   });
 });
