@@ -9,7 +9,7 @@ import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import MoneyInput from '../components/MoneyInput.js';
-import { formatCurrency } from '../utils/format.js';
+import { formatCurrency, formatTimeAMPM } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
 import {
@@ -1890,7 +1890,7 @@ const RenderCreateModal: React.FC<CreateModalProps> = ({
                     }`}
                     onClick={() => onChange({ horaInicio: slot })}
                   >
-                    {slot}
+                    {formatTimeAMPM(slot)}
                   </button>
                 ))}
               </div>

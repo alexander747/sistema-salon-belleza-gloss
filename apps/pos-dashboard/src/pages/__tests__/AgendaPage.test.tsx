@@ -134,7 +134,7 @@ async function fillCreateForm(container: HTMLElement, fechaISO?: string) {
   });
 
   // Slot disponible
-  fireEvent.click(await screen.findByRole('button', { name: '10:00' }, WAIT));
+  fireEvent.click(await screen.findByRole('button', { name: '10:00 AM' }, WAIT));
 
   // Gate real: el botón Crear cita debe habilitarse (canCreate completo)
   const crearBtn = await screen.findByRole('button', { name: 'Crear cita' });
@@ -1038,7 +1038,7 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
     }, WAIT);
 
     // Al cambiar cantidad se limpia la hora: re-seleccionar el slot
-    fireEvent.click(await screen.findByRole('button', { name: '10:00' }, WAIT));
+    fireEvent.click(await screen.findByRole('button', { name: '10:00 AM' }, WAIT));
     const crearBtn = await screen.findByRole('button', { name: 'Crear cita' });
     await waitFor(() => expect(crearBtn).toBeEnabled(), WAIT);
 
