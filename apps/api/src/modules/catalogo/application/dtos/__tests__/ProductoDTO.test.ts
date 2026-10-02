@@ -15,6 +15,7 @@ const makeEntity = (overrides: Record<string, unknown> = {}) =>
     precioCompra: 20000,
     precioVenta: 26000,
     margenGanancia: 30,
+    tipoPrecio: 'MARGEN',
     cantidadStock: 15,
     stockMinimo: 5,
     tipoInventario: 'RETAIL',
@@ -36,5 +37,19 @@ describe('ProductoDTO.fromEntity — codigoBarras', () => {
     const dto = ProductoDTO.fromEntity(makeEntity({ codigoBarras: '7701234567890' }));
 
     expect(dto.codigoBarras).toBe('7701234567890');
+  });
+});
+
+describe('ProductoDTO.fromEntity — tipoPrecio', () => {
+  it('maps a MARGEN entity mode to the DTO', () => {
+    const dto = ProductoDTO.fromEntity(makeEntity({ tipoPrecio: 'MARGEN' }));
+
+    expect(dto.tipoPrecio).toBe('MARGEN');
+  });
+
+  it('maps a FIJO entity mode to the DTO', () => {
+    const dto = ProductoDTO.fromEntity(makeEntity({ tipoPrecio: 'FIJO' }));
+
+    expect(dto.tipoPrecio).toBe('FIJO');
   });
 });

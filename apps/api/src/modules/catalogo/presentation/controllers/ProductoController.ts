@@ -120,6 +120,7 @@ export class ProductoController {
         id: Number(req.params.id),
         cantidad: req.body.cantidad,
         precioCompra: req.body.precioCompra,
+        precioVenta: req.body.precioVenta,
         registradoPorId: req.user?.id,
       });
       res.json(result);

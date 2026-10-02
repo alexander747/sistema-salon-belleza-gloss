@@ -62,7 +62,12 @@ export type UpdateServicioInput = z.infer<typeof updateServicioSchema>;
 
 // ── Productos ───────────────────────────────────────────────
 
-export const createProductoSchema = z.object({
+/**
+ * Plain object schema (no `.superRefine`) so `updateProductoSchema` can call
+ * `.partial()`. The FIJO-requires-price rule lives in `createProductoSchema`;
+ * the update path enforces the resulting state in `UpdateProductoUseCase`.
+ */
+export const productoBaseSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido').max(150),
   marca: z.string().max(100).optional(),
   codigoBarras: z.string().max(50).optional().nullable(),
@@ -73,14 +78,31 @@ export const createProductoSchema = z.object({
   precioCompra: z.number().min(0).default(0),
   margenGanancia: z.number().int().min(0).max(1000).default(30),
   precioVenta: z.number().min(0).optional(),
+  tipoPrecio: z.enum(['FIJO', 'MARGEN']).default('MARGEN'),
   cantidadStock: z.number().min(0).default(0),
   stockMinimo: z.number().min(0).default(0),
   tipoInventario: z.enum(['RETAIL', 'INTERNAL']).default('RETAIL'),
 });
 
+export type TipoPrecioProducto = z.infer<typeof productoBaseSchema>['tipoPrecio'];
+
+/**
+ * Create-only semantic rule: a FIJO product must carry a positive price.
+ * `MARGEN` derives it from `precioCompra`/`margenGanancia` in the use case.
+ */
+export const createProductoSchema = productoBaseSchema.superRefine((data, ctx) => {
+  if (data.tipoPrecio === 'FIJO' && !(data.precioVenta && data.precioVenta > 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['precioVenta'],
+      message: 'El precio de venta es requerido cuando el tipo de precio es FIJO',
+    });
+  }
+});
+
 export type CreateProductoInput = z.infer<typeof createProductoSchema>;
 
-export const updateProductoSchema = createProductoSchema.partial();
+export const updateProductoSchema = productoBaseSchema.partial();
 
 export type UpdateProductoInput = z.infer<typeof updateProductoSchema>;
 
@@ -100,6 +122,8 @@ export type ReabastecerStockInput = z.infer<typeof reabastecerStockSchema>;
 export const restockProductoSchema = z.object({
   cantidad: z.number().int().min(1, 'La cantidad debe ser al menos 1'),
   precioCompra: z.number().positive('El precio de compra debe ser positivo'),
+  // Only meaningful for FIJO products: an explicit new fixed sale price.
+  precioVenta: z.number().positive('El precio de venta debe ser positivo').optional(),
   observacion: z.string().optional(),
 });
 

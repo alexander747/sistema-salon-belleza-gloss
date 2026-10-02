@@ -15,6 +15,7 @@ export class ProductoDTO {
   precioVenta: number;
   precioCompra?: number;
   margenGanancia: number;
+  tipoPrecio: string;
   cantidadStock: number;
   stockMinimo: number;
   tipoInventario: string;
@@ -40,6 +41,7 @@ export class ProductoDTO {
     dto.urlFoto = entity.urlFoto ?? null;
     dto.precioVenta = Number(entity.precioVenta);
     dto.margenGanancia = entity.margenGanancia;
+    dto.tipoPrecio = entity.tipoPrecio;
     dto.cantidadStock = Number(entity.cantidadStock);
     dto.stockMinimo = Number(entity.stockMinimo);
     dto.tipoInventario = entity.tipoInventario;

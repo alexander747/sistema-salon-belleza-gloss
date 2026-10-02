@@ -44,6 +44,7 @@ const producto = {
   precioVenta: 26000,
   precioCompra: 20000,
   margenGanancia: 30,
+  tipoPrecio: 'MARGEN',
   cantidadStock: 15,
   stockMinimo: 5,
   tipoInventario: 'RETAIL',
@@ -362,6 +363,121 @@ describe('ProductosPage — listado y operaciones', () => {
 
     await waitFor(() => {
       expect(mockDelete).toHaveBeenCalledWith('/salones/1/productos/1');
+    });
+  }, 20000);
+});
+
+describe('ProductosPage — tipoPrecio (precio fijo)', () => {
+  const productoFijo = { ...producto, tipoPrecio: 'FIJO', precioCompra: 0, precioVenta: 500 };
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPut.mockReset();
+    mockDelete.mockReset();
+  });
+
+  it('crear en modo FIJO envía tipoPrecio y el precio de venta explícito', async () => {
+    defaultApiMock();
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nuevo Producto' }, WAIT));
+    expect(await screen.findByText('Nuevo Producto', {}, WAIT)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '🎯 Precio fijo' }));
+    fireEvent.change(screen.getByPlaceholderText('Ej: Shampoo profesional'), {
+      target: { value: 'Esmalte fijo' },
+    });
+    // Modo FIJO: [0] precio de compra, [1] precio de venta
+    const moneyInputs = screen.getAllByPlaceholderText('0');
+    fireEvent.change(moneyInputs[1], { target: { value: '500' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear producto' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/productos',
+        expect.objectContaining({ tipoPrecio: 'FIJO', precioVenta: 500 }),
+      );
+    });
+  }, 20000);
+
+  it('editar un producto FIJO usa el modo persistido y guarda el precio fijo', async () => {
+    defaultApiMock([productoFijo]);
+    mockPut.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }, WAIT));
+    expect(await screen.findByText('Editar Producto', {}, WAIT)).toBeInTheDocument();
+
+    // FIJO precarga el precio como input editable (MoneyInput), no como sugerencia estática
+    const precioInput = screen.getByDisplayValue('500');
+    fireEvent.change(precioInput, { target: { value: '750' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith(
+        '/salones/1/productos/1',
+        expect.objectContaining({ tipoPrecio: 'FIJO', precioVenta: 750 }),
+      );
+    });
+  }, 20000);
+
+  it('re-stock FIJO mantiene el precio, muestra el campo opcional y no aplica margen', async () => {
+    defaultApiMock([productoFijo]);
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-stock inteligente' }, WAIT));
+    expect(await screen.findByText('Re-stock inteligente', {}, WAIT)).toBeInTheDocument();
+
+    // [0] cantidad, [1] nuevo precio de compra, [2] precio de venta opcional (FIJO)
+    const stockInputs = screen.getAllByPlaceholderText('0');
+    fireEvent.change(stockInputs[0], { target: { value: '10' } });
+    fireEvent.change(stockInputs[1], { target: { value: '10000' } });
+
+    expect(screen.getByText(/Precio de venta \(fijo\)/)).toBeInTheDocument();
+    expect(screen.getByText('Nuevo precio de venta (opcional)')).toBeInTheDocument();
+    expect(screen.getAllByText('$ 500').length).toBeGreaterThanOrEqual(1);
+    // PMP = (10*0 + 10*10000)/20 = 5000 → margen 30% = 6500 NO debe mostrarse
+    expect(screen.queryByText('$ 6.500')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar re-stock' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/productos/1/restock', {
+        cantidad: 10,
+        precioCompra: 10000,
+      });
+    });
+  }, 20000);
+
+  it('re-stock FIJO con precio explícito lo envía', async () => {
+    defaultApiMock([productoFijo]);
+    mockPost.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-stock inteligente' }, WAIT));
+
+    const stockInputs = screen.getAllByPlaceholderText('0');
+    fireEvent.change(stockInputs[0], { target: { value: '5' } });
+    fireEvent.change(stockInputs[1], { target: { value: '100' } });
+    fireEvent.change(stockInputs[2], { target: { value: '650' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar re-stock' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/salones/1/productos/1/restock', {
+        cantidad: 5,
+        precioCompra: 100,
+        precioVenta: 650,
+      });
     });
   }, 20000);
 });

@@ -982,4 +982,81 @@ describe('CreateRegistroUseCase', () => {
       expect(mockComisionService.calcularComision).toHaveBeenCalledWith(40000, 60, 25000);
     });
   });
+
+  describe('sale price snapshot (tipoPrecio=FIJO)', () => {
+    // FIJO product whose cost/margin WOULD derive 130 (100 × 1.30) — the sale
+    // snapshot must read the configured precioVenta, never re-derive it.
+    const setupFijo = (precioVenta: number) => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 5, deudaTotal: 0 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '60' });
+      mockComisionService.calcularComision.mockReturnValue(0);
+      mockComisionService.calcularMontoTotal.mockReturnValue(0);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(0);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue({
+        id: 1,
+        salonId: 1,
+        clienteId: 1,
+        usuarioId: 2,
+        totalServicios: 0,
+        totalProductos: 0,
+        montoTotal: 0,
+        propina: 0,
+        comisionCalculada: 0,
+        esRetoque: false,
+        montoPendiente: 0,
+        estaPagadaEmpleada: false,
+        notas: null,
+        descripcionServicio: null,
+        pagos: [],
+        divisiones: [],
+        productosVendidos: [],
+        serviciosItems: [],
+        creadoEn: new Date(),
+        actualizadoEn: new Date(),
+      });
+      mockProductoRepo.findBySalonAndId.mockResolvedValue({
+        id: 99,
+        nombre: 'Esmalte',
+        tipoPrecio: 'FIJO',
+        precioVenta,
+        precioCompra: 100,
+        margenGanancia: 30,
+        cantidadStock: 10,
+      });
+      mockProductoRepo.decrementStock.mockResolvedValue({ id: 99, cantidadStock: 8 });
+    };
+
+    const createdProducto = () =>
+      mockRepoCreate.mock.calls
+        .map(([data]) => data as Record<string, unknown>)
+        .find((data) => data?.productoId === 99);
+
+    it('snapshots the configured fixed precioVenta, not a margin-derived value', async () => {
+      setupFijo(500);
+
+      await useCase.execute({ ...validInput, productosVendidos: [{ productoId: 99, cantidad: 2 }] });
+
+      expect(createdProducto()).toEqual(
+        expect.objectContaining({
+          productoId: 99,
+          cantidad: 2,
+          precioVentaUnitario: 500,
+          subtotal: 1000,
+        }),
+      );
+      // margin would be 100 × 1.30 = 130 — prove the snapshot is not derived
+      expect(createdProducto()?.precioVentaUnitario).not.toBe(130);
+    });
+
+    it('snapshots a different fixed price verbatim (triangulation)', async () => {
+      setupFijo(750);
+
+      await useCase.execute({ ...validInput, productosVendidos: [{ productoId: 99, cantidad: 3 }] });
+
+      expect(createdProducto()).toEqual(
+        expect.objectContaining({ precioVentaUnitario: 750, subtotal: 2250 }),
+      );
+    });
+  });
 });

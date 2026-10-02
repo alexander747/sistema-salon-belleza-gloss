@@ -12,6 +12,7 @@ export interface Producto {
   precioVenta: number;
   precioCompra?: number;
   margenGanancia: number;
+  tipoPrecio: 'FIJO' | 'MARGEN';
   cantidadStock: number;
   stockMinimo: number;
   tipoInventario: 'RETAIL' | 'INTERNAL';
@@ -74,6 +75,7 @@ export async function createProducto(
     precioCompra?: number;
     margenGanancia?: number;
     precioVenta?: number;
+    tipoPrecio?: 'FIJO' | 'MARGEN';
     cantidadStock?: number;
     stockMinimo?: number;
     tipoInventario?: string;
@@ -99,7 +101,7 @@ export async function deleteProducto(salonId: number, id: number): Promise<void>
 export async function restockProducto(
   salonId: number,
   id: number,
-  payload: { cantidad: number; precioCompra: number },
+  payload: { cantidad: number; precioCompra: number; precioVenta?: number },
 ): Promise<Producto> {
   const { data } = await api.post(`/salones/${salonId}/productos/${id}/restock`, payload);
   return data;

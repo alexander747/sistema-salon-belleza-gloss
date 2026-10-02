@@ -14,6 +14,16 @@ export enum TipoInventario {
   INTERNAL = 'INTERNAL',
 }
 
+/**
+ * How `precioVenta` is derived.
+ * - `MARGEN`: recomputed from `precioCompra` + `margenGanancia` on restock.
+ * - `FIJO`: stored verbatim; restock must never clobber it.
+ */
+export enum TipoPrecio {
+  FIJO = 'FIJO',
+  MARGEN = 'MARGEN',
+}
+
 @Entity('productos')
 export class ProductoEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 150 })
@@ -58,6 +68,9 @@ export class ProductoEntity extends BaseEntity {
 
   @Column({ type: 'int', default: 30 })
   margenGanancia: number;
+
+  @Column({ type: 'varchar', length: 10, default: TipoPrecio.MARGEN })
+  tipoPrecio: TipoPrecio;
 
   @Column({ type: 'boolean', default: true })
   activo: boolean;
