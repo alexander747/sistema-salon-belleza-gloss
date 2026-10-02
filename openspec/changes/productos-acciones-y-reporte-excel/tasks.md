@@ -26,10 +26,10 @@ Chain strategy: pending
 
 ## Phase 1: API export service (TDD)
 
-- [ ] 1.1 RED: create `apps/api/src/modules/catalogo/application/services/__tests__/ProductoExcelExportService.test.ts` — sheets `['Productos','Totales']`; A(100,150,2)+B(200,300,10)→2/2200/3300; empty→0; `precioCompra=0` present.
-- [ ] 1.2 GREEN: create `ProductoExcelExportService.ts` with `HEADER_FILL`/`COP_FORMAT`/`estiloHeader` (copy `ExcelExportService.ts`) + `buildProductosWorkbook(rows)` (13 `Productos` cols, `Totales`).
-- [ ] 1.3 GREEN: add `exportar({salonId,userRol})` injecting `ListProductosUseCase` with `limit:0`; `productos_<YYYY-MM-DD>.xlsx`.
-- [ ] 1.4 Verify: `cd apps/api && npx vitest run src/modules/catalogo/application/services`.
+- [x] 1.1 RED: create `apps/api/src/modules/catalogo/application/services/__tests__/ProductoExcelExportService.test.ts` — sheets `['Productos','Totales']`; A(100,150,2)+B(200,300,10)→2/2200/3300; empty→0; `precioCompra=0` present.
+- [x] 1.2 GREEN: create `ProductoExcelExportService.ts` with `HEADER_FILL`/`COP_FORMAT`/`estiloHeader` (copy `ExcelExportService.ts`) + `buildProductosWorkbook(rows)` (13 `Productos` cols, `Totales`).
+- [x] 1.3 GREEN: add `exportar({salonId,userRol})` injecting `ListProductosUseCase` with `limit:0`; `productos_<YYYY-MM-DD>.xlsx`.
+- [x] 1.4 Verify: `cd apps/api && npx vitest run src/modules/catalogo/application/services`.
 
 ## Phase 2: API wiring + route order (TDD)
 
