@@ -41,14 +41,14 @@ Chain strategy: pending
 
 ## Phase 3: UI actions (TDD)
 
-- [ ] 3.1 RED: extend `apps/pos-dashboard/src/pages/__tests__/ProductosPage.test.tsx` — desktop `⋮`→MUI `Menu` (5 items); mobile (`setMobileMedia(true)`)→`.mobileBottomSheet` (5 actions, runs+closes); migrate existing edit/historial/restock/eliminar tests to open `⋮` first.
-- [ ] 3.2 GREEN: `ProductosPage.tsx` — `actionsAnchor`/`actionsProducto` state, `useMediaQuery('(max-width:600px)')`, single `⋮` button (`aria-label="Acciones"`), MUI `Menu`+`MenuItem` reusing existing handlers.
-- [ ] 3.3 GREEN: mobile `.mobileBottomSheet` overlay with the 5 labeled actions; keep `data-label="Acciones"`; remove `iconActionBtn`.
-- [ ] 3.4 GREEN: `ProductosPage.module.css` — both grid templates final track `150px`→`44px`.
-- [ ] 3.5 Verify: `cd apps/pos-dashboard && npx vitest run`.
+- [x] 3.1 RED: extend `apps/pos-dashboard/src/pages/__tests__/ProductosPage.test.tsx` — desktop `⋮`→MUI `Menu` (5 items); mobile (`setMobileMedia(true)`)→`.mobileBottomSheet` (5 actions, runs+closes); migrate existing edit/historial/restock/eliminar tests to open `⋮` first.
+- [x] 3.2 GREEN: `ProductosPage.tsx` — `actionsAnchor`/`actionsProducto` state, `useMediaQuery('(max-width:600px)')`, single `⋮` button (`aria-label="Acciones"`), MUI `Menu`+`MenuItem` reusing existing handlers.
+- [x] 3.3 GREEN: mobile `.mobileBottomSheet` overlay with the 5 labeled actions; keep `data-label="Acciones"`; remove `iconActionBtn`.
+- [x] 3.4 GREEN: `ProductosPage.module.css` — both grid templates final track `150px`→`44px`.
+- [x] 3.5 Verify: `cd apps/pos-dashboard && npx vitest run`.
 
 ## Phase 4: UI export button + final verification
 
-- [ ] 4.1 RED: extend `ProductosPage.test.tsx` — success calls `api.get('/salones/1/productos/exportar',{responseType:'blob'})` + download; error shows message, no download.
-- [ ] 4.2 GREEN: `ProductosPage.tsx` — `exportando`/`exportError`, `downloadExcel` (mirror `FinanzasPage.tsx:4318-4358`), toolbar `📥 Exportar Excel`.
-- [ ] 4.3 Verify baselines (no new failures): `cd apps/api && npx vitest run` (≤2 files/13 tests), `npx tsc --noEmit` (≤6 errors); `cd apps/pos-dashboard && npx vitest run` (≤1 file/1 test), `npx tsc --noEmit` (0).
+- [x] 4.1 RED: extend `ProductosPage.test.tsx` — success calls `api.get('/salones/1/productos/exportar',{responseType:'blob'})` + download; error shows message, no download.
+- [x] 4.2 GREEN: `ProductosPage.tsx` — `exportando`/`exportError`, `downloadExcel` (mirror `FinanzasPage.tsx:4318-4358`), toolbar `📥 Exportar Excel`.
+- [x] 4.3 Verify baselines (no new failures): `cd apps/api && npx vitest run` (≤2 files/13 tests), `npx tsc --noEmit` (≤6 errors); `cd apps/pos-dashboard && npx vitest run` (≤1 file/1 test), `npx tsc --noEmit` (0).

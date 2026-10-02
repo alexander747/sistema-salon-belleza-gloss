@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Menu, MenuItem, useMediaQuery } from '@mui/material';
+import { Inventory2, RemoveCircle, Edit, History, DeleteOutlined } from '@mui/icons-material';
 import { Skeleton, Button } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
@@ -83,18 +85,38 @@ const ghostBtnStyle: React.CSSProperties = {
   transition: 'background 0.2s',
 };
 
-/** Botón de acción compacto (solo icono, con title/aria-label), patrón FinanzasPage. */
-const iconActionBtn: React.CSSProperties = {
+/** Botón "⋮" que abre el menú de acciones de una fila. */
+const menuTriggerBtn: React.CSSProperties = {
   background: 'none',
   border: 'none',
   cursor: 'pointer',
-  fontSize: '1rem',
-  padding: '0.25rem 0.3rem',
+  fontSize: '1.15rem',
+  padding: '0.2rem 0.45rem',
   borderRadius: 'var(--radius-sm)',
-  transition: 'background 0.15s, transform 0.15s',
+  transition: 'background 0.15s, color 0.15s',
   color: 'var(--text-secondary)',
   lineHeight: 1,
 };
+
+/** Fila de acción del bottom-sheet móvil. */
+const sheetActionBtn: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.65rem',
+  width: '100%',
+  padding: '0.85rem 1rem',
+  background: 'transparent',
+  border: 'none',
+  borderBottom: '1px solid var(--border)',
+  color: 'var(--text-primary)',
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.875rem',
+  fontWeight: 500,
+  cursor: 'pointer',
+  textAlign: 'left',
+};
+
+const iconGap: React.CSSProperties = { marginRight: '0.6rem' };
 
 const modalOverlayStyle: React.CSSProperties = {
   position: 'fixed',
@@ -182,6 +204,15 @@ const ProductosPage: React.FC = () => {
   const [deleting, setDeleting] = useState<Producto | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  /* Row actions overlay state: MUI Menu (>600px) o bottom-sheet (≤600px) */
+  const [actionsAnchor, setActionsAnchor] = useState<HTMLElement | null>(null);
+  const [actionsProducto, setActionsProducto] = useState<Producto | null>(null);
+  const isMobile = useMediaQuery('(max-width:600px)');
+
+  /* Export Excel state */
+  const [exportando, setExportando] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   /* Filter state */
   const [filterTipo, setFilterTipo] = useState<'TODOS' | 'RETAIL' | 'INTERNAL'>('TODOS');
@@ -323,6 +354,38 @@ const ProductosPage: React.FC = () => {
     setShowModal(true);
   };
 
+  /* ── Row actions (trigger ⋮) ── */
+  const openActions = (e: React.MouseEvent<HTMLElement>, prod: Producto) => {
+    setActionsAnchor(e.currentTarget);
+    setActionsProducto(prod);
+  };
+
+  const closeActions = () => {
+    setActionsAnchor(null);
+    setActionsProducto(null);
+  };
+
+  /** Cierra el overlay antes de ejecutar la acción elegida. */
+  const runAction = (cb: (prod: Producto) => void) => {
+    const prod = actionsProducto;
+    closeActions();
+    if (prod) cb(prod);
+  };
+
+  const openRestock = (prod: Producto) => {
+    setStockModal({ producto: prod, type: 'restock' });
+    setStockCantidad(0);
+    setRestockPrecioCompra(prod.precioCompra ?? 0);
+    setRestockPrecioVenta(0);
+  };
+
+  const openDescontar = (prod: Producto) => {
+    setStockModal({ producto: prod, type: 'descontar' });
+    setStockCantidad(0);
+  };
+
+  const openDelete = (prod: Producto) => setDeleting(prod);
+
   /* ── Create / Update ── */
   const handleSave = async () => {
     if (!salonId || !form.nombre.trim() || form.precioVenta <= 0) return;
@@ -459,6 +522,50 @@ const ProductosPage: React.FC = () => {
     setCurrentPage(page);
   };
 
+  /* ── Export Excel ──
+     Descarga el xlsx de inventario. Los errores de axios con responseType blob
+     llegan como Blob (no JSON): se lee el texto y se intenta extraer el mensaje. */
+  const downloadExcel = useCallback(async () => {
+    if (salonId == null || exportando) return;
+    setExportando(true);
+    setExportError(null);
+    try {
+      const response = await api.get(`/salones/${salonId}/productos/exportar`, {
+        responseType: 'blob',
+      });
+      const blob = response.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `productos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const axiosErr = err as {
+        response?: { data?: unknown };
+        message?: string;
+      };
+      let mensaje = 'No se pudo exportar el inventario';
+      const blobErr = axiosErr.response?.data;
+      if (blobErr instanceof Blob) {
+        try {
+          const texto = await blobErr.text();
+          const parsed = JSON.parse(texto) as { error?: { message?: string }; message?: string };
+          mensaje = parsed.error?.message ?? parsed.message ?? mensaje;
+        } catch {
+          // Blob sin JSON: queda el mensaje por defecto
+        }
+      } else if (axiosErr.message) {
+        mensaje = axiosErr.message;
+      }
+      setExportError(mensaje);
+    } finally {
+      setExportando(false);
+    }
+  }, [salonId, exportando]);
+
   /* ── Animation variants ── */
   const itemVariants = {
     hidden: { opacity: 0, y: 16 },
@@ -522,18 +629,49 @@ const ProductosPage: React.FC = () => {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               />
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                <button
-                  onClick={() => {
-                    resetForm();
-                    setShowModal(true);
-                  }}
-                  style={primaryBtnStyle}
-                >
-                  + Nuevo Producto
-                </button>
-              </motion.div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {canViewCost && (
+                  <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                    <button
+                      onClick={downloadExcel}
+                      disabled={exportando}
+                      style={{
+                        ...ghostBtnStyle,
+                        opacity: exportando ? 0.6 : 1,
+                        cursor: exportando ? 'wait' : 'pointer',
+                      }}
+                      title="Descargar inventario de productos en Excel"
+                    >
+                      {exportando ? 'Exportando…' : '📥 Exportar Excel'}
+                    </button>
+                  </motion.div>
+                )}
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                  <button
+                    onClick={() => {
+                      resetForm();
+                      setShowModal(true);
+                    }}
+                    style={primaryBtnStyle}
+                  >
+                    + Nuevo Producto
+                  </button>
+                </motion.div>
+              </div>
             </div>
+            {exportError && (
+              <p
+                role="alert"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.75rem',
+                  color: 'var(--danger)',
+                  margin: '0.5rem 0 0',
+                }}
+              >
+                {exportError}
+              </p>
+            )}
           </div>
 
           {/* ── Tipo filter chips ── */}
@@ -773,58 +911,15 @@ const ProductosPage: React.FC = () => {
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }} data-label="Código">
                         {prod.codigoBarras || '—'}
                       </span>
-                      <span style={{ display: 'flex', gap: '0.15rem', justifyContent: 'flex-end' }} data-label="Acciones">
+                      <span style={{ display: 'flex', justifyContent: 'flex-end' }} data-label="Acciones">
                         <button
-                          onClick={() => {
-                            setStockModal({ producto: prod, type: 'restock' });
-                            setStockCantidad(0);
-                            setRestockPrecioCompra(prod.precioCompra ?? 0);
-                            setRestockPrecioVenta(0);
-                          }}
-                          style={iconActionBtn}
-                          title="Re-stock inteligente"
-                          aria-label="Re-stock inteligente"
+                          type="button"
+                          onClick={(e) => openActions(e, prod)}
+                          style={menuTriggerBtn}
+                          title="Acciones"
+                          aria-label="Acciones"
                         >
-                          📦
-                        </button>
-                        <button
-                          onClick={() => {
-                            setStockModal({ producto: prod, type: 'descontar' });
-                            setStockCantidad(0);
-                          }}
-                          style={iconActionBtn}
-                          title="Descontar stock"
-                          aria-label="Descontar stock"
-                        >
-                          ➖
-                        </button>
-                        <button
-                          onClick={() => openEdit(prod)}
-                          style={iconActionBtn}
-                          title="Editar"
-                          aria-label="Editar"
-                          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => openHistory(prod)}
-                          style={iconActionBtn}
-                          title="Historial de precios"
-                          aria-label="Historial"
-                        >
-                          📜
-                        </button>
-                        <button
-                          onClick={() => setDeleting(prod)}
-                          style={iconActionBtn}
-                          title="Eliminar"
-                          aria-label="Eliminar"
-                          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
-                        >
-                          🗑️
+                          ⋮
                         </button>
                       </span>
                     </motion.div>
@@ -843,6 +938,80 @@ const ProductosPage: React.FC = () => {
               />
             </>
           )}
+
+      {/* ── Acciones de fila: Menu (desktop) / bottom-sheet (móvil) ── */}
+      {!isMobile && (
+        <Menu
+          anchorEl={actionsAnchor}
+          open={Boolean(actionsAnchor)}
+          onClose={closeActions}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <MenuItem onClick={() => runAction(openRestock)}>
+            <Inventory2 fontSize="small" style={iconGap} /> Re-stock
+          </MenuItem>
+          <MenuItem onClick={() => runAction(openDescontar)}>
+            <RemoveCircle fontSize="small" style={iconGap} /> Descontar
+          </MenuItem>
+          <MenuItem onClick={() => runAction(openEdit)}>
+            <Edit fontSize="small" style={iconGap} /> Editar
+          </MenuItem>
+          <MenuItem onClick={() => runAction(openHistory)}>
+            <History fontSize="small" style={iconGap} /> Historial
+          </MenuItem>
+          <MenuItem onClick={() => runAction(openDelete)} style={{ color: 'var(--danger)' }}>
+            <DeleteOutlined fontSize="small" style={iconGap} /> Eliminar
+          </MenuItem>
+        </Menu>
+      )}
+
+      {isMobile && actionsProducto && (
+        <div
+          className="mobileBottomSheet actionsSheet"
+          style={modalOverlayStyle}
+          onClick={closeActions}
+        >
+          <div
+            className="mobileBottomSheetContent"
+            style={{ ...modalContentStyle, maxWidth: '440px', padding: '0.75rem 0.5rem 0.5rem' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontSize: '1rem',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                padding: '0 0.75rem 0.75rem',
+                margin: 0,
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              {actionsProducto.nombre}
+            </p>
+            <button type="button" style={sheetActionBtn} onClick={() => runAction(openRestock)}>
+              <Inventory2 fontSize="small" /> Re-stock
+            </button>
+            <button type="button" style={sheetActionBtn} onClick={() => runAction(openDescontar)}>
+              <RemoveCircle fontSize="small" /> Descontar
+            </button>
+            <button type="button" style={sheetActionBtn} onClick={() => runAction(openEdit)}>
+              <Edit fontSize="small" /> Editar
+            </button>
+            <button type="button" style={sheetActionBtn} onClick={() => runAction(openHistory)}>
+              <History fontSize="small" /> Historial
+            </button>
+            <button
+              type="button"
+              style={{ ...sheetActionBtn, color: 'var(--danger)', borderBottom: 'none' }}
+              onClick={() => runAction(openDelete)}
+            >
+              <DeleteOutlined fontSize="small" /> Eliminar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Create / Edit Modal ── */}
       <AnimatePresence>
