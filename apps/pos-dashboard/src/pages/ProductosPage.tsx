@@ -190,6 +190,7 @@ const ProductosPage: React.FC = () => {
   const [stockModal, setStockModal] = useState<{ producto: Producto; type: 'descontar' | 'reabastecer' | 'restock' } | null>(null);
   const [stockCantidad, setStockCantidad] = useState(0);
   const [restockPrecioCompra, setRestockPrecioCompra] = useState(0);
+  const [restockPrecioVenta, setRestockPrecioVenta] = useState(0);
 
   /* History modal */
   const [historyModal, setHistoryModal] = useState<Producto | null>(null);
@@ -204,11 +205,11 @@ const ProductosPage: React.FC = () => {
     precioCompra: 0,
     margenGanancia: 30,
     precioVenta: 0,
+    tipoPrecio: 'MARGEN' as 'FIJO' | 'MARGEN',
     cantidadStock: 0,
     stockMinimo: 0,
     tipoInventario: 'RETAIL' as 'RETAIL' | 'INTERNAL',
   });
-  const [priceMode, setPriceMode] = useState<'margin' | 'fixed'>('margin');
 
   /* ── Derived ── */
 
@@ -225,12 +226,12 @@ const ProductosPage: React.FC = () => {
     return 0;
   }, [form.precioCompra, form.margenGanancia]);
 
-  // Auto-set precioVenta in margin mode
+  // Auto-set precioVenta in MARGEN mode
   useEffect(() => {
-    if (priceMode === 'margin' && suggestedPrecioVenta > 0) {
+    if (form.tipoPrecio === 'MARGEN' && suggestedPrecioVenta > 0) {
       setForm((prev) => ({ ...prev, precioVenta: suggestedPrecioVenta }));
     }
-  }, [suggestedPrecioVenta, priceMode]);
+  }, [suggestedPrecioVenta, form.tipoPrecio]);
 
   const canViewCost = user?.rol === Rol.DUEÑA || user?.rol === Rol.ADMINISTRADOR || user?.rol === Rol.CONTADOR || user?.rol === Rol.SUPERADMIN;
 
@@ -295,12 +296,12 @@ const ProductosPage: React.FC = () => {
       precioCompra: 0,
       margenGanancia: 30,
       precioVenta: 0,
+      tipoPrecio: 'MARGEN',
       cantidadStock: 0,
       stockMinimo: 0,
       tipoInventario: 'RETAIL',
     });
     setEditing(null);
-    setPriceMode('margin');
   };
 
   /* ── Open edit modal ── */
@@ -314,17 +315,11 @@ const ProductosPage: React.FC = () => {
       precioCompra: prod.precioCompra ?? 0,
       margenGanancia: prod.margenGanancia,
       precioVenta: prod.precioVenta,
+      tipoPrecio: prod.tipoPrecio ?? 'MARGEN',
       cantidadStock: prod.cantidadStock,
       stockMinimo: prod.stockMinimo,
       tipoInventario: prod.tipoInventario ?? 'RETAIL',
     });
-    // Detect mode: if precioCompra * (1+margen/100) ≈ precioVenta, use margin
-    const precioCompra = prod.precioCompra ?? 0;
-    const suggested = precioCompra > 0 && prod.margenGanancia > 0
-      ? Math.round(precioCompra * (1 + prod.margenGanancia / 100) * 100) / 100
-      : 0;
-    const diff = Math.abs(suggested - prod.precioVenta);
-    setPriceMode(diff <= 1 && suggested > 0 ? 'margin' : 'fixed');
     setShowModal(true);
   };
 
@@ -343,14 +338,16 @@ const ProductosPage: React.FC = () => {
         marca: form.marca.trim() || undefined,
         precioCompra: form.precioCompra,
         margenGanancia: form.margenGanancia,
+        tipoPrecio: form.tipoPrecio,
         cantidadStock: form.cantidadStock,
         stockMinimo: form.stockMinimo,
         tipoInventario: form.tipoInventario,
       };
 
-      // If user manually edited precioVenta to something different from suggested,
-      // send it explicitly. Otherwise omit it so backend auto-calculates.
-      if (form.precioVenta !== suggestedPrecioVenta) {
+      // FIJO always sends the configured price. MARGEN sends an explicit price
+      // only when the user overrode the suggested one; otherwise the backend
+      // derives it so it stays in sync with cost/margin.
+      if (form.tipoPrecio === 'FIJO' || form.precioVenta !== suggestedPrecioVenta) {
         payload.precioVenta = form.precioVenta;
       }
 
@@ -380,10 +377,15 @@ const ProductosPage: React.FC = () => {
     setActionLoading(true);
     try {
       if (stockModal.type === 'restock') {
-        await restockProducto(salonId, stockModal.producto.id, {
+        const payload: { cantidad: number; precioCompra: number; precioVenta?: number } = {
           cantidad: stockCantidad,
           precioCompra: restockPrecioCompra,
-        });
+        };
+        // Only FIJO accepts a new fixed price; MARGEN always recomputes.
+        if (stockModal.producto.tipoPrecio === 'FIJO' && restockPrecioVenta > 0) {
+          payload.precioVenta = restockPrecioVenta;
+        }
+        await restockProducto(salonId, stockModal.producto.id, payload);
       } else {
         await api.post(`/salones/${salonId}/productos/${stockModal.producto.id}/descontar`, {
           cantidad: stockCantidad,
@@ -392,6 +394,7 @@ const ProductosPage: React.FC = () => {
       setStockModal(null);
       setStockCantidad(0);
       setRestockPrecioCompra(0);
+      setRestockPrecioVenta(0);
       fetchData();
     } catch {
       setActionError('Error al actualizar el stock. Intentá de nuevo.');
@@ -409,10 +412,15 @@ const ProductosPage: React.FC = () => {
     const nuevoPMP = stockActual > 0
       ? Math.round(((stockActual * precioCompraActual) + (stockCantidad * restockPrecioCompra)) / (stockActual + stockCantidad) * 100) / 100
       : restockPrecioCompra;
-    const nuevoPV = Math.round(nuevoPMP * (1 + prod.margenGanancia / 100) * 100) / 100;
+    // FIJO keeps its configured price (or an explicit incoming one); MARGEN
+    // recomputes from the new PMP.
+    const esFijo = prod.tipoPrecio === 'FIJO';
+    const nuevoPV = esFijo
+      ? (restockPrecioVenta > 0 ? restockPrecioVenta : prod.precioVenta)
+      : Math.round(nuevoPMP * (1 + prod.margenGanancia / 100) * 100) / 100;
 
-    return { nuevoPMP, nuevoPV, nuevoStock: stockActual + stockCantidad };
-  }, [stockModal, stockCantidad, restockPrecioCompra]);
+    return { nuevoPMP, nuevoPV, nuevoStock: stockActual + stockCantidad, esFijo };
+  }, [stockModal, stockCantidad, restockPrecioCompra, restockPrecioVenta]);
 
   /* ── Delete ── */
   const handleDelete = async () => {
@@ -681,12 +689,7 @@ const ProductosPage: React.FC = () => {
                   const isLowStock = prod.cantidadStock <= prod.stockMinimo;
                   const isLast = idx === productos.length - 1;
                   const margen = prod.margenGanancia;
-                  // Determine pricing mode
-                  const pc = prod.precioCompra ?? 0;
-                  const suggested = pc > 0 && prod.margenGanancia > 0
-                    ? Math.round(pc * (1 + prod.margenGanancia / 100) * 100) / 100
-                    : 0;
-                  const isMargin = suggested > 0 && Math.abs(suggested - prod.precioVenta) <= 1;
+                  const isMargin = prod.tipoPrecio === 'MARGEN';
 
                   return (
                     <motion.div
@@ -776,6 +779,7 @@ const ProductosPage: React.FC = () => {
                             setStockModal({ producto: prod, type: 'restock' });
                             setStockCantidad(0);
                             setRestockPrecioCompra(prod.precioCompra ?? 0);
+                            setRestockPrecioVenta(0);
                           }}
                           style={iconActionBtn}
                           title="Re-stock inteligente"
@@ -958,12 +962,12 @@ const ProductosPage: React.FC = () => {
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.3rem' }}>
                     <button
                       type="button"
-                      onClick={() => setPriceMode('margin')}
+                      onClick={() => setForm((prev) => ({ ...prev, tipoPrecio: 'MARGEN' }))}
                       style={{
                         flex: 1, height: '36px', borderRadius: 'var(--radius-sm)',
-                        border: priceMode === 'margin' ? '2px solid var(--accent)' : '1px solid var(--border)',
-                        background: priceMode === 'margin' ? 'var(--accent-subtle)' : 'var(--bg-base)',
-                        color: priceMode === 'margin' ? 'var(--accent)' : 'var(--text-secondary)',
+                        border: form.tipoPrecio === 'MARGEN' ? '2px solid var(--accent)' : '1px solid var(--border)',
+                        background: form.tipoPrecio === 'MARGEN' ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                        color: form.tipoPrecio === 'MARGEN' ? 'var(--accent)' : 'var(--text-secondary)',
                         fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600,
                         cursor: 'pointer', transition: 'all 0.2s',
                       }}
@@ -972,12 +976,12 @@ const ProductosPage: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPriceMode('fixed')}
+                      onClick={() => setForm((prev) => ({ ...prev, tipoPrecio: 'FIJO' }))}
                       style={{
                         flex: 1, height: '36px', borderRadius: 'var(--radius-sm)',
-                        border: priceMode === 'fixed' ? '2px solid var(--accent)' : '1px solid var(--border)',
-                        background: priceMode === 'fixed' ? 'var(--accent-subtle)' : 'var(--bg-base)',
-                        color: priceMode === 'fixed' ? 'var(--accent)' : 'var(--text-secondary)',
+                        border: form.tipoPrecio === 'FIJO' ? '2px solid var(--accent)' : '1px solid var(--border)',
+                        background: form.tipoPrecio === 'FIJO' ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                        color: form.tipoPrecio === 'FIJO' ? 'var(--accent)' : 'var(--text-secondary)',
                         fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600,
                         cursor: 'pointer', transition: 'all 0.2s',
                       }}
@@ -987,7 +991,7 @@ const ProductosPage: React.FC = () => {
                   </div>
                 </div>
 
-                {priceMode === 'margin' ? (
+                {form.tipoPrecio === 'MARGEN' ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
                     <div>
                       <label style={formLabelStyle}>Precio de compra</label>
@@ -1212,6 +1216,21 @@ const ProductosPage: React.FC = () => {
                       />
                     </div>
 
+                    {stockModal.producto.tipoPrecio === 'FIJO' && (
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label style={formLabelStyle}>Nuevo precio de venta (opcional)</label>
+                        <MoneyInput
+                          value={restockPrecioVenta}
+                          onChange={(n) => setRestockPrecioVenta(n)}
+                          style={formFieldStyle}
+                          placeholder="0"
+                        />
+                        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', margin: '0.3rem 0 0' }}>
+                          Dejalo en 0 para conservar el precio fijo actual.
+                        </p>
+                      </div>
+                    )}
+
                     {restockPreview && (
                       <div
                         style={{
@@ -1231,7 +1250,11 @@ const ProductosPage: React.FC = () => {
                           </span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Nuevo P. Venta ({stockModal.producto.margenGanancia}% margen):</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            {restockPreview.esFijo
+                              ? 'Precio de venta (fijo):'
+                              : `Nuevo P. Venta (${stockModal.producto.margenGanancia}% margen):`}
+                          </span>
                           <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
                             {formatCurrency(restockPreview.nuevoPV)}
                           </span>
@@ -1254,6 +1277,7 @@ const ProductosPage: React.FC = () => {
                       setStockModal(null);
                       setStockCantidad(0);
                       setRestockPrecioCompra(0);
+                      setRestockPrecioVenta(0);
                     }}
                   >
                     Cancelar
