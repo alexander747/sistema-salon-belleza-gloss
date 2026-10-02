@@ -30,11 +30,13 @@
   transition: background 0.15s;
 }
 
-/* ── Móvil (≤640px): grid apilado como cards ──
-   Cada celda se vuelve label+valor (label vía data-label del JSX),
-   se ocultan columnas de bajo valor (margen + modo de precio) y las
-   acciones quedan como footer de la card. */
-@media (max-width: 640px) {
+/* ── Móvil y tablet (≤1024px): grid apilado como cards ──
+   El grid de escritorio requiere ~954px de ancho mínimo; por debajo de
+   1024px se apila como cards para evitar scroll horizontal en celular y
+   tablet. Cada celda se vuelve label+valor (label vía data-label del
+   JSX), se ocultan columnas de bajo valor (margen + modo de precio) y
+   las acciones quedan como footer de la card. */
+@media (max-width: 1024px) {
   .gridHeader {
     display: none;
   }
