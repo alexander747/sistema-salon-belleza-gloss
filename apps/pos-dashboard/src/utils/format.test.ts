@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCurrency } from './format';
+import { formatCurrency, formatTimeAMPM } from './format';
 
 /** es-CO currency usa NBSP entre símbolo y número — normalizar para comparar. */
 function normalize(s: string): string {
@@ -29,5 +29,39 @@ describe('formatCurrency', () => {
 
   it('no usa decimales (COP entero) — trunca la fracción', () => {
     expect(normalize(formatCurrency(50000.4))).toBe('$ 50.000');
+  });
+});
+
+describe('formatTimeAMPM', () => {
+  it('convierte medianoche "00:00" a "12:00 AM"', () => {
+    expect(formatTimeAMPM('00:00')).toBe('12:00 AM');
+  });
+
+  it('convierte mediodía "12:00" a "12:00 PM"', () => {
+    expect(formatTimeAMPM('12:00')).toBe('12:00 PM');
+  });
+
+  it('convierte la tarde con ceros a la izquierda "13:05" a "01:05 PM"', () => {
+    expect(formatTimeAMPM('13:05')).toBe('01:05 PM');
+  });
+
+  it('convierte la mañana "08:00" a "08:00 AM"', () => {
+    expect(formatTimeAMPM('08:00')).toBe('08:00 AM');
+  });
+
+  it('convierte la tarde "14:30" a "02:30 PM"', () => {
+    expect(formatTimeAMPM('14:30')).toBe('02:30 PM');
+  });
+
+  it('devuelve la entrada sin cambios ante texto vacío', () => {
+    expect(formatTimeAMPM('')).toBe('');
+  });
+
+  it('devuelve la entrada sin cambios ante texto inválido sin lanzar', () => {
+    expect(formatTimeAMPM('abc')).toBe('abc');
+  });
+
+  it('devuelve la entrada sin cambios ante una fecha ISO completa', () => {
+    expect(formatTimeAMPM('2026-01-01T10:00:00')).toBe('2026-01-01T10:00:00');
   });
 });
