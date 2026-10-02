@@ -20,7 +20,12 @@ export const AppDataSource = new DataSource({
   // CreatePrestamos tienen SQL inválido para MySQL 8 y chocan).
   migrationsRun: process.env.DB_SYNCHRONIZE !== 'true' && process.env.NODE_ENV === 'production',
   logging: process.env.NODE_ENV !== 'production' ? ['error', 'warn', 'schema'] : ['error'],
-  entities: [__dirname + '/../infrastructure/persistence/entities/**/*.{ts,js}'],
+  // Entity glob — MUST exclude test/spec files. TypeORM require()s every match
+  // at boot, so a `*.test.ts` under `entities/` drags vitest into a CommonJS
+  // entrypoint and crashes the API before MySQL connects. The extglob
+  // `!(*.test|*.spec)` keeps only real entity modules (any depth, so
+  // `__tests__/*.test.ts` is skipped too).
+  entities: [__dirname + '/../infrastructure/persistence/entities/**/!(*.test|*.spec).{ts,js}'],
   migrations: [__dirname + '/../infrastructure/persistence/migrations/**/*.{ts,js}'],
   charset: 'utf8mb4',
   timezone: 'Z',
