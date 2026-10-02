@@ -32,10 +32,10 @@ vi.mock('../../controllers/RegistroController', () => ({
   RegistroController: class { list = () => {}; create = () => {}; get = () => {}; anular = () => {}; abonar = () => {}; },
 }));
 vi.mock('../../controllers/GastoController', () => ({
-  GastoController: class { list = () => {}; create = () => {}; delete = () => {}; },
+  GastoController: class { list = respond200; create = () => {}; delete = () => {}; },
 }));
 vi.mock('../../controllers/DevolucionController', () => ({
-  DevolucionController: class { list = () => {}; create = () => {}; },
+  DevolucionController: class { list = respond200; create = () => {}; },
 }));
 vi.mock('../../controllers/LiquidacionController', () => ({
   LiquidacionController: class { nominaPendiente = () => {}; liquidarEmpleada = () => {}; historial = () => {}; },
@@ -105,6 +105,37 @@ describe('finanzas routes — gating real de Reportes', () => {
 
   it('GET /finanzas/resumen sigue accesible (200) para un rol no privilegiado', async () => {
     const res = await request(buildApp(Rol.MANICURISTA)).get('/salones/1/finanzas/resumen');
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('finanzas routes — gating real de Gastos y Devoluciones', () => {
+  it('GET /gastos responde 403 INSUFFICIENT_ROLE a RECEPCIONISTA', async () => {
+    const res = await request(buildApp(Rol.RECEPCIONISTA)).get('/salones/1/gastos');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.details.code).toBe('INSUFFICIENT_ROLE');
+  });
+
+  it('GET /gastos responde 403 a MANICURISTA', async () => {
+    const res = await request(buildApp(Rol.MANICURISTA)).get('/salones/1/gastos');
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /gastos responde 200 a CONTADOR', async () => {
+    const res = await request(buildApp(Rol.CONTADOR)).get('/salones/1/gastos');
+    expect(res.status).toBe(200);
+  });
+
+  it('GET /devoluciones responde 403 INSUFFICIENT_ROLE a RECEPCIONISTA', async () => {
+    const res = await request(buildApp(Rol.RECEPCIONISTA)).get('/salones/1/devoluciones');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.details.code).toBe('INSUFFICIENT_ROLE');
+  });
+
+  it('GET /devoluciones responde 200 a DUEÑA', async () => {
+    const res = await request(buildApp(Rol.DUEÑA)).get('/salones/1/devoluciones');
     expect(res.status).toBe(200);
   });
 });
