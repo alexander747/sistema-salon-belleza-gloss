@@ -63,6 +63,13 @@ reviewable work units (foundation → API behavior → frontend).
 - [x] 4.2 `cd apps/pos-dashboard && npx vitest run` + `npx tsc --noEmit` (baseline ≤2 known).
 - [x] 4.3 Document backfill (`UPDATE productos SET tipoPrecio='FIJO' WHERE precioCompra=0 AND precioVenta>0`) and rollback in PR body.
 
+## Phase 5: Post-Verify Remediation (fixes `verify-report.md` CRITICAL-1 / CRITICAL-2)
+
+- [x] 5.1 CRITICAL-1 — exclude `*.test`/`*.spec` from the TypeORM entity glob in `apps/api/src/shared/database.ts` (`entities/**/!(*.test|*.spec).{ts,js}`); prove `npx tsx src/server.ts` boots to `🚀 Server listening`.
+- [x] 5.2 CRITICAL-2a — behavioral tests proving `ReabastecerStock` leaves `precioVenta` untouched (`ReabastecerStockUseCase.test.ts` UC contract + `TypeORMProductoRepository.test.ts` persistence invariant); mutation-verified.
+- [x] 5.3 CRITICAL-2b — behavioral test proving a FIJO sale snapshots the configured `precioVenta`, not a margin-derived value (`CreateRegistroUseCase.test.ts`); mutation-verified.
+- [x] 5.4 Re-run gates: API 667 passed / 5 known date-dependent; dashboard 415 passed / 1 known; API `tsc` 1 known (`seed.ts`); dashboard `tsc` 0.
+
 ## Backfill / Rollback (PR body)
 
 **Backfill (runs automatically at API startup).** Production runs with
