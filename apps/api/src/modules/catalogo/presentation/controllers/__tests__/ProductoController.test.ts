@@ -15,6 +15,7 @@ describe('ProductoController', () => {
   let mockRestockUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockHistorialUseCase: { execute: ReturnType<typeof vi.fn> };
   let mockDeleteUseCase: { execute: ReturnType<typeof vi.fn> };
+  let mockExcelExportService: { exportar: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -27,6 +28,7 @@ describe('ProductoController', () => {
     mockRestockUseCase = { execute: vi.fn() };
     mockHistorialUseCase = { execute: vi.fn() };
     mockDeleteUseCase = { execute: vi.fn() };
+    mockExcelExportService = { exportar: vi.fn() };
     next = vi.fn();
     controller = new ProductoController(
       mockListUseCase as never,
@@ -38,6 +40,7 @@ describe('ProductoController', () => {
       mockDeleteUseCase as never,
       mockRestockUseCase as never,
       mockHistorialUseCase as never,
+      mockExcelExportService as never,
     );
   });
 
@@ -243,6 +246,54 @@ describe('ProductoController', () => {
         salonId: 1,
         id: 1,
       });
+    });
+  });
+
+  describe('exportar', () => {
+    it('should set xlsx headers and send the buffer from the export service', async () => {
+      const buffer = Buffer.from('PK\x03\x04fake');
+      mockExcelExportService.exportar.mockResolvedValue({
+        buffer,
+        filename: 'productos_2026-10-02.xlsx',
+      });
+      const setHeader = vi.fn();
+      const send = vi.fn();
+      const req = {
+        salonId: 1,
+        user: { rol: Rol.DUEÑA },
+      } as unknown as Request;
+      const res = { setHeader, send } as unknown as Response;
+
+      await controller.exportar(req, res, next);
+
+      expect(mockExcelExportService.exportar).toHaveBeenCalledWith({
+        salonId: 1,
+        userRol: Rol.DUEÑA,
+      });
+      expect(setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect(setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="productos_2026-10-02.xlsx"',
+      );
+      expect(send).toHaveBeenCalledWith(buffer);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should forward errors to next and not send a body', async () => {
+      const error = new Error('boom');
+      mockExcelExportService.exportar.mockRejectedValue(error);
+      const setHeader = vi.fn();
+      const send = vi.fn();
+      const req = { salonId: 1, user: { rol: Rol.DUEÑA } } as unknown as Request;
+      const res = { setHeader, send } as unknown as Response;
+
+      await controller.exportar(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
+      expect(send).not.toHaveBeenCalled();
     });
   });
 });

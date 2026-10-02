@@ -47,6 +47,7 @@ import { ReabastecerStockUseCase } from '../modules/catalogo/application/use-cas
 import { DeleteProductoUseCase } from '../modules/catalogo/application/use-cases/producto/DeleteProductoUseCase';
 import { RestockProductoUseCase } from '../modules/catalogo/application/use-cases/producto/RestockProductoUseCase';
 import { ObtenerHistorialPreciosUseCase } from '../modules/catalogo/application/use-cases/producto/ObtenerHistorialPreciosUseCase';
+import { ProductoExcelExportService } from '../modules/catalogo/application/services/ProductoExcelExportService';
 
 // Personas Module — Repositories
 import { TypeORMUsuarioRepository as PersonasTypeORMUsuarioRepository } from '../modules/personas/infrastructure/persistence/TypeORMUsuarioRepository';
@@ -155,6 +156,7 @@ container.register('ReabastecerStockUseCase', { useClass: ReabastecerStockUseCas
 container.register('RestockProductoUseCase', { useClass: RestockProductoUseCase });
 container.register('ObtenerHistorialPreciosUseCase', { useClass: ObtenerHistorialPreciosUseCase });
 container.register('DeleteProductoUseCase', { useClass: DeleteProductoUseCase });
+container.register(ProductoExcelExportService, { useClass: ProductoExcelExportService });
 
 // ---- Catalogo Module — Controllers ----
 container.register(CategoriaController, { useClass: CategoriaController });

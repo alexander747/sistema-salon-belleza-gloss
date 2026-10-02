@@ -33,11 +33,11 @@ Chain strategy: pending
 
 ## Phase 2: API wiring + route order (TDD)
 
-- [ ] 2.1 RED: create `presentation/routes/__tests__/catalogo.routes.test.ts` — assert `/productos/exportar` layer index `<` `/productos/:id`, and `requireRole(...PRIVILEGED_ROLES_LIST)` (mirror `finanzas.routes.test.ts`).
-- [ ] 2.2 GREEN: `catalogo.routes.ts` — import `PRIVILEGED_ROLES_LIST`; register `GET /productos/exportar` **before** `/productos/:id`.
-- [ ] 2.3 RED+GREEN: extend `presentation/controllers/__tests__/ProductoController.test.ts` for `exportar` (Content-Type, Content-Disposition, `res.send(buffer)`, error→`next`); add `exportar` to `ProductoController.ts`.
-- [ ] 2.4 GREEN: `shared/container.ts` — import + `container.register(ProductoExcelExportService)`.
-- [ ] 2.5 Verify: `cd apps/api && npx vitest run && npx tsc --noEmit`.
+- [x] 2.1 RED: create `presentation/routes/__tests__/catalogo.routes.test.ts` — assert `/productos/exportar` layer index `<` `/productos/:id`, and `requireRole(...PRIVILEGED_ROLES_LIST)` (mirror `finanzas.routes.test.ts`).
+- [x] 2.2 GREEN: `catalogo.routes.ts` — import `PRIVILEGED_ROLES_LIST`; register `GET /productos/exportar` **before** `/productos/:id`.
+- [x] 2.3 RED+GREEN: extend `presentation/controllers/__tests__/ProductoController.test.ts` for `exportar` (Content-Type, Content-Disposition, `res.send(buffer)`, error→`next`); add `exportar` to `ProductoController.ts`.
+- [x] 2.4 GREEN: `shared/container.ts` — import + `container.register(ProductoExcelExportService)`.
+- [x] 2.5 Verify: `cd apps/api && npx vitest run && npx tsc --noEmit`.
 
 ## Phase 3: UI actions (TDD)
 
