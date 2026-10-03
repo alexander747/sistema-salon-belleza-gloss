@@ -9,7 +9,7 @@ import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
-import { calcularDesgloseReparto, costoUnitarioLinea } from '../utils/reparto.js';
+import { calcularDesgloseReparto, costoUnitarioLinea, alcanceLabel, type DescuentoAlcance } from '../utils/reparto.js';
 import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
 import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
 import MoneyInput from './MoneyInput.js';
@@ -45,6 +45,8 @@ interface CartItem {
   precioPorGramo?: number | null;
   /** Grams used per unit — only for `POR_GRAMO` services. */
   gramosUsados?: number;
+  /** Costo de insumos editado por el usuario (descuento). Si es undefined, se deriva de gramos × $/g. */
+  costoInsumosOverride?: number;
 }
 
 interface Producto {
@@ -166,6 +168,22 @@ const inputStyle: React.CSSProperties = {
   maxWidth: '100%',
 };
 
+/** Compact inline editor for a cart line's unit price. */
+const priceInputStyle: React.CSSProperties = {
+  width: '88px',
+  height: '32px',
+  padding: '0 0.4rem',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border)',
+  background: 'var(--bg-base)',
+  color: 'var(--text-primary)',
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.8125rem',
+  fontWeight: 600,
+  textAlign: 'right',
+  outline: 'none',
+};
+
 /* ── Animation variants ── */
 
 const cardVariants = {
@@ -222,8 +240,12 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
 
   /* ── Discount & Override state ── */
   const [descuento, setDescuento] = useState<number>(0);
-  const [totalPersonalizado, setTotalPersonalizado] = useState<number | null>(null);
-  const [ajustarTotal, setAjustarTotal] = useState(false);
+  /** Alcance del % : servicios, productos o ambos (default AMBOS). */
+  const [descuentoAlcance, setDescuentoAlcance] = useState<DescuentoAlcance>('AMBOS');
+  // Secciones opcionales (switch): ocultas por defecto para no agrandar el modal.
+  const [propinaActiva, setPropinaActiva] = useState(false);
+  const [descuentoActivo, setDescuentoActivo] = useState(false);
+  const [notasActivo, setNotasActivo] = useState(false);
   const [notaAjuste, setNotaAjuste] = useState('');
 
   /* ── Submission state ── */
@@ -304,17 +326,21 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
 
   const subtotal = useMemo(() => totalServicios + totalProductos, [totalServicios, totalProductos]);
 
+  // El % se aplica SOLO al alcance elegido; el descuento se calcula por lado.
+  const pctServ = descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS' ? descuento : 0;
+  const pctProd = descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS' ? descuento : 0;
+
   const descuentoMonto = useMemo(() => {
-    return subtotal * (descuento / 100);
-  }, [subtotal, descuento]);
+    const descServicios = totalServicios - Math.round(totalServicios * (1 - pctServ / 100));
+    const descProductos = totalProductos - Math.round(totalProductos * (1 - pctProd / 100));
+    return descServicios + descProductos;
+  }, [totalServicios, totalProductos, pctServ, pctProd]);
 
   const calculatedTotal = useMemo(() => {
     return subtotal + propina - descuentoMonto;
   }, [subtotal, propina, descuentoMonto]);
 
-  const finalTotal = useMemo(() => {
-    return totalPersonalizado !== null ? totalPersonalizado : calculatedTotal;
-  }, [totalPersonalizado, calculatedTotal]);
+  const finalTotal = calculatedTotal;
 
   const cambio = useMemo(() => {
     if (paymentMethod !== 'EFECTIVO') return 0;
@@ -335,7 +361,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     return names.join(', ');
   }, [cart, productCart]);
 
-  const hasAdjustment = descuento > 0 || totalPersonalizado !== null;
+  const hasAdjustment = descuento > 0;
   const ajusteNoteRequired = hasAdjustment && notaAjuste.trim().length === 0;
 
   const canSubmit = useMemo(() => {
@@ -381,6 +407,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
             gramosUsados: item.gramosUsados,
             precioPorGramo: item.precioPorGramo,
             costoBaseInsumos: item.costoBaseInsumos,
+            costoInsumosOverride: item.costoInsumosOverride,
           }) * item.cantidad,
         0,
       ),
@@ -391,18 +418,16 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     () =>
       calcularDesgloseReparto({
         totalServicios,
-        totalProductos,
-        propina,
         totalCostoInsumos,
-        valorFinal: finalTotal,
+        porcentajeDescuento: descuento,
+        descuentoAlcance,
         porcentajeComision: porcentajeComisionEmpleada ?? 0,
       }),
     [
       totalServicios,
-      totalProductos,
-      propina,
       totalCostoInsumos,
-      finalTotal,
+      descuento,
+      descuentoAlcance,
       porcentajeComisionEmpleada,
     ],
   );
@@ -459,12 +484,14 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setReferencia('');
       setPropina(0);
       setNotas('');
+      setPropinaActiva(false);
+      setNotasActivo(false);
+      setDescuentoActivo(false);
       setSearch('');
       setTypeFilter('TODO');
       setProductCart([]);
       setDescuento(0);
-      setTotalPersonalizado(null);
-      setAjustarTotal(false);
+      setDescuentoAlcance('AMBOS');
       setNotaAjuste('');
       setFecha(toISODate(new Date()));
       setError(null);
@@ -519,7 +546,18 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   const updateServiceGramos = (servicioId: number, gramos: number | undefined) => {
     setCart((prev) =>
       prev.map((item) =>
-        item.servicioId === servicioId ? { ...item, gramosUsados: gramos } : item,
+        item.servicioId === servicioId
+          ? { ...item, gramosUsados: gramos, costoInsumosOverride: undefined }
+          : item,
+      ),
+    );
+  };
+
+  /** Edita el costo de insumos de la línea (descuento). `undefined` vuelve al derivado. */
+  const updateCostoInsumos = (servicioId: number, costo: number | undefined) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.servicioId === servicioId ? { ...item, costoInsumosOverride: costo } : item,
       ),
     );
   };
@@ -528,8 +566,14 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     setCart((prev) => prev.filter((item) => item.servicioId !== servicioId));
   };
 
-  /* Note: updatePrice function removed — service prices are now read-only.
-     Price adjustments should only be done via Descuento (%) or Ajustar valor total. */
+  /** Edita el precio unitario de la línea (E1: precio editable por línea). */
+  const updateServicePrice = (servicioId: number, precio: number) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.servicioId === servicioId ? { ...item, precio: Math.max(0, precio) } : item,
+      ),
+    );
+  };
 
   /* ── Product cart helpers ── */
 
@@ -570,6 +614,15 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
 
   const removeProductFromCart = (productoId: number) => {
     setProductCart((prev) => prev.filter((item) => item.productoId !== productoId));
+  };
+
+  /** Edita el precio unitario de venta del producto (E1). */
+  const updateProductPrice = (productoId: number, precio: number) => {
+    setProductCart((prev) =>
+      prev.map((item) =>
+        item.productoId === productoId ? { ...item, precioVenta: Math.max(0, precio) } : item,
+      ),
+    );
   };
 
   /* ── Scanner de código de barras (PR2) ──
@@ -617,8 +670,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       let finalNotas = notas.trim() || undefined;
       if (hasAdjustment && notaAjuste.trim()) {
         const ajusteParts: string[] = [];
-        if (descuento > 0) ajusteParts.push(`descuento ${descuento}%`);
-        if (totalPersonalizado !== null) ajusteParts.push(`total $${totalPersonalizado}`);
+        if (descuento > 0) ajusteParts.push(`descuento ${descuento}% ${alcanceLabel(descuentoAlcance)}`);
         const prefix = `[AJUSTE: ${ajusteParts.join(' | ')}] Razón: ${notaAjuste.trim()}`;
         finalNotas = finalNotas ? `${prefix}\n${finalNotas}` : prefix;
       }
@@ -651,6 +703,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
         productosVendidos: productCart.map((p) => ({
           productoId: p.productoId,
           cantidad: p.cantidad,
+          // E1: precio editado por el usuario (el server cae al del catálogo si falta).
+          precioVenta: p.precioVenta,
         })),
         serviciosItems: cart.map((item) => ({
           servicioId: item.servicioId,
@@ -659,13 +713,12 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           // Server re-derives the cost from the catalog; grams are required for POR_GRAMO.
           costoBaseInsumos: item.costoBaseInsumos ?? 0,
           gramosUsados: item.tipoCostoInsumo === 'POR_GRAMO' ? item.gramosUsados : undefined,
+          costoInsumosOverride: item.costoInsumosOverride,
           cantidad: item.cantidad,
         })),
-        // Price adjustment fields
+        // Descuento % con alcance (el server deriva precioAjustado/valorFinal)
         porcentajeDescuento: descuento,
-        precioAjustado: hasAdjustment,
-        valorOriginal: subtotal + propina,
-        valorFinal: finalTotal,
+        descuentoAlcance,
       };
       const { data } = await api.post(`/salones/${salonId}/registros`, payload);
 
@@ -698,7 +751,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           metodoPago: paymentMethod,
           total: finalTotal,
           propina,
-          descuento: descuentoMonto,
+          // Descuento EFECTIVO = subtotal + propina − total: cubre tanto el % como
+          // el "Ajustar valor total", así el recibo cierra (subtotal − desc + propina = total).
+          descuento: Math.max(0, subtotal + propina - finalTotal),
           descuentoPorcentaje: descuento || undefined,
           montoPendiente: pendiente,
         }),
@@ -1117,6 +1172,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                           const item = entry.data;
                           const gramosLinea = item.gramosUsados ?? 0;
                           const costoInsumoLinea = gramosLinea * (item.precioPorGramo ?? 0);
+                          const costoInsumosMostrado =
+                            item.costoInsumosOverride ?? costoInsumoLinea;
                           return (
                             <motion.div
                               key={`svc-${item.servicioId}`}
@@ -1219,6 +1276,20 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                                   +
                                 </button>
                               </div>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputMode="decimal"
+                                aria-label={`Precio ${item.nombre}`}
+                                value={item.precio}
+                                onChange={(e) =>
+                                  updateServicePrice(item.servicioId, Number(e.target.value))
+                                }
+                                className={styles.noSpinner}
+                                style={priceInputStyle}
+                                title="Precio unitario"
+                              />
                               <span
                                 style={{
                                   fontFamily: "'DM Sans', sans-serif",
@@ -1265,16 +1336,52 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                                     />
                                     <span className={styles.gramsSuffix}>g</span>
                                   </div>
-                                  {costoInsumoLinea > 0 && (
-                                    <span
+                                  <label
+                                    className={styles.gramsLabel}
+                                    htmlFor={`costo-svc-${item.servicioId}`}
+                                  >
+                                    Costo de insumos
+                                  </label>
+                                  <div className={styles.gramsInputWrap}>
+                                    <input
+                                      id={`costo-svc-${item.servicioId}`}
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      inputMode="decimal"
+                                      aria-label={`Costo de insumos ${item.nombre}`}
+                                      placeholder="0"
+                                      value={costoInsumosMostrado > 0 ? costoInsumosMostrado : ''}
+                                      onChange={(e) =>
+                                        updateCostoInsumos(
+                                          item.servicioId,
+                                          e.target.value === ''
+                                            ? undefined
+                                            : Number(e.target.value),
+                                        )
+                                      }
+                                      className={styles.gramsInput}
+                                    />
+                                    <span className={styles.gramsSuffix}>$</span>
+                                  </div>
+                                  {item.costoInsumosOverride != null && costoInsumoLinea > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCostoInsumos(item.servicioId, undefined)
+                                      }
                                       className={styles.gramsCost}
-                                      aria-label={`Costo de insumo ${formatCurrency(costoInsumoLinea)}`}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: 0,
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        font: 'inherit',
+                                      }}
                                     >
-                                      Costo de insumo
-                                      <strong className={styles.gramsCostValue}>
-                                        {formatCurrency(costoInsumoLinea)}
-                                      </strong>
-                                    </span>
+                                      Calculado: {formatCurrency(costoInsumoLinea)} · volver
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -1319,12 +1426,29 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                                 </div>
                                 <div
                                   style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem',
                                     fontFamily: "'DM Sans', sans-serif",
                                     fontSize: '0.6875rem',
                                     color: 'var(--text-secondary)',
                                   }}
                                 >
-                                  {formatCurrency(item.precioVenta)} × {item.cantidad}
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    inputMode="decimal"
+                                    aria-label={`Precio ${item.nombre}`}
+                                    value={item.precioVenta}
+                                    onChange={(e) =>
+                                      updateProductPrice(item.productoId, Number(e.target.value))
+                                    }
+                                    className={styles.noSpinner}
+                                    style={priceInputStyle}
+                                    title="Precio unitario"
+                                  />
+                                  <span>× {item.cantidad}</span>
                                 </div>
                               </div>
                               <div
@@ -1468,27 +1592,41 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   </div>
                 </div>
 
-                {/* ── Propina ── */}
+                {/* ── Propina (switch) ── */}
                 <div className={styles.checkoutSection}>
-                  <div>
-                    <label style={formLabelStyle}>Propina</label>
-                    <MoneyInput
-                      value={propina}
-                      onChange={setPropina}
-                      placeholder="0"
-                      ariaLabel="Propina"
-                      style={inputStyle}
-                      className={styles.noSpinner}
-                      onFocus={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--accent)';
-                        e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--border)';
-                        e.currentTarget.style.boxShadow = 'none';
+                  <label className={styles.switchLabel}>
+                    <input
+                      type="checkbox"
+                      checked={propinaActiva}
+                      onChange={(e) => {
+                        setPropinaActiva(e.target.checked);
+                        if (!e.target.checked) setPropina(0);
                       }}
                     />
-                  </div>
+                    <span className={styles.switchSlider} />
+                    <span className={styles.switchLabelText}>Agregar propina</span>
+                  </label>
+                  {propinaActiva && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label style={formLabelStyle}>Propina</label>
+                      <MoneyInput
+                        value={propina}
+                        onChange={setPropina}
+                        placeholder="0"
+                        ariaLabel="Propina"
+                        style={inputStyle}
+                        className={styles.noSpinner}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                          e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--border)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Discount & Price Override ── */}
@@ -1507,94 +1645,90 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     Ajustes de precio
                   </div>
 
-                  {/* Descuento % */}
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <label style={formLabelStyle}>Descuento (%)</label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                      }}
-                    >
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={descuento || ''}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setDescuento(Math.min(100, Math.max(0, val)));
-                        }}
-                        placeholder="0"
-                        className={styles.noSpinner}
-                        style={{ ...inputStyle, maxWidth: '100px' }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--accent)';
-                          e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--border)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      />
-                      <span
-                        style={{
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontSize: '0.75rem',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        %
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Total ajustado toggle + input */}
+                  {/* Descuento % (switch) */}
                   <div style={{ marginBottom: '0.5rem' }}>
                     <label className={styles.switchLabel}>
                       <input
                         type="checkbox"
-                        checked={ajustarTotal}
+                        checked={descuentoActivo}
                         onChange={(e) => {
-                          setAjustarTotal(e.target.checked);
-                          if (!e.target.checked) setTotalPersonalizado(null);
+                          setDescuentoActivo(e.target.checked);
+                          if (!e.target.checked) setDescuento(0);
                         }}
                       />
                       <span className={styles.switchSlider} />
-                      <span className={styles.switchLabelText}>Ajustar valor total</span>
+                      <span className={styles.switchLabelText}>Ajustar precio por %</span>
                     </label>
-                    {ajustarTotal && (
+                    {descuentoActivo && (
                       <div style={{ marginTop: '0.5rem' }}>
-                        <MoneyInput
-                          value={totalPersonalizado ?? 0}
-                          onChange={(n) => {
-                            // Regla del dueño: el ajuste de valor SOLO puede ser
-                            // hacia ABAJO (descuento), nunca por encima del precio
-                            // del servicio. Si se ingresa un valor mayor, se ignora.
-                            if (n > calculatedTotal) {
-                              return;
-                            }
-                            setTotalPersonalizado(n === 0 ? null : n);
+                        <label style={formLabelStyle}>Descuento (%)</label>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
                           }}
-                          placeholder={formatCurrency(calculatedTotal)}
-                          ariaLabel="Valor total ajustado"
-                          className={styles.noSpinner}
-                          style={inputStyle}
-                          onFocus={(e) => {
-                            e.currentTarget.style.borderColor = 'var(--accent)';
-                            e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
-                          }}
-                          onBlur={(e) => {
-                            e.currentTarget.style.borderColor = 'var(--border)';
-                            e.currentTarget.style.boxShadow = 'none';
-                          }}
-                        />
+                        >
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={descuento || ''}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setDescuento(Math.min(100, Math.max(0, val)));
+                            }}
+                            placeholder="0"
+                            aria-label="Descuento (%)"
+                            className={styles.noSpinner}
+                            style={{ ...inputStyle, maxWidth: '100px' }}
+                            onFocus={(e) => {
+                              e.currentTarget.style.borderColor = 'var(--accent)';
+                              e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
+                            }}
+                            onBlur={(e) => {
+                              e.currentTarget.style.borderColor = 'var(--border)';
+                              e.currentTarget.style.boxShadow = 'none';
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontFamily: "'DM Sans', sans-serif",
+                              fontSize: '0.75rem',
+                              color: 'var(--text-secondary)',
+                            }}
+                          >
+                            %
+                          </span>
+                        </div>
+                        {/* Alcance del descuento: servicios / productos / ambos */}
+                        <label style={{ ...formLabelStyle, marginTop: '0.5rem' }}>
+                          Aplicar a
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.3rem' }}>
+                          {(
+                            [
+                              ['SERVICIOS', 'Servicios'],
+                              ['PRODUCTOS', 'Productos'],
+                              ['AMBOS', 'Ambos'],
+                            ] as Array<[DescuentoAlcance, string]>
+                          ).map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              aria-label={`Alcance ${label}`}
+                              onClick={() => setDescuentoAlcance(value)}
+                              className={`${styles.typeFilterBtn} ${descuentoAlcance === value ? styles.typeFilterBtnActive : ''}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Note de ajuste (required if discount or override) */}
+                  {/* Note de ajuste (required if discount) */}
                   {hasAdjustment && (
                     <div>
                       <label
@@ -1624,21 +1758,37 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                             display: 'block',
                           }}
                         >
-                          Este campo es obligatorio cuando hay descuento o ajuste de total.
+                          Este campo es obligatorio cuando hay descuento.
                         </span>
                       )}
                     </div>
                   )}
 
-                  {/* Notas generales */}
+                  {/* Notas generales (switch) */}
                   <div style={{ marginTop: '0.5rem' }}>
-                    <label style={formLabelStyle}>Notas (opcional)</label>
-                    <textarea
-                      value={notas}
-                      onChange={(e) => setNotas(e.target.value)}
-                      placeholder="Notas adicionales…"
-                      className={styles.notesInput}
-                    />
+                    <label className={styles.switchLabel}>
+                      <input
+                        type="checkbox"
+                        checked={notasActivo}
+                        onChange={(e) => {
+                          setNotasActivo(e.target.checked);
+                          if (!e.target.checked) setNotas('');
+                        }}
+                      />
+                      <span className={styles.switchSlider} />
+                      <span className={styles.switchLabelText}>Agregar notas</span>
+                    </label>
+                    {notasActivo && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <label style={formLabelStyle}>Notas (opcional)</label>
+                        <textarea
+                          value={notas}
+                          onChange={(e) => setNotas(e.target.value)}
+                          placeholder="Notas adicionales…"
+                          className={styles.notesInput}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1794,25 +1944,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   )}
                   {descuentoMonto > 0 && (
                     <div className={styles.totalRow}>
-                      <span>Descuento ({descuento}%)</span>
+                      <span>Descuento ({descuento}% {alcanceLabel(descuentoAlcance)})</span>
                       <span style={{ color: 'var(--danger)' }}>
                         -{formatCurrency(descuentoMonto)}
-                      </span>
-                    </div>
-                  )}
-                  {totalPersonalizado !== null && totalPersonalizado !== calculatedTotal && (
-                    <div className={styles.totalRow}>
-                      <span>Ajuste</span>
-                      <span
-                        style={{
-                          color:
-                            totalPersonalizado > calculatedTotal
-                              ? 'var(--success)'
-                              : 'var(--danger)',
-                        }}
-                      >
-                        {totalPersonalizado > calculatedTotal ? '+' : '-'}
-                        {formatCurrency(Math.abs(totalPersonalizado - calculatedTotal))}
                       </span>
                     </div>
                   )}

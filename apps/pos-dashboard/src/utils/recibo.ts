@@ -36,6 +36,8 @@ export interface ReciboData {
   descuentoPorcentaje?: number;
   /** Deuda restante en fiado (0 = pagado completo). */
   montoPendiente: number;
+  /** Monto efectivamente cobrado en el momento (total − pendiente). */
+  montoPagado: number;
 }
 
 /** Línea tal como la ve el usuario en el carrito (aún sin subtotal). */
@@ -82,6 +84,7 @@ export function buildRecibo(args: BuildReciboArgs): ReciboData {
     descuento: args.descuento ?? 0,
     descuentoPorcentaje: args.descuentoPorcentaje,
     montoPendiente: args.montoPendiente ?? 0,
+    montoPagado: Math.max(0, args.total - (args.montoPendiente ?? 0)),
   };
 }
 

@@ -112,6 +112,7 @@ describe('CreateRegistroUseCase', () => {
     ],
     divisiones: [],
     porcentajeDescuento: 0,
+    descuentoAlcance: 'AMBOS',
     productosVendidos: [],
     serviciosItems: [],
   };
@@ -274,7 +275,7 @@ describe('CreateRegistroUseCase', () => {
     }));
   });
 
-  it('should calculate commission on the adjusted services total when price is adjusted', async () => {
+  it('calcula la comisión sobre el total NETO de servicios con % y alcance SERVICIOS', async () => {
     const mockCliente = { id: 1, totalServicios: 5, deudaTotal: 50000 };
     const mockUsuario = { id: 2, porcentajeComisionServicio: '50' };
     const mockSaved = {
@@ -282,9 +283,9 @@ describe('CreateRegistroUseCase', () => {
       salonId: 1,
       clienteId: 1,
       usuarioId: 2,
-      totalServicios: 85000,
+      totalServicios: 100000,
       totalProductos: 0,
-      montoTotal: 85000,
+      montoTotal: 100000,
       propina: 0,
       comisionCalculada: 40000,
       esRetoque: false,
@@ -301,7 +302,7 @@ describe('CreateRegistroUseCase', () => {
     mockClienteRepo.findBySalonAndId.mockResolvedValue(mockCliente);
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(mockUsuario);
     mockComisionService.calcularComision.mockReturnValue(40000);
-    mockComisionService.calcularMontoTotal.mockReturnValue(85000);
+    mockComisionService.calcularMontoTotal.mockReturnValue(100000);
     mockComisionService.calcularMontoPendiente.mockReturnValue(0);
     mockRegistroRepo.create.mockResolvedValue({ id: 1 });
     mockPagoRepo.bulkCreate.mockResolvedValue([]);
@@ -309,25 +310,32 @@ describe('CreateRegistroUseCase', () => {
 
     const input = {
       ...validInput,
-      totalServicios: 85000,
+      totalServicios: 100000,
       totalProductos: 0,
       propina: 0,
-      pagos: [
-        { monto: 80000, metodoPago: 'EFECTIVO' as const },
-      ],
-      porcentajeDescuento: 0,
-      precioAjustado: true,
-      valorOriginal: 85000,
-      valorFinal: 80000,
+      pagos: [{ monto: 80000, metodoPago: 'EFECTIVO' as const }],
+      porcentajeDescuento: 20,
+      descuentoAlcance: 'SERVICIOS' as const,
       serviciosItems: [
-        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 85000, costoBaseInsumos: 0, cantidad: 1 },
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 100000, costoBaseInsumos: 0, cantidad: 1 },
       ],
     };
 
     const result = await useCase.execute(input);
 
-    // proportion = (80000 - 0) / (85000 - 0) ≈ 0.941176 → round(85000 × 0.941176) = 80000
+    // servNeto = round(100000 × 0.8) = 80000 → comisión 50% sobre 80000
     expect(mockComisionService.calcularComision).toHaveBeenCalledWith(80000, 50, 0);
+    // totalServicios se persiste BRUTO; valorFinal es el cobrado (servNeto + propina)
+    expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalServicios: 100000,
+        valorFinal: 80000,
+        precioAjustado: true,
+        porcentajeDescuento: 20,
+        descuentoAlcance: 'SERVICIOS',
+      }),
+      expect.anything(),
+    );
     expect(result.comisionCalculada).toBe(40000);
   });
 
@@ -894,6 +902,47 @@ describe('CreateRegistroUseCase', () => {
       expect(mockComisionService.calcularComision).toHaveBeenCalledWith(450000, 60, 114000);
     });
 
+    it('usa el costoInsumosOverride editado por el usuario (insumo y comisión)', async () => {
+      setupHappy();
+      mockServicioRepo.findBySalonAndId.mockResolvedValue({
+        id: 7,
+        costoBaseInsumos: 0,
+        tipoCostoInsumo: 'POR_GRAMO',
+        precioPorGramo: 1200,
+      });
+
+      const input = {
+        ...validInput,
+        totalServicios: 450000,
+        totalProductos: 0,
+        propina: 0,
+        serviciosItems: [
+          {
+            servicioId: 7,
+            nombreServicio: 'Tintura',
+            precioServicio: 450000,
+            gramosUsados: 95, // derivado = 114000
+            costoInsumosOverride: 50000, // insumo registrado (descuento)
+            cantidad: 1,
+          },
+        ],
+      };
+
+      await useCase.execute(input);
+
+      // El valor editado se REGISTRA en la venta (50.000 en vez de 114.000)
+      expect(mockRepoCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          servicioId: 7,
+          costoBaseInsumos: 50000,
+          gramosUsados: 95,
+          precioPorGramo: 1200,
+        }),
+      );
+      // La comisión usa el insumo EDITADO (50.000)
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(450000, 60, 50000);
+    });
+
     it('rejects a POR_GRAMO line without grams (422) and persists nothing', async () => {
       setupHappy();
       mockServicioRepo.findBySalonAndId.mockResolvedValue({
@@ -1056,6 +1105,129 @@ describe('CreateRegistroUseCase', () => {
 
       expect(createdProducto()).toEqual(
         expect.objectContaining({ precioVentaUnitario: 750, subtotal: 2250 }),
+      );
+    });
+
+    it('persists the EDITED precioVenta and computes the subtotal from it', async () => {
+      setupFijo(500); // catalog price
+
+      await useCase.execute({
+        ...validInput,
+        productosVendidos: [{ productoId: 99, cantidad: 2, precioVenta: 999 }],
+      });
+
+      // El precio editado gana sobre el catálogo, y el subtotal usa el editado.
+      expect(createdProducto()).toEqual(
+        expect.objectContaining({ precioVentaUnitario: 999, subtotal: 1998 }),
+      );
+    });
+
+    it('honors an edited price of 0 (courtesy) instead of falling back to the catalog', async () => {
+      setupFijo(500);
+
+      await useCase.execute({
+        ...validInput,
+        productosVendidos: [{ productoId: 99, cantidad: 1, precioVenta: 0 }],
+      });
+
+      expect(createdProducto()).toEqual(
+        expect.objectContaining({ precioVentaUnitario: 0, subtotal: 0 }),
+      );
+    });
+  });
+
+  describe('descuento % con alcance (E2)', () => {
+    const ejecutar = (overrides: Partial<CreateRegistroInput>) => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 5, deudaTotal: 0 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '50' });
+      mockComisionService.calcularComision.mockReturnValue(0);
+      mockComisionService.calcularMontoTotal.mockReturnValue(150000);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(0);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue({
+        id: 1,
+        salonId: 1,
+        clienteId: 1,
+        usuarioId: 2,
+        totalServicios: 100000,
+        totalProductos: 50000,
+        montoTotal: 150000,
+        propina: 0,
+        comisionCalculada: 0,
+        esRetoque: false,
+        montoPendiente: 0,
+        estaPagadaEmpleada: false,
+        notas: null,
+        descripcionServicio: null,
+        pagos: [],
+        divisiones: [],
+        creadoEn: new Date(),
+        actualizadoEn: new Date(),
+      });
+      return useCase.execute({
+        ...validInput,
+        totalServicios: 100000,
+        totalProductos: 50000,
+        propina: 0,
+        pagos: [],
+        ...overrides,
+      });
+    };
+
+    it('SERVICIOS: descuenta solo servicios; productos intactos; comisión sobre el neto de servicios', async () => {
+      await ejecutar({ porcentajeDescuento: 10, descuentoAlcance: 'SERVICIOS' });
+
+      // servNeto = 90000, prodNeto = 50000
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(90000, 50, 0);
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalServicios: 100000,
+          totalProductos: 50000,
+          valorOriginal: 150000,
+          valorFinal: 140000,
+          descuentoAlcance: 'SERVICIOS',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('PRODUCTOS: descuenta solo productos; la comisión NO toca productos', async () => {
+      await ejecutar({ porcentajeDescuento: 10, descuentoAlcance: 'PRODUCTOS' });
+
+      // servNeto = 100000 (sin descuento), prodNeto = 45000
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(100000, 50, 0);
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalServicios: 100000,
+          totalProductos: 50000,
+          valorOriginal: 150000,
+          valorFinal: 145000,
+          descuentoAlcance: 'PRODUCTOS',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('AMBOS: descuenta los dos lados y la comisión usa el neto de servicios', async () => {
+      await ejecutar({ porcentajeDescuento: 10, descuentoAlcance: 'AMBOS' });
+
+      // servNeto = 90000, prodNeto = 45000
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(90000, 50, 0);
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ valorFinal: 135000, descuentoAlcance: 'AMBOS' }),
+        expect.anything(),
+      );
+    });
+
+    it('sin % (0) el valorFinal es el bruto y no marca precioAjustado', async () => {
+      await ejecutar({ porcentajeDescuento: 0, descuentoAlcance: 'AMBOS' });
+
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          valorFinal: 150000,
+          precioAjustado: false,
+        }),
+        expect.anything(),
       );
     });
   });

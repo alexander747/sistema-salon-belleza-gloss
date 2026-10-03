@@ -18,6 +18,11 @@ export const divisionRegistroSchema = z.object({
 
 export type DivisionRegistroInput = z.infer<typeof divisionRegistroSchema>;
 
+/** Alcance del descuento %: solo servicios, solo productos, o ambos. */
+export const descuentoAlcanceSchema = z.enum(['SERVICIOS', 'PRODUCTOS', 'AMBOS']);
+
+export type DescuentoAlcance = z.infer<typeof descuentoAlcanceSchema>;
+
 export const createRegistroSchema = z.object({
   salonId: z.number().int().positive(),
   clienteId: z.number().int().positive('El clienteId es requerido'),
@@ -34,14 +39,18 @@ export const createRegistroSchema = z.object({
   divisiones: z.array(divisionRegistroSchema).optional().default([]),
   notas: z.string().max(500).optional(),
   registradoPorId: z.number().int().optional(),
-  // Price adjustment fields (optional — backend calculates defaults)
-  precioAjustado: z.boolean().optional(),
+  // Descuento: un único % aplicado a un ALCANCE elegido (servicios/productos/ambos).
+  // Reemplaza el antiguo ajuste de "valor total" (totalPersonalizado): el precio
+  // ahora se ajusta por línea (precioServicio/precioVenta) + este %.
   porcentajeDescuento: z.number().min(0).max(100).optional().default(0),
-  valorOriginal: z.number().min(0).optional(),
-  valorFinal: z.number().min(0).optional(),
+  // Opcional en el schema; el use case aplica el default 'AMBOS' cuando falta.
+  descuentoAlcance: descuentoAlcanceSchema.optional(),
   productosVendidos: z.array(z.object({
     productoId: z.number().int().positive(),
     cantidad: z.number().int().positive(),
+    // Precio unitario editado por el usuario. Ausente → el server usa el
+    // precio del catálogo (comportamiento legacy).
+    precioVenta: z.number().min(0, 'El precio de venta debe ser mayor o igual a 0').optional(),
   })).optional().default([]),
   serviciosItems: z.array(z.object({
     servicioId: z.number().int().positive('El servicioId debe ser un entero positivo'),
@@ -53,6 +62,9 @@ export const createRegistroSchema = z.object({
     // POR_GRAMO only: grams used per unit (> 0). Shape validation lives here;
     // the use case enforces "POR_GRAMO without grams → 422" after resolving the catalog.
     gramosUsados: z.number().positive('Los gramos deben ser mayores a 0').optional(),
+    // Editado por el usuario (ej. descuento de insumos). Si viene, el server lo
+    // usa como costo de la línea en vez de derivarlo (gramos × $/g).
+    costoInsumosOverride: z.number().min(0, 'El costo de insumos no puede ser negativo').optional(),
     // Quantity of units sold for this line (expanded to N item rows server-side).
     cantidad: z.number().int('La cantidad debe ser un entero').positive('La cantidad debe ser ≥ 1').default(1),
   })).optional().default([]),

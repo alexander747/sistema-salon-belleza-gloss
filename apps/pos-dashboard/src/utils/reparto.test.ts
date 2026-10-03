@@ -7,98 +7,93 @@ import {
 } from './reparto.js';
 
 /**
- * Réplica de la fórmula del servidor:
- *   totalServiciosAjustado = round(totalServicios × (valorFinal − propina)/(montoTotal − propina))
- *   comision = max(0, totalServiciosAjustado − insumos) × (porcentaje/100)
- *   (CreateRegistroUseCase.ts:162-174 + ComisionService.ts:11-18)
+ * Réplica de la fórmula del servidor (E2):
+ *   servNeto = round(totalServicios × (1 − pctServ/100))
+ *   pctServ  = (alcance ∈ {SERVICIOS, AMBOS}) ? % : 0
+ *   comision = max(0, servNeto − insumos) × (porcentaje/100)
+ *   (CreateRegistroUseCase + ComisionService)
  */
-describe('calcularDesgloseReparto — caso canónico del dueño', () => {
-  it('ajuste 550.000 → 300.000 con 30 g ($800/g): 24.000 de insumo y reparto 60/40', () => {
+describe('calcularDesgloseReparto — servicios con % (E2)', () => {
+  it('alcance SERVICIOS al 20%: aplica el % y reparte 60/40', () => {
     const desglose = calcularDesgloseReparto({
       totalServicios: 550000,
-      totalProductos: 0,
-      propina: 0,
       totalCostoInsumos: 24000,
-      valorFinal: 300000,
+      porcentajeDescuento: 20,
+      descuentoAlcance: 'SERVICIOS',
       porcentajeComision: 60,
     });
 
-    expect(desglose.cobradoServicios).toBe(300000);
+    // 550000 × 0.8 = 440000
+    expect(desglose.cobradoServicios).toBe(440000);
     expect(desglose.insumos).toBe(24000);
-    expect(desglose.aRepartir).toBe(276000);
-    expect(desglose.comisionEmpleada).toBe(165600);
-    expect(desglose.quedaSalon).toBe(110400);
+    expect(desglose.aRepartir).toBe(416000);
+    expect(desglose.comisionEmpleada).toBe(249600);
+    expect(desglose.quedaSalon).toBe(166400);
     expect(desglose.insumoSuperaCobrado).toBe(false);
   });
 
-  it('caso canónico con cantidad ×2 duplica el insumo y el reparto', () => {
-    const desglose = calcularDesgloseReparto({
-      totalServicios: 550000 * 2,
-      totalProductos: 0,
-      propina: 0,
-      totalCostoInsumos: 24000 * 2,
-      valorFinal: 300000 * 2,
-      porcentajeComision: 60,
-    });
-
-    expect(desglose.cobradoServicios).toBe(600000);
-    expect(desglose.aRepartir).toBe(552000);
-    expect(desglose.comisionEmpleada).toBe(331200);
-    expect(desglose.quedaSalon).toBe(220800);
-  });
-});
-
-describe('calcularDesgloseReparto — insumo mayor al cobrado', () => {
-  it('clampea la comisión en 0 y nunca devuelve negativos', () => {
+  it('alcance PRODUCTOS al 20%: los servicios NO se descuentan (base de comisión intacta)', () => {
     const desglose = calcularDesgloseReparto({
       totalServicios: 550000,
-      totalProductos: 0,
-      propina: 0,
       totalCostoInsumos: 24000,
-      valorFinal: 20000,
+      porcentajeDescuento: 20,
+      descuentoAlcance: 'PRODUCTOS',
       porcentajeComision: 60,
     });
 
-    expect(desglose.cobradoServicios).toBe(20000);
-    expect(desglose.aRepartir).toBe(0);
-    expect(desglose.comisionEmpleada).toBe(0);
-    expect(desglose.quedaSalon).toBe(0);
-    expect(desglose.insumoSuperaCobrado).toBe(true);
+    expect(desglose.cobradoServicios).toBe(550000);
+    expect(desglose.aRepartir).toBe(526000);
+    expect(desglose.comisionEmpleada).toBe(315600);
+    expect(desglose.quedaSalon).toBe(210400);
   });
 
-  it('sin comisión configurada (0%) el salón se queda con todo lo repartible', () => {
+  it('alcance AMBOS aplica el % a servicios (la comisión nunca toca productos)', () => {
     const desglose = calcularDesgloseReparto({
       totalServicios: 100000,
-      totalProductos: 0,
-      propina: 0,
+      totalCostoInsumos: 20000,
+      porcentajeDescuento: 10,
+      descuentoAlcance: 'AMBOS',
+      porcentajeComision: 50,
+    });
+
+    expect(desglose.cobradoServicios).toBe(90000);
+    expect(desglose.aRepartir).toBe(70000);
+    expect(desglose.comisionEmpleada).toBe(35000);
+    expect(desglose.quedaSalon).toBe(35000);
+  });
+
+  it('sin descuento (0%) la base de servicios es el bruto', () => {
+    const desglose = calcularDesgloseReparto({
+      totalServicios: 100000,
       totalCostoInsumos: 25000,
-      valorFinal: 100000,
+      porcentajeDescuento: 0,
+      descuentoAlcance: 'AMBOS',
       porcentajeComision: 0,
     });
 
+    expect(desglose.cobradoServicios).toBe(100000);
     expect(desglose.aRepartir).toBe(75000);
     expect(desglose.comisionEmpleada).toBe(0);
     expect(desglose.quedaSalon).toBe(75000);
   });
 });
 
-describe('calcularDesgloseReparto — productos y propina (prorrateo del servidor)', () => {
-  it('prorratea la parte de servicios del total cobrado igual que el backend', () => {
-    // montoTotal = 150.000; baseReal = 120.000 − 10.000 = 110.000
-    // proporcion = 110.000 / 150.000 = 0,7333…; cobradoServicios = round(100.000 × 0,7333) = 73.333
+describe('calcularDesgloseReparto — insumo mayor al cobrado', () => {
+  it('clampea la comisión en 0 y nunca devuelve negativos', () => {
     const desglose = calcularDesgloseReparto({
-      totalServicios: 100000,
-      totalProductos: 50000,
-      propina: 10000,
-      totalCostoInsumos: 20000,
-      valorFinal: 120000,
-      porcentajeComision: 50,
+      totalServicios: 20000,
+      totalCostoInsumos: 24000,
+      porcentajeDescuento: 50,
+      descuentoAlcance: 'SERVICIOS',
+      porcentajeComision: 60,
     });
 
-    expect(desglose.cobradoServicios).toBe(73333);
-    expect(desglose.aRepartir).toBe(53333);
-    expect(desglose.comisionEmpleada).toBe(26666.5);
-    expect(desglose.quedaSalon).toBe(26666.5);
+    // 20000 × 0.5 = 10000 < 24000 de insumo
+    expect(desglose.cobradoServicios).toBe(10000);
+    expect(desglose.aRepartir).toBe(0);
+    expect(desglose.comisionEmpleada).toBe(0);
+    expect(desglose.quedaSalon).toBe(0);
+    expect(desglose.insumoSuperaCobrado).toBe(true);
   });
 });
 

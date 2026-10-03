@@ -9,7 +9,7 @@ import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import MoneyInput from '../components/MoneyInput.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
-import { formatCurrency } from '../utils/format.js';
+import { formatCalendarDate, formatCurrency } from '../utils/format.js';
 import styles from './EmpleadasPage.module.css';
 
 /* ── Types ── */
@@ -749,7 +749,7 @@ const RenderTable: React.FC<RenderTableProps> = ({
               {empleada.actualizadoEn ? new Date(empleada.actualizadoEn).toLocaleDateString('es-CL') : '—'}
             </td>
             <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Nacimiento">
-              {empleada.fechaNacimiento ? new Date(empleada.fechaNacimiento).toLocaleDateString('es-CL') : '—'}
+              {empleada.fechaNacimiento ? formatCalendarDate(empleada.fechaNacimiento, { day: '2-digit', month: '2-digit', year: 'numeric' }, 'es-CL') : '—'}
             </td>
             <td data-label="Acciones">
               <div style={{ display: 'flex', gap: '0.15rem' }}>

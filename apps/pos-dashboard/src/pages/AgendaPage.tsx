@@ -17,6 +17,8 @@ import {
   costoUnitarioLinea,
   lineasServicioCita,
   totalServiciosCita,
+  alcanceLabel,
+  type DescuentoAlcance,
 } from '../utils/reparto.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { getCitaActions, type CitaAccion } from '../utils/citaActions.js';
@@ -293,13 +295,15 @@ const AgendaPage: React.FC = () => {
     serviciosPrecios: {} as Record<number, number>,
     /** Gramos usados por servicio POR_GRAMO (costo derivado en el servidor). */
     serviciosGramos: {} as Record<number, number>,
+    /** Costo de insumos editado por el usuario (descuento); ausente = derivado. */
+    serviciosCostoInsumos: {} as Record<number, number | undefined>,
     nuevosServiciosIds: [] as number[],
     productosVendidos: [] as ProductCartItem[],
     propina: 0,
     metodoPago: 'EFECTIVO' as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA',
     descuento: 0,  // percentage 0–100
-    totalPersonalizado: null as number | null,
-    ajustarTotal: false,
+    /** Alcance del % : servicios, productos o ambos (default AMBOS). */
+    descuentoAlcance: 'AMBOS' as DescuentoAlcance,
     notaAjuste: '',
     montoRecibido: 0,
     esFiado: false,
@@ -609,13 +613,13 @@ const AgendaPage: React.FC = () => {
     setCompletarForm({
       serviciosPrecios: precios,
       serviciosGramos: {},
+      serviciosCostoInsumos: {},
       nuevosServiciosIds: [],
       productosVendidos: [],
       propina: 0,
       metodoPago: 'EFECTIVO',
       descuento: 0,
-      totalPersonalizado: null,
-      ajustarTotal: false,
+      descuentoAlcance: 'AMBOS',
       notaAjuste: '',
       montoRecibido: 0,
       esFiado: false,
@@ -636,7 +640,9 @@ const AgendaPage: React.FC = () => {
 
       // Extra services added in completar
       const extraServicios = servicios.filter(s => completarForm.nuevosServiciosIds.includes(s.id));
-      const totalExtraServicios = extraServicios.reduce((sum, s) => sum + (s.precioBase ?? 0), 0);
+      const precioExtra = (s: ServicioSimple) =>
+        completarForm.serviciosPrecios[s.id] ?? s.precioBase ?? 0;
+      const totalExtraServicios = extraServicios.reduce((sum, s) => sum + precioExtra(s), 0);
 
       const totalServiciosFinal = totalServicios + totalExtraServicios;
       const totalProductos = completarForm.productosVendidos.reduce(
@@ -644,19 +650,23 @@ const AgendaPage: React.FC = () => {
         0,
       );
 
-      // Percentage discount
+      // Descuento % con alcance: se aplica solo al alcance elegido.
       const descuentoPct = completarForm.descuento || 0;
-      const descuentoMonto = (totalServiciosFinal + totalProductos) * (descuentoPct / 100);
-      const calculatedTotal = totalServiciosFinal + totalProductos + completarForm.propina - descuentoMonto;
-      const finalTotal = completarForm.totalPersonalizado ?? calculatedTotal;
-      const hasAdjustment = descuentoPct > 0 || completarForm.totalPersonalizado !== null;
+      const descuentoAlcance = completarForm.descuentoAlcance;
+      const pctServ =
+        descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
+      const pctProd =
+        descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
+      const servNeto = Math.round(totalServiciosFinal * (1 - pctServ / 100));
+      const prodNeto = Math.round(totalProductos * (1 - pctProd / 100));
+      const finalTotal = servNeto + prodNeto + completarForm.propina;
+      const hasAdjustment = descuentoPct > 0;
 
       // Build notas with adjustment info
       let notas = `Cita completada: ${selectedCita.servicios.map(s => s.nombre).join(', ')}`;
       if (hasAdjustment && completarForm.notaAjuste.trim()) {
         const ajusteParts: string[] = [];
-        if (descuentoPct > 0) ajusteParts.push(`descuento ${descuentoPct}%`);
-        if (completarForm.totalPersonalizado !== null) ajusteParts.push(`total $${completarForm.totalPersonalizado}`);
+        if (descuentoPct > 0) ajusteParts.push(`descuento ${descuentoPct}% ${alcanceLabel(descuentoAlcance)}`);
         const prefix = `[AJUSTE: ${ajusteParts.join(' | ')}] Razón: ${completarForm.notaAjuste.trim()}`;
         notas = `${prefix}\n${notas}`;
       }
@@ -698,6 +708,7 @@ const AgendaPage: React.FC = () => {
                 };
                 if (catalogo?.tipoCostoInsumo === 'POR_GRAMO') {
                   item.gramosUsados = completarForm.serviciosGramos[s.id] ?? 0;
+                  item.costoInsumosOverride = completarForm.serviciosCostoInsumos[s.id];
                 }
                 return item;
               })
@@ -706,12 +717,13 @@ const AgendaPage: React.FC = () => {
               const item: Record<string, unknown> = {
                 servicioId: s.id,
                 nombreServicio: s.nombre,
-                precioServicio: s.precioBase ?? 0,
+                precioServicio: precioExtra(s),
                 cantidad: 1,
                 costoBaseInsumos: s.costoBaseInsumos ?? 0,
               };
               if (s.tipoCostoInsumo === 'POR_GRAMO') {
                 item.gramosUsados = completarForm.serviciosGramos[s.id] ?? 0;
+                item.costoInsumosOverride = completarForm.serviciosCostoInsumos[s.id];
               }
               return item;
             }),
@@ -721,12 +733,12 @@ const AgendaPage: React.FC = () => {
           productosVendidos: completarForm.productosVendidos.map(p => ({
             productoId: p.productoId,
             cantidad: p.cantidad,
+            // E1: precio editado por el usuario (el server cae al del catálogo si falta).
+            precioVenta: p.precioVenta,
           })),
-          // Price adjustment fields
+          // Descuento % con alcance (el server deriva precioAjustado/valorFinal)
           porcentajeDescuento: descuentoPct,
-          precioAjustado: hasAdjustment,
-          valorOriginal: totalServiciosFinal + totalProductos + completarForm.propina,
-          valorFinal: finalTotal,
+          descuentoAlcance,
         },
       });
 
@@ -762,7 +774,7 @@ const AgendaPage: React.FC = () => {
                 tipo: 'SERVICIO' as const,
                 nombre: s.nombre,
                 cantidad: 1,
-                precio: s.precioBase ?? 0,
+                precio: completarForm.serviciosPrecios[s.id] ?? s.precioBase ?? 0,
               })),
             // Productos vendidos
             ...completarForm.productosVendidos.map((p) => ({
@@ -775,7 +787,8 @@ const AgendaPage: React.FC = () => {
           metodoPago: completarForm.metodoPago,
           total: finalTotal,
           propina: completarForm.propina,
-          descuento: descuentoMonto,
+          // Descuento EFECTIVO = subtotal + propina − total (cubre el % y el ajuste de total).
+          descuento: Math.max(0, totalServiciosFinal + totalProductos + completarForm.propina - finalTotal),
           descuentoPorcentaje: descuentoPct || undefined,
           montoPendiente: pendiente,
         }),
@@ -2516,13 +2529,14 @@ interface CompletarModalProps {
   form: {
     serviciosPrecios: Record<number, number>;
     serviciosGramos: Record<number, number>;
+    serviciosCostoInsumos: Record<number, number | undefined>;
     nuevosServiciosIds: number[];
     productosVendidos: ProductCartItem[];
     propina: number;
     metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
     descuento: number;  // percentage 0–100
-    totalPersonalizado: number | null;
-    ajustarTotal: boolean;
+    /** Alcance del % : servicios, productos o ambos. */
+    descuentoAlcance: DescuentoAlcance;
     notaAjuste: string;
     montoRecibido: number;
     esFiado: boolean;
@@ -2617,6 +2631,15 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
     });
   };
 
+  /** Edita el precio unitario de venta del producto (E1). */
+  const updateProductPrice = (productoId: number, precio: number) => {
+    onChangeForm({
+      productosVendidos: form.productosVendidos.map((item) =>
+        item.productoId === productoId ? { ...item, precioVenta: Math.max(0, precio) } : item,
+      ),
+    });
+  };
+
   const totalProductosCalc = useMemo(
     () => form.productosVendidos.reduce((sum, p) => sum + p.precioVenta * p.cantidad, 0),
     [form.productosVendidos],
@@ -2642,18 +2665,26 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   );
 
   const totalExtraServicios = useMemo(
-    () => addedServicios.reduce((sum, s) => sum + (s.precioBase ?? 0), 0),
-    [addedServicios],
+    () => addedServicios.reduce((sum, s) => sum + (form.serviciosPrecios[s.id] ?? s.precioBase ?? 0), 0),
+    [addedServicios, form.serviciosPrecios],
   );
 
   const descuentoPct = form.descuento || 0;
-  const subtotalBeforeDiscount = totalOriginalServicios + totalExtraServicios + totalProductosCalc;
-  const descuentoMonto = subtotalBeforeDiscount * (descuentoPct / 100);
-  const calculatedTotal = subtotalBeforeDiscount + form.propina - descuentoMonto;
-  const totalFinal = form.totalPersonalizado ?? calculatedTotal;
+  const descuentoAlcance = form.descuentoAlcance;
+  const pctServ =
+    descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
+  const pctProd =
+    descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
+  const totalServiciosBruto = totalOriginalServicios + totalExtraServicios;
+  const subtotalBeforeDiscount = totalServiciosBruto + totalProductosCalc;
+  const servNeto = Math.round(totalServiciosBruto * (1 - pctServ / 100));
+  const prodNeto = Math.round(totalProductosCalc * (1 - pctProd / 100));
+  const descuentoMonto = totalServiciosBruto - servNeto + (totalProductosCalc - prodNeto);
+  const calculatedTotal = servNeto + prodNeto + form.propina;
+  const totalFinal = calculatedTotal;
   /** Deuda restante: la propina nunca se fía (decisión owner D8). */
   const pendiente = calcularPendiente(totalFinal, form.propina, form.montoRecibido);
-  const hasAdjustment = descuentoPct > 0 || form.totalPersonalizado !== null;
+  const hasAdjustment = descuentoPct > 0;
   const ajusteNoteRequired = hasAdjustment && form.notaAjuste.trim().length === 0;
 
   /** Servicios POR_GRAMO realizados (precio > 0) que aún no tienen gramos > 0. */
@@ -2682,6 +2713,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
         gramosUsados: form.serviciosGramos[s.id] ?? 0,
         precioPorGramo: catalogo?.precioPorGramo,
         costoBaseInsumos: catalogo?.costoBaseInsumos ?? s.costoBaseInsumos,
+        costoInsumosOverride: form.serviciosCostoInsumos[s.id],
       });
       return sum + unitario * (s.cantidad ?? 1);
     }, 0);
@@ -2694,19 +2726,19 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
           gramosUsados: form.serviciosGramos[s.id] ?? 0,
           precioPorGramo: s.precioPorGramo,
           costoBaseInsumos: s.costoBaseInsumos,
+          costoInsumosOverride: form.serviciosCostoInsumos[s.id],
         }),
       0,
     );
 
     return deOriginales + deExtras;
-  }, [cita.servicios, form.serviciosPrecios, form.serviciosGramos, servicios, addedServicios]);
+  }, [cita.servicios, form.serviciosPrecios, form.serviciosGramos, form.serviciosCostoInsumos, servicios, addedServicios]);
 
   const desglose = calcularDesgloseReparto({
     totalServicios: totalOriginalServicios + totalExtraServicios,
-    totalProductos: totalProductosCalc,
-    propina: form.propina,
     totalCostoInsumos,
-    valorFinal: totalFinal,
+    porcentajeDescuento: descuentoPct,
+    descuentoAlcance,
     porcentajeComision: porcentajeComisionEmpleada ?? 0,
   });
 
@@ -2809,6 +2841,8 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                     const esPorGramo = catalogoServicio?.tipoCostoInsumo === 'POR_GRAMO';
                     const gramosLinea = form.serviciosGramos[s.id] ?? 0;
                     const costoInsumoLinea = gramosLinea * (catalogoServicio?.precioPorGramo ?? 0);
+                    const costoInsumosMostrado =
+                      form.serviciosCostoInsumos[s.id] ?? costoInsumoLinea;
                     return (
                       <div
                         key={s.id}
@@ -2827,6 +2861,24 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                               </span>
                             )}
                           </span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            inputMode="decimal"
+                            aria-label={`Precio ${s.nombre}`}
+                            value={currentPrice}
+                            onChange={(e) =>
+                              onChangeForm({
+                                serviciosPrecios: {
+                                  ...form.serviciosPrecios,
+                                  [s.id]: Math.max(0, Number(e.target.value)),
+                                },
+                              })
+                            }
+                            className={`${styles.noSpinner} ${styles.servicePriceInput}`}
+                            title="Precio unitario"
+                          />
                           <span
                             style={{
                               fontFamily: "'DM Sans', sans-serif",
@@ -2872,22 +2924,68 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                                       ...form.serviciosGramos,
                                       [s.id]: Number(e.target.value),
                                     },
+                                    // Recalcular el derivado: limpia el ajuste manual.
+                                    serviciosCostoInsumos: {
+                                      ...form.serviciosCostoInsumos,
+                                      [s.id]: undefined,
+                                    },
                                   })
                                 }
                                 className={`${styles.noSpinner} ${styles.gramsInput}`}
                               />
                               <span className={styles.gramsSuffix}>g</span>
                             </div>
-                            {costoInsumoLinea > 0 && (
-                              <span
+                            <label className={styles.gramsLabel} htmlFor={`costo-cita-${s.id}`}>
+                              Costo de insumos
+                            </label>
+                            <div className={styles.gramsInputWrap}>
+                              <input
+                                id={`costo-cita-${s.id}`}
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputMode="decimal"
+                                aria-label={`Costo de insumos ${s.nombre}`}
+                                placeholder="0"
+                                value={costoInsumosMostrado > 0 ? costoInsumosMostrado : ''}
+                                onChange={(e) =>
+                                  onChangeForm({
+                                    serviciosCostoInsumos: {
+                                      ...form.serviciosCostoInsumos,
+                                      [s.id]:
+                                        e.target.value === ''
+                                          ? undefined
+                                          : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                                className={`${styles.noSpinner} ${styles.gramsInput}`}
+                              />
+                              <span className={styles.gramsSuffix}>$</span>
+                            </div>
+                            {form.serviciosCostoInsumos[s.id] != null && costoInsumoLinea > 0 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onChangeForm({
+                                    serviciosCostoInsumos: {
+                                      ...form.serviciosCostoInsumos,
+                                      [s.id]: undefined,
+                                    },
+                                  })
+                                }
                                 className={styles.gramsCost}
-                                aria-label={`Costo de insumo ${formatCurrency(costoInsumoLinea)}`}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  font: 'inherit',
+                                }}
                               >
-                                Costo de insumo
-                                <strong className={styles.gramsCostValue}>
-                                  {formatCurrency(costoInsumoLinea)}
-                                </strong>
-                              </span>
+                                Calculado: {formatCurrency(costoInsumoLinea)} · volver
+                              </button>
                             )}
                           </div>
                         )}
@@ -2898,15 +2996,24 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                   {addedServicios.map(s => (
                     <div key={s.id} className={`${styles.serviceCard} ${styles.serviceCardAdded}`}>
                       <span className={`${styles.serviceName} ${styles.serviceNameAdded}`}>+ {s.nombre}</span>
-                      <span
-                        style={{
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontSize: '0.75rem',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        {formatCurrency(s.precioBase ?? 0)}
-                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputMode="decimal"
+                        aria-label={`Precio ${s.nombre}`}
+                        value={form.serviciosPrecios[s.id] ?? s.precioBase ?? 0}
+                        onChange={(e) =>
+                          onChangeForm({
+                            serviciosPrecios: {
+                              ...form.serviciosPrecios,
+                              [s.id]: Math.max(0, Number(e.target.value)),
+                            },
+                          })
+                        }
+                        className={`${styles.noSpinner} ${styles.servicePriceInput}`}
+                        title="Precio unitario"
+                      />
                       <button
                         onClick={() => onToggleServicio(s.id)}
                         className={styles.serviceRemoveBtn}
@@ -3045,6 +3152,19 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                             +
                           </button>
                         </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          inputMode="decimal"
+                          aria-label={`Precio ${item.nombre}`}
+                          value={item.precioVenta}
+                          onChange={(e) =>
+                            updateProductPrice(item.productoId, Number(e.target.value))
+                          }
+                          className={`${styles.noSpinner} ${styles.servicePriceInput}`}
+                          title="Precio unitario"
+                        />
                         <span className={styles.selectedProductTotal}>
                           {formatCurrency(item.precioVenta * item.cantidad)}
                         </span>
@@ -3100,6 +3220,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                       type="number"
                       min="0"
                       max="100"
+                      aria-label="Descuento (%)"
                       value={form.descuento}
                       onChange={(e) =>
                         onChangeForm({
@@ -3111,6 +3232,43 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>%</span>
                   </div>
                 </div>
+
+                {/* Alcance del descuento */}
+                <div className={styles.receiptRow}>
+                  <span className={styles.receiptLabel}>Aplicar a</span>
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    {(['SERVICIOS', 'PRODUCTOS', 'AMBOS'] as DescuentoAlcance[]).map((value) => {
+                      const labels: Record<DescuentoAlcance, string> = {
+                        SERVICIOS: 'Servicios',
+                        PRODUCTOS: 'Productos',
+                        AMBOS: 'Ambos',
+                      };
+                      const active = form.descuentoAlcance === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-label={`Alcance ${labels[value]}`}
+                          onClick={() => onChangeForm({ descuentoAlcance: value })}
+                          style={{
+                            padding: '0.2rem 0.45rem',
+                            borderRadius: 'var(--radius-sm)',
+                            border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                            background: active ? 'var(--accent-glow)' : 'transparent',
+                            color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {labels[value]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {descuentoMonto > 0 && (
                   <div className={styles.receiptRow}>
                     <span
@@ -3128,97 +3286,12 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                   </div>
                 )}
 
-                {/* Ajustar total toggle */}
-                <div
-                  style={{
-                    padding: '0.3rem 0',
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <label className={styles.toggleLabel}>
-                    <input
-                      type="checkbox"
-                      checked={form.ajustarTotal}
-                      onChange={(e) => {
-                        onChangeForm({
-                          ajustarTotal: e.target.checked,
-                          totalPersonalizado: e.target.checked ? form.totalPersonalizado : null,
-                        });
-                      }}
-                      style={{ display: 'none' }}
-                    />
-                    <span
-                      style={{
-                        position: 'relative',
-                        width: '36px',
-                        height: '20px',
-                        background: form.ajustarTotal ? 'var(--accent)' : 'var(--border)',
-                        borderRadius: '10px',
-                        transition: 'background 0.2s',
-                        flexShrink: 0,
-                        display: 'inline-block',
-                      }}
-                    >
-                      <span
-                        style={{
-                          content: '""',
-                          position: 'absolute',
-                          top: '2px',
-                          left: form.ajustarTotal ? '18px' : '2px',
-                          width: '16px',
-                          height: '16px',
-                          background: 'var(--bg-root)',
-                          borderRadius: '50%',
-                          transition: 'left 0.2s',
-                        }}
-                      />
-                    </span>
-                    <span>Ajustar valor total</span>
-                  </label>
-                  {form.ajustarTotal && (
-                    <MoneyInput
-                      value={form.totalPersonalizado ?? 0}
-                      onChange={(n) => onChangeForm({ totalPersonalizado: n === 0 ? null : n })}
-                      placeholder={formatCurrency(calculatedTotal)}
-                      className={`${styles.noSpinner} ${styles.amountInput}`}
-                      style={{
-                        width: '100%',
-                        marginTop: '0.3rem',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  )}
-                </div>
-
-                {/* Custom total warning */}
-                {form.totalPersonalizado !== null &&
-                  form.totalPersonalizado !== calculatedTotal && (
-                    <div className={styles.receiptRow}>
-                      <span
-                        style={{
-                          color: 'var(--warning)',
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontSize: '0.8125rem',
-                        }}
-                      >
-                        Ajuste
-                      </span>
-                      <span className={styles.receiptAdjustmentWarning}>
-                        {form.totalPersonalizado > calculatedTotal ? '+' : '-'}
-                        {formatCurrency(Math.abs(form.totalPersonalizado - calculatedTotal))}
-                      </span>
-                    </div>
-                  )}
-
                 <hr className={styles.receiptDivider} />
 
                 {/* Final Total */}
                 <div className={styles.receiptRow}>
                   <span className={styles.receiptTotalLabel}>Total</span>
-                  <span
-                    className={`${styles.receiptTotalValue} ${form.totalPersonalizado !== null ? styles.receiptCustomTotalValue : ''}`}
-                  >
+                  <span className={styles.receiptTotalValue}>
                     {formatCurrency(totalFinal)}
                   </span>
                 </div>

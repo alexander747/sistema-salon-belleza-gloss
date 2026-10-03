@@ -91,6 +91,10 @@ export class TypeORMGastoRepository implements IGastoRepository {
     return Number(result?.total ?? 0);
   }
 
+  async findByPrestamoId(prestamoId: number): Promise<GastoEntity | null> {
+    return this.getRepo().findOne({ where: { prestamoId } });
+  }
+
   async create(data: Partial<GastoEntity>): Promise<GastoEntity> {
     const entity = this.getRepo().create(data);
     return this.getRepo().save(entity);

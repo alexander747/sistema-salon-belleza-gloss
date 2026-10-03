@@ -37,6 +37,8 @@ export interface RegistroServicioDTO {
   notas: string | null;
   precioAjustado: boolean;
   porcentajeDescuento: number;
+  /** Alcance del descuento %: 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS' (null en legacy). */
+  descuentoAlcance: string | null;
   valorOriginal: number;
   valorFinal: number;
   pagos: PagoDTO[];
@@ -72,6 +74,7 @@ export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroS
     notas: entity.notas ?? null,
     precioAjustado: entity.precioAjustado,
     porcentajeDescuento: Number(entity.porcentajeDescuento),
+    descuentoAlcance: entity.descuentoAlcance ?? null,
     valorOriginal: Number(entity.valorOriginal),
     valorFinal: Number(entity.valorFinal),
     pagos: (entity.pagos ?? []).map((p) => ({

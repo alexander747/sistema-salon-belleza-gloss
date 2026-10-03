@@ -1,6 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import type { QueryRunner } from 'typeorm';
-import type { CreateRegistroInput } from '@pos-final/validation';
+import type { CreateRegistroInput, DescuentoAlcance } from '@pos-final/validation';
 import { MetodoPago } from '../../../../../infrastructure/persistence/entities/PagoTransaccionEntity';
 import { AppDataSource } from '../../../../../shared/database';
 import { ClienteEntity } from '../../../../../infrastructure/persistence/entities/ClienteEntity';
@@ -109,6 +109,7 @@ export class CreateRegistroUseCase {
             tipoCostoInsumo: 'POR_GRAMO',
             gramosUsados,
             precioPorGramo,
+            costoInsumosOverride: si.costoInsumosOverride,
           }),
           gramosUsados,
           precioPorGramo,
@@ -121,6 +122,7 @@ export class CreateRegistroUseCase {
         tipoCostoInsumo: 'FIJO',
         costoBaseInsumos:
           servicio != null ? Number(servicio.costoBaseInsumos ?? 0) : si.costoBaseInsumos ?? 0,
+        costoInsumosOverride: si.costoInsumosOverride,
       });
       lineasResueltas.push({
         servicioId: si.servicioId,
@@ -133,6 +135,7 @@ export class CreateRegistroUseCase {
       });
     }
 
+    // Insumo de la venta (respeta el editado del usuario) → base de la comisión y del reparto.
     const totalCostoBaseInsumos = lineasResueltas.reduce(
       (sum, l) => sum + l.costoUnitario * l.cantidad,
       0,
@@ -145,39 +148,50 @@ export class CreateRegistroUseCase {
         ? lineasResueltas.reduce((sum, l) => sum + l.precioServicio * l.cantidad, 0)
         : Number(input.totalServicios);
 
+    const totalProductosBruto = Number(input.totalProductos ?? 0);
+    const propina = Number(input.propina ?? 0);
+
     const montoTotal = this.comisionService.calcularMontoTotal(
       totalServiciosEfectivo,
-      input.totalProductos,
-      input.propina,
+      totalProductosBruto,
+      propina,
     );
 
-    // ── 4a. Price adjustment fields ──────────────────────────
-    const porcentajeDescuento = input.porcentajeDescuento ?? 0;
-    const propina = input.propina ?? 0;
-    const valorOriginal = montoTotal; // sum before any discount
-    const valorFinal = input.valorFinal ?? montoTotal;
-    // Use frontend's explicit flag; fallback to false if not provided
-    const precioAjustado = input.precioAjustado ?? false;
+    // ── 4a. Descuento % con ALCANCE (fuente de verdad) ────────
+    // Un único % aplicado a SERVICIOS / PRODUCTOS / AMBOS. Reemplaza el antiguo
+    // ajuste de "valor total" (totalPersonalizado): el precio se ajusta por línea
+    // (E1) + este %; el valor final se deriva server-side (nunca del cliente).
+    const porcentajeDescuento = Number(input.porcentajeDescuento ?? 0);
+    const descuentoAlcance: DescuentoAlcance = input.descuentoAlcance ?? 'AMBOS';
+    const pctServ =
+      descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS'
+        ? porcentajeDescuento
+        : 0;
+    const pctProd =
+      descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS'
+        ? porcentajeDescuento
+        : 0;
 
-    // ── 4b. Commission on ADJUSTED services total ────────────
-    // Commission is computed on what the client actually paid for services:
-    // prorate totalServicios by (valorFinal - propina) / (montoTotal - propina).
-    const baseBruta = montoTotal - propina;
-    const baseReal = valorFinal - propina;
-    const proporcion = baseBruta > 0 ? baseReal / baseBruta : 1;
-    const totalServiciosAjustado = Math.round(totalServiciosEfectivo * proporcion);
+    const servNeto = Math.round(totalServiciosEfectivo * (1 - pctServ / 100));
+    const prodNeto = Math.round(totalProductosBruto * (1 - pctProd / 100));
+    const valorOriginal = montoTotal; // total bruto pre-descuento (incluye propina)
+    const valorFinal = Number((servNeto + prodNeto + propina).toFixed(2));
+    const precioAjustado = pctServ > 0 || pctProd > 0;
 
+    // ── 4b. Comisión sobre servicios NETOS ───────────────────
+    // La comisión se calcula sobre lo que el cliente pagó por SERVICIOS (post
+    // descuento de alcance). Los productos NUNCA entran en la base de comisión.
     const comisionCalculada = this.comisionService.calcularComision(
-      totalServiciosAjustado,
+      servNeto,
       porcentaje,
       totalCostoBaseInsumos,
     );
 
     const totalPagado = (input.pagos ?? []).reduce((sum, p) => sum + p.monto, 0);
     // montoPendiente se computa sobre el valor REAL cobrado (valorFinal, ya
-    // ajustado por descuento/precio personalizado), excluyendo la propina —
-    // misma semántica que la comisión. Con el bruto pre-descuento el cliente
-    // que paga el total descontado quedaría debiendo el descuento (deuda falsa).
+    // ajustado por descuento), excluyendo la propina — misma semántica que la
+    // comisión. Con el bruto pre-descuento el cliente que paga el total
+    // descontado quedaría debiendo el descuento (deuda falsa).
     const montoPendiente = this.comisionService.calcularMontoPendiente(
       valorFinal,
       propina,
@@ -210,10 +224,10 @@ export class CreateRegistroUseCase {
           cajaId: caja.id,
           citaId: input.citaId ?? null,
           totalServicios: totalServiciosEfectivo,
-          totalProductos: input.totalProductos,
+          totalProductos: totalProductosBruto,
           cantidadProductosVendidos,
           montoTotal,
-          propina: input.propina,
+          propina,
           comisionCalculada,
           esRetoque: input.esRetoque ?? false,
           descripcionServicio: input.descripcionServicio,
@@ -222,9 +236,10 @@ export class CreateRegistroUseCase {
           registradoPorId: input.registradoPorId,
           // Fecha de negocio (backfill): se persiste SIEMPRE (default = ahora)
           fechaHora,
-          // Price adjustment fields
+          // Price adjustment fields (server-derived)
           precioAjustado,
           porcentajeDescuento,
+          descuentoAlcance,
           valorOriginal,
           valorFinal,
         },
@@ -278,7 +293,9 @@ export class CreateRegistroUseCase {
           );
           if (!producto) continue;
 
-          const precioVentaUnitario = Number(producto.precioVenta);
+          // Precio editado por el usuario si viene; si no, el del catálogo.
+          // `??` (no `||`) para respetar un 0 legítimo (cortesía/regalo).
+          const precioVentaUnitario = Number(pv.precioVenta ?? producto.precioVenta);
           const subtotal = precioVentaUnitario * pv.cantidad;
 
           const registroProducto = qr.manager

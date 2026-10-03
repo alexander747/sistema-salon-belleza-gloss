@@ -121,6 +121,8 @@ export class ResumenDiaUseCase {
           propina,
           montoTotal,
           valorFinal: r.valorFinal != null ? Number(r.valorFinal) : montoTotal,
+          porcentajeDescuento: Number(r.porcentajeDescuento ?? 0),
+          descuentoAlcance: r.descuentoAlcance ?? null,
         });
 
       // Tipo filter: when SERVICIOS, product contributions are zeroed; when

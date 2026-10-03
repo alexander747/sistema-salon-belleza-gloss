@@ -63,3 +63,62 @@ describe('calcularContribucionesRegistro', () => {
     expect(result).toEqual({ servicios: 90001, productos: 8999 });
   });
 });
+
+describe('calcularContribucionesRegistro — descuento % con alcance (E2)', () => {
+  it('AMBOS: aplica el mismo % a servicios y productos', () => {
+    const result = calcularContribucionesRegistro({
+      totalServicios: 300000,
+      totalProductos: 50000,
+      propina: 15000,
+      montoTotal: 365000,
+      valorFinal: 330000, // servNeto 270000 + prodNeto 45000 + propina 15000
+      porcentajeDescuento: 10,
+      descuentoAlcance: 'AMBOS',
+    });
+
+    expect(result).toEqual({ servicios: 270000, productos: 45000 });
+  });
+
+  it('SERVICIOS: descuenta solo servicios; productos intactos', () => {
+    const result = calcularContribucionesRegistro({
+      totalServicios: 300000,
+      totalProductos: 50000,
+      propina: 0,
+      montoTotal: 350000,
+      valorFinal: 320000, // 270000 + 50000
+      porcentajeDescuento: 10,
+      descuentoAlcance: 'SERVICIOS',
+    });
+
+    expect(result).toEqual({ servicios: 270000, productos: 50000 });
+  });
+
+  it('PRODUCTOS: descuenta solo productos; servicios intactos', () => {
+    const result = calcularContribucionesRegistro({
+      totalServicios: 300000,
+      totalProductos: 50000,
+      propina: 0,
+      montoTotal: 350000,
+      valorFinal: 345000, // 300000 + 45000
+      porcentajeDescuento: 10,
+      descuentoAlcance: 'PRODUCTOS',
+    });
+
+    expect(result).toEqual({ servicios: 300000, productos: 45000 });
+  });
+
+  it('legacy con ajuste de valor total (no reconcilia) cae al prorrateo proporcional', () => {
+    // porcentajeDescuento 0 pero valorFinal ajustado a 80000 (totalPersonalizado viejo)
+    const result = calcularContribucionesRegistro({
+      totalServicios: 100000,
+      totalProductos: 0,
+      propina: 0,
+      montoTotal: 100000,
+      valorFinal: 80000,
+      porcentajeDescuento: 0,
+      descuentoAlcance: 'AMBOS',
+    });
+
+    expect(result).toEqual({ servicios: 80000, productos: 0 });
+  });
+});

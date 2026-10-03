@@ -365,6 +365,28 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     });
   });
 
+  it('los bloques opcionales (propina, % y notas) están ocultos hasta activar el switch', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte'));
+    llenarClienteYEmpleada();
+
+    // Ocultos por defecto (no agrandan el modal)
+    expect(screen.queryByLabelText('Propina')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Descuento (%)')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Notas adicionales…')).not.toBeInTheDocument();
+
+    // Se activan con su switch
+    fireEvent.click(screen.getByLabelText(/agregar propina/i));
+    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.click(screen.getByLabelText(/agregar notas/i));
+
+    expect(screen.getByLabelText('Propina')).toBeInTheDocument();
+    expect(screen.getByLabelText('Descuento (%)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Notas adicionales…')).toBeInTheDocument();
+  });
+
   it('fiado con propina: la propina nunca se fía — queda fuera de la deuda', async () => {
     // Servicio 90.000 + propina 10.000 → total 100.000; fiado con pago 0 → pendiente 90.000
     apiMockServicio(90000, 'Corte Premium');
@@ -374,6 +396,8 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     fireEvent.click(await screen.findByText('Corte Premium'));
     llenarClienteYEmpleada();
 
+    // La propina ahora vive detrás de un switch
+    fireEvent.click(screen.getByLabelText(/agregar propina/i));
     fireEvent.change(screen.getByLabelText('Propina'), { target: { value: '10000' } });
     fireEvent.click(screen.getByLabelText(/fiado/i));
 
@@ -414,7 +438,7 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     });
   });
 
-  it('bloquea ajustar el total POR ENCIMA del precio (regla dueño): 40.000 no puede subir a 50.000', async () => {
+  it('descuento % con alcance (E2): exige nota y el payload viaja con porcentajeDescuento + alcance', async () => {
     apiMockServicio(40000, 'Corte Premium');
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
@@ -422,44 +446,29 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     fireEvent.click(await screen.findByText('Corte Premium'));
     llenarClienteYEmpleada();
 
-    // Activar "Ajustar valor total" e intentar poner 50.000 (mayor al precio)
-    fireEvent.click(screen.getByLabelText(/ajustar valor total/i));
-    fireEvent.change(screen.getByLabelText('Valor total ajustado'), { target: { value: '50000' } });
+    // Activar el bloque de descuento y aplicar 10% a SERVICIOS.
+    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '10' } });
+    fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
-    // El ajuste hacia arriba se IGNORA → no se aplica (no hay nota obligatoria,
-    // que solo aparece cuando hay un ajuste real hacia abajo)
-    expect(screen.queryByPlaceholderText(/Indicá el motivo del ajuste/i)).not.toBeInTheDocument();
-  });
-
-  it('permite ajustar el total hacia ABAJO (descuento): 40.000 → 35.000 y guarda', async () => {
-    apiMockServicio(40000, 'Corte Premium');
-    mockPost.mockResolvedValue({ data: {} });
-    renderModal();
-
-    fireEvent.click(await screen.findByText('Corte Premium'));
-    llenarClienteYEmpleada();
-
-    fireEvent.click(screen.getByLabelText(/ajustar valor total/i));
-    fireEvent.change(screen.getByLabelText('Valor total ajustado'), { target: { value: '35000' } });
-
-    // El ajuste hacia abajo exige nota
+    // El descuento exige nota → botón deshabilitado
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeDisabled();
     fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo del ajuste/i), {
-      target: { value: 'Descuento a clienta conocida' },
+      target: { value: 'Cliente frecuente' },
     });
 
-    // En efectivo el monto recibido es manual: la clienta pagó 35.000
-    fireEvent.change(screen.getByLabelText('Monto recibido'), { target: { value: '35000' } });
-
+    // 40.000 − 10% = 36.000
+    fireEvent.change(screen.getByLabelText('Monto recibido'), { target: { value: '36000' } });
     fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
         '/salones/1/registros',
         expect.objectContaining({
-          valorFinal: 35000,
-          valorOriginal: 40000,
-          precioAjustado: true,
-          pagos: [{ monto: 35000, metodoPago: 'EFECTIVO' }],
+          porcentajeDescuento: 10,
+          descuentoAlcance: 'SERVICIOS',
+          totalServicios: 40000,
+          pagos: [{ monto: 36000, metodoPago: 'EFECTIVO' }],
         }),
       );
     });
@@ -524,8 +533,8 @@ describe('WalkInModal — escáner de código de barras (PR2)', () => {
 
     const scan = scanear('7701234567890');
 
-    // En el carrito: línea de producto con precio × cantidad
-    expect(await screen.findByText('$ 15.000 × 1')).toBeInTheDocument();
+    // En el carrito: línea de producto con precio unitario editable
+    expect(await screen.findByLabelText('Precio Shampoo Barra')).toHaveValue(15000);
     // El input del escáner queda limpio para el siguiente código
     expect(scan.value).toBe('');
   });
@@ -535,10 +544,10 @@ describe('WalkInModal — escáner de código de barras (PR2)', () => {
     await screen.findByText('Shampoo Barra');
 
     scanear('7701234567890');
-    expect(await screen.findByText('$ 15.000 × 1')).toBeInTheDocument();
+    expect(await screen.findByText('× 1')).toBeInTheDocument();
 
     scanear('7701234567890');
-    expect(await screen.findByText('$ 15.000 × 2')).toBeInTheDocument();
+    expect(await screen.findByText('× 2')).toBeInTheDocument();
   });
 
   it('código desconocido muestra "Producto no encontrado" y el mensaje desaparece al tipear', async () => {
@@ -561,7 +570,7 @@ describe('WalkInModal — escáner de código de barras (PR2)', () => {
 
     scanear('  7701234567890  ');
 
-    expect(await screen.findByText('$ 15.000 × 1')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Precio Shampoo Barra')).toHaveValue(15000);
   });
 });
 
@@ -635,6 +644,31 @@ describe('WalkInModal — recibo tras registrar (PR2)', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Recibo de venta' });
     expect(within(dialog).getByText('Tarjeta')).toBeInTheDocument();
+  });
+
+  it('el recibo refleja el descuento % y el pendiente de un pago parcial', async () => {
+    mockPost.mockResolvedValue({ data: { id: 99, fechaHora: '2026-10-03T12:00:00.000Z' } });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte')); // 30.000
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
+    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    // Descuento 10% → total 27.000 + pago parcial 10.000 (fiado)
+    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '10' } });
+    fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo/i), { target: { value: 'promo' } });
+    // Pago parcial: fiado con monto a cobrar 10.000
+    fireEvent.click(screen.getByLabelText(/fiado/i));
+    fireEvent.change(screen.getByLabelText('Monto a cobrar'), { target: { value: '10000' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Recibo de venta' });
+    // Descuento = 30.000 × 10% = 3.000
+    expect(within(dialog).getByText('-$ 3.000')).toBeInTheDocument();
+    // Total 27.000 y Pendiente 17.000 (pagó 10.000)
+    expect(within(dialog).getByText('$ 27.000')).toBeInTheDocument();
+    expect(within(dialog).getByText('$ 17.000')).toBeInTheDocument();
   });
 });
 
@@ -767,7 +801,38 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     });
   });
 
-  it('shows the live supply cost for a POR_GRAMO line (100 g × $800 = $ 80.000)', async () => {
+  it('permite editar el costo de insumos y lo envía como costoInsumosOverride (descuento)', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Tintura Global'));
+    llenarYSeleccionarTarjeta();
+    fireEvent.change(screen.getByLabelText('Gramos usados Tintura Global'), {
+      target: { value: '95' },
+    });
+    fireEvent.change(screen.getByLabelText('Costo de insumos Tintura Global'), {
+      target: { value: '50000' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          serviciosItems: [
+            expect.objectContaining({
+              servicioId: 7,
+              gramosUsados: 95,
+              costoInsumosOverride: 50000,
+            }),
+          ],
+        }),
+      );
+    });
+  });
+
+  it('muestra el costo de insumos en un input editable pre-cargado con el derivado (100 g × $800 = $ 80.000)', async () => {
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
 
@@ -779,16 +844,17 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     expect(screen.getByText('Gramos usados')).toBeInTheDocument();
     expect(within(gramosInput.parentElement as HTMLElement).getByText('g')).toBeInTheDocument();
 
-    // Sin gramos todavía: no se muestra un costo engañoso de $ 0.
-    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
+    const costoInput = screen.getByLabelText('Costo de insumos Alisado permanente brasileño');
+    // Sin gramos todavía: el campo queda vacío (no un $ 0 engañoso).
+    expect(costoInput).toHaveValue(null);
 
     fireEvent.change(gramosInput, { target: { value: '100' } });
 
-    // 100 g × $800 coincide con el costoBaseInsumos que persistirá el servidor.
-    expect(screen.getByLabelText('Costo de insumo $ 80.000')).toBeInTheDocument();
+    // 100 g × $800 → el campo editable se pre-carga con el derivado.
+    expect(costoInput).toHaveValue(80000);
   });
 
-  it('hides the supply cost when grams are empty or zero', async () => {
+  it('deja el costo de insumos vacío cuando los gramos son ∅ o 0 (no muestra $ 0)', async () => {
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
 
@@ -796,10 +862,10 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     llenarYSeleccionarTarjeta();
     const gramosInput = screen.getByLabelText('Gramos usados Tintura Global');
 
-    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Costo de insumos Tintura Global')).toHaveValue(null);
 
     fireEvent.change(gramosInput, { target: { value: '0' } });
-    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Costo de insumos Tintura Global')).toHaveValue(null);
   });
 
   it('the receipt reflects the quantity of the service line', async () => {
@@ -889,7 +955,7 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
     refreshSpy.mockClear();
   });
 
-  it('muestra Cobrado − Insumos = A repartir y el split por % de la empleada (caso canónico)', async () => {
+  it('muestra Cobrado − Insumos = A repartir y el split por % de la empleada (E2)', async () => {
     apiMockReparto([ALISADO_550]);
     renderModal();
 
@@ -899,39 +965,32 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
       target: { value: '30' },
     });
 
-    // Ajuste del total: 550.000 → 300.000
-    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
-    fireEvent.change(screen.getByLabelText('Valor total ajustado'), {
-      target: { value: '300000' },
-    });
+    // Descuento 20% sobre SERVICIOS: 550.000 → 440.000
+    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '20' } });
+    fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
     expect(within(panel).getByText('Cobrado')).toBeInTheDocument();
-    expect(within(panel).getByText('$ 300.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 440.000')).toBeInTheDocument();
     expect(within(panel).getByText('− $ 24.000')).toBeInTheDocument();
-    expect(within(panel).getByText('$ 276.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 416.000')).toBeInTheDocument();
     expect(within(panel).getByText('Comisión empleada (60%)')).toBeInTheDocument();
-    expect(within(panel).getByText('$ 165.600')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 249.600')).toBeInTheDocument();
     expect(within(panel).getByText('Queda para el salón')).toBeInTheDocument();
-    expect(within(panel).getByText('$ 110.400')).toBeInTheDocument();
-    expect(
-      within(panel).getByText(
-        'El costo de insumos se descuenta del total cobrado y el resto se reparte entre la empleada y el salón.',
-      ),
-    ).toBeInTheDocument();
+    expect(within(panel).getByText('$ 166.400')).toBeInTheDocument();
   });
 
-  it('muestra el desglose también cuando solo hay ajuste de total (servicio FIJO)', async () => {
-    // 100.000 → 80.000, insumo fijo 15.000, comisión 60%: 65.000 × 0,6 = 39.000.
+  it('muestra el desglose también cuando hay descuento (servicio FIJO)', async () => {
+    // 100.000 con 20% → 80.000, insumo fijo 15.000, comisión 60%: 65.000 × 0,6 = 39.000.
     apiMockReparto([CORTE_FIJO]);
     renderModal();
 
     fireEvent.click(await screen.findByText('Corte'));
     seleccionarClienteYEmpleada();
-    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
-    fireEvent.change(screen.getByLabelText('Valor total ajustado'), {
-      target: { value: '80000' },
-    });
+    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '20' } });
+    fireEvent.click(screen.getByLabelText('Alcance Ambos'));
 
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
     expect(within(panel).getByText('$ 80.000')).toBeInTheDocument();
@@ -950,11 +1009,10 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
     fireEvent.change(screen.getByLabelText('Gramos usados Alisado permanente brasileño'), {
       target: { value: '30' },
     });
-    // Ajuste por debajo del costo de insumo: 20.000 < 24.000.
-    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
-    fireEvent.change(screen.getByLabelText('Valor total ajustado'), {
-      target: { value: '20000' },
-    });
+    // Descuento 96%: 550.000 → 22.000 < 24.000 de insumo.
+    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '96' } });
+    fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
     // A repartir y comisión quedan en 0 (el server clampa), nunca negativos.
@@ -963,5 +1021,94 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
     expect(
       within(panel).getByText('La comisión queda en $0 porque el insumo supera el total cobrado.'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('WalkInModal — precios editables por línea (E1)', () => {
+  const producto = {
+    id: 2,
+    nombre: 'Shampoo Barra',
+    marca: null,
+    precioVenta: 15000,
+    cantidadStock: 5,
+    categoriaId: 1,
+  };
+
+  function apiMock() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 }],
+        });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María' }] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [producto] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  function llenarClienteEmpleadaYTarjeta() {
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
+    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    apiMock();
+  });
+
+  it('editar el precio de un servicio lo envía como precioServicio y recalcula el total', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte'));
+    llenarClienteEmpleadaYTarjeta();
+
+    fireEvent.change(screen.getByLabelText('Precio Corte'), { target: { value: '45000' } });
+    // El botón de submit refleja el total editado.
+    expect(screen.getByRole('button', { name: /^Registrar\s+\$\s*45\.000/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          totalServicios: 45000,
+          serviciosItems: [
+            expect.objectContaining({ servicioId: 1, precioServicio: 45000, cantidad: 1 }),
+          ],
+        }),
+      );
+    });
+  });
+
+  it('editar el precio de un producto lo envía como precioVenta y recalcula el total', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Shampoo Barra'));
+    llenarClienteEmpleadaYTarjeta();
+
+    fireEvent.change(screen.getByLabelText('Precio Shampoo Barra'), {
+      target: { value: '20000' },
+    });
+    expect(screen.getByRole('button', { name: /^Registrar\s+\$\s*20\.000/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          totalProductos: 20000,
+          productosVendidos: [{ productoId: 2, cantidad: 1, precioVenta: 20000 }],
+        }),
+      );
+    });
   });
 });

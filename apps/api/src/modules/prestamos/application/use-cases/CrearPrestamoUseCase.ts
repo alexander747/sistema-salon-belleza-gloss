@@ -59,6 +59,7 @@ export class CrearPrestamoUseCase {
       categoria: 'Prestamo',
       fecha: new Date(),
       reportadoPorId: input.registradoPorId,
+      prestamoId: prestamo.id,
     });
 
     return this.mapToDTO(prestamo, nombreEmpleado);

@@ -138,16 +138,16 @@ describe('VentasPage — carrito y cobro (happy path)', () => {
 
     fireEvent.click(await screen.findByText('Shampoo'));
 
-    // El line item del carrito muestra precio × cantidad y el total
-    expect(await screen.findByText('$ 20.000 × 1')).toBeInTheDocument();
+    // El line item del carrito muestra el precio unitario editable × cantidad y el total
+    expect(await screen.findByLabelText('Precio Shampoo')).toHaveValue(20000);
     expect(screen.getByText('Total')).toBeInTheDocument();
-    // "$ 20.000" aparece en el line item y en el total del carrito
+    // "$ 20.000" aparece en el total del carrito (y en la card del catálogo)
     expect(screen.getAllByText('$ 20.000').length).toBeGreaterThanOrEqual(2);
 
     // Sumar otra unidad con el botón "+" del carrito → cantidad 2, total 40.000
     fireEvent.click(screen.getByRole('button', { name: '+' }));
 
-    expect(await screen.findByText('$ 20.000 × 2')).toBeInTheDocument();
+    expect(await screen.findByText('× 2')).toBeInTheDocument();
     expect(screen.getAllByText('$ 40.000').length).toBeGreaterThanOrEqual(2);
   }, 20000);
 
@@ -182,7 +182,7 @@ describe('VentasPage — carrito y cobro (happy path)', () => {
           totalProductos: 40000,
           montoTotal: 40000,
           pagos: [{ monto: 40000, metodoPago: 'TARJETA' }],
-          productosVendidos: [{ productoId: 1, cantidad: 2 }],
+          productosVendidos: [{ productoId: 1, cantidad: 2, precioVenta: 20000 }],
           notas: 'Venta directa: 2x Shampoo',
         }),
       );
@@ -194,6 +194,34 @@ describe('VentasPage — carrito y cobro (happy path)', () => {
       expect(
         screen.getByText('Seleccioná productos de la lista para agregarlos al carrito.'),
       ).toBeInTheDocument();
+    });
+  }, 20000);
+
+  it('editar el precio de una línea cambia el total y el payload (E1)', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Shampoo'));
+    fireEvent.change(screen.getByLabelText('Precio Shampoo'), { target: { value: '35000' } });
+
+    // El total del carrito refleja el precio editado (35000), no el de catálogo (20000).
+    expect(screen.getAllByText('$ 35.000').length).toBeGreaterThanOrEqual(2);
+
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[1], { target: { value: '1' } });
+    fireEvent.change(combos[2], { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Cobrar\s+\$\s*35\.000/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          totalProductos: 35000,
+          montoTotal: 35000,
+          productosVendidos: [{ productoId: 1, cantidad: 1, precioVenta: 35000 }],
+        }),
+      );
     });
   }, 20000);
 });
@@ -244,7 +272,7 @@ describe('VentasPage — escáner de código de barras (PR2)', () => {
 
     const scan = scanear('7701234567899');
 
-    expect(await screen.findByText('$ 25.000 × 1')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Precio Aceite Argan')).toHaveValue(25000);
     expect(scan.value).toBe('');
   });
 
@@ -254,10 +282,10 @@ describe('VentasPage — escáner de código de barras (PR2)', () => {
     await screen.findByText('Aceite Argan');
 
     scanear('7701234567899');
-    expect(await screen.findByText('$ 25.000 × 1')).toBeInTheDocument();
+    expect(await screen.findByText('× 1')).toBeInTheDocument();
 
     scanear('7701234567899');
-    expect(await screen.findByText('$ 25.000 × 2')).toBeInTheDocument();
+    expect(await screen.findByText('× 2')).toBeInTheDocument();
   });
 
   it('código desconocido muestra "Producto no encontrado" y el mensaje desaparece al tipear', async () => {
@@ -459,7 +487,7 @@ describe('VentasPage — fecha de negocio / backfill (PR3)', () => {
 
     expect(await screen.findByText(/no hay caja abierta para la fecha/i)).toBeInTheDocument();
     // El carrito sigue con el producto (el flujo permanece abierto)
-    expect(screen.getByText('$ 20.000 × 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Precio Shampoo')).toHaveValue(20000);
   }, 20000);
 });
 

@@ -74,3 +74,55 @@ describe('CostoInsumoService + ComisionService (real cost feeds the unchanged fo
     expect(comision).toBe(0);
   });
 });
+
+describe('CostoInsumoService.calcularCostoLinea — costoInsumosOverride (editable por el usuario)', () => {
+  const service = new CostoInsumoService();
+
+  it('el override gana sobre el derivado POR_GRAMO (descuento de insumos)', () => {
+    const result = service.calcularCostoLinea({
+      tipoCostoInsumo: 'POR_GRAMO',
+      gramosUsados: 95,
+      precioPorGramo: 1200,
+      costoInsumosOverride: 90000,
+    });
+    expect(result).toBe(90000);
+  });
+
+  it('el override gana sobre el costo FIJO', () => {
+    const result = service.calcularCostoLinea({
+      tipoCostoInsumo: 'FIJO',
+      costoBaseInsumos: 25000,
+      costoInsumosOverride: 10000,
+    });
+    expect(result).toBe(10000);
+  });
+
+  it('override = 0 es válido (insumo sin costo)', () => {
+    const result = service.calcularCostoLinea({
+      tipoCostoInsumo: 'POR_GRAMO',
+      gramosUsados: 95,
+      precioPorGramo: 1200,
+      costoInsumosOverride: 0,
+    });
+    expect(result).toBe(0);
+  });
+
+  it('sin override sigue derivando igual que antes', () => {
+    const result = service.calcularCostoLinea({
+      tipoCostoInsumo: 'POR_GRAMO',
+      gramosUsados: 95,
+      precioPorGramo: 1200,
+    });
+    expect(result).toBe(114000);
+  });
+
+  it('calcularCostoRealLinea ignora el override y devuelve el derivado', () => {
+    const result = service.calcularCostoRealLinea({
+      tipoCostoInsumo: 'POR_GRAMO',
+      gramosUsados: 95,
+      precioPorGramo: 1200,
+      costoInsumosOverride: 50000,
+    });
+    expect(result).toBe(114000);
+  });
+});

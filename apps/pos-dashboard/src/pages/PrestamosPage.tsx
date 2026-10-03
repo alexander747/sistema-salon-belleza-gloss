@@ -7,7 +7,7 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import MoneyInput from '../components/MoneyInput.js';
-import { formatCurrency } from '../utils/format.js';
+import { formatCalendarDate, formatCurrency } from '../utils/format.js';
 import styles from './PrestamosPage.module.css';
 
 /* ── Types ── */
@@ -465,11 +465,7 @@ const PrestamosPage: React.FC = () => {
                       </span>
                     </td>
                     <td data-label="Fecha">
-                      {new Date(p.fechaCreacion).toLocaleDateString('es-CO', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatCalendarDate(p.fechaCreacion)}
                     </td>
                     <td style={{ textAlign: 'right' }} data-label="Acciones">
                       <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
@@ -732,11 +728,7 @@ const PrestamosPage: React.FC = () => {
                         {selectedPrestamo.pagos.map((pago) => (
                           <tr key={pago.id}>
                             <td>
-                              {new Date(pago.fechaPago).toLocaleDateString('es-CO', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric',
-                              })}
+                              {formatCalendarDate(pago.fechaPago)}
                             </td>
                             <td style={{ fontWeight: 600 }}>
                               {formatCurrency(Number(pago.monto))}

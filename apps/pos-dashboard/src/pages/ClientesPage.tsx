@@ -8,7 +8,7 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
-import { formatCurrency } from '../utils/format.js';
+import { formatCalendarDate, formatCurrency } from '../utils/format.js';
 import styles from './ClientesPage.module.css';
 
 /* ── Types ── */
@@ -665,7 +665,7 @@ const RenderTable: React.FC<RenderTableProps> = ({
               {formatDate(cliente.actualizadoEn)}
             </td>
             <td style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }} data-label="Nacimiento">
-              {formatDate(cliente.fechaNacimiento)}
+              {formatCalendarDate(cliente.fechaNacimiento, { day: '2-digit', month: '2-digit', year: 'numeric' })}
             </td>
             <td data-label="Acciones">
               <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -973,7 +973,7 @@ const RenderDetailModal: React.FC<DetailModalProps> = ({
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Fecha de nacimiento</span>
             <span className={styles.infoValue}>
-              {formatDate(cliente.fechaNacimiento)}
+              {formatCalendarDate(cliente.fechaNacimiento, { day: '2-digit', month: '2-digit', year: 'numeric' })}
             </span>
           </div>
         )}

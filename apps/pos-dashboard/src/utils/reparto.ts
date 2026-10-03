@@ -2,33 +2,34 @@
  * Desglose del reparto de una venta: espejo EXACTO de la fórmula del servidor
  * para que la UI muestre los mismos números que se persisten.
  *
- * - `CreateRegistroUseCase.ts:162-174`:
- *     proporcion = (valorFinal − propina) / (montoTotal − propina)
- *     totalServiciosAjustado = round(totalServicios × proporcion)
- * - `ComisionService.ts:11-18`:
- *     comision = max(0, totalServiciosAjustado − insumos) × (porcentaje / 100)
+ * - `CreateRegistroUseCase.ts` (E2):
+ *     servNeto = round(totalServicios × (1 − pctServ/100))
+ *     pctServ  = (alcance ∈ {SERVICIOS, AMBOS}) ? % : 0
+ * - `ComisionService.ts`:
+ *     comision = max(0, servNeto − insumos) × (porcentaje / 100)
  *
  * El costo de insumos se resta COMPLETO (no se prorratea por el descuento) y el
- * resto se reparte entre la empleada y el salón.
+ * resto se reparte entre la empleada y el salón. Los productos NUNCA entran en
+ * la base de comisión.
  */
 
+export type DescuentoAlcance = 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS';
+
 export interface DesgloseRepartoInput {
-  /** Σ(precio unitario × cantidad) con precios de catálogo (pre-ajuste). */
+  /** Σ(precio unitario × cantidad) con precios efectivos (bruto, pre-descuento). */
   totalServicios: number;
-  /** Σ(precioVenta × cantidad) de productos. */
-  totalProductos: number;
-  /** Propina cobrada (no se reparte ni se descuenta de la base de servicios). */
-  propina: number;
   /** Σ(costo unitario × cantidad); el costo real derivado por el servidor. */
   totalCostoInsumos: number;
-  /** Total realmente cobrado por la venta (valorFinal). */
-  valorFinal: number;
+  /** Porcentaje de descuento (0–100). */
+  porcentajeDescuento: number;
+  /** Alcance del descuento: solo servicios, solo productos, o ambos. */
+  descuentoAlcance: DescuentoAlcance;
   /** Porcentaje de comisión de la empleada (0–100). */
   porcentajeComision: number;
 }
 
 export interface DesgloseReparto {
-  /** Parte de servicios del total cobrado, prorrateada por el ajuste. */
+  /** Parte de servicios del total cobrado, con el % de servicios aplicado. */
   cobradoServicios: number;
   /** Costo de insumos restado completo. */
   insumos: number;
@@ -47,6 +48,13 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Etiqueta legible del alcance del descuento (para notas y UI). */
+export function alcanceLabel(alcance: DescuentoAlcance): string {
+  if (alcance === 'SERVICIOS') return 'servicios';
+  if (alcance === 'PRODUCTOS') return 'productos';
+  return 'servicios y productos';
+}
+
 /**
  * Costo unitario de una línea, espejo de `CostoInsumoService.calcularCostoLinea`:
  * - `POR_GRAMO` → `round2(gramosUsados × precioPorGramo)` (el costo del cliente se ignora).
@@ -57,7 +65,12 @@ export function costoUnitarioLinea(linea: {
   gramosUsados?: number | null;
   precioPorGramo?: number | null;
   costoBaseInsumos?: number | null;
+  costoInsumosOverride?: number | null;
 }): number {
+  // Override editado por el usuario (descuento de insumos): gana sobre el derivado.
+  if (linea.costoInsumosOverride != null) {
+    return round2(Number(linea.costoInsumosOverride));
+  }
   if (linea.tipoCostoInsumo === 'POR_GRAMO') {
     const gramos = Number(linea.gramosUsados ?? 0);
     const precio = Number(linea.precioPorGramo ?? 0);
@@ -102,17 +115,17 @@ export function totalServiciosCita(lineas: ReadonlyArray<LineaServicioCita>): nu
 export function calcularDesgloseReparto(input: DesgloseRepartoInput): DesgloseReparto {
   const {
     totalServicios,
-    totalProductos,
-    propina,
     totalCostoInsumos,
-    valorFinal,
+    porcentajeDescuento,
+    descuentoAlcance,
     porcentajeComision,
   } = input;
 
-  const baseBruta = totalServicios + totalProductos;
-  const baseReal = valorFinal - propina;
-  const proporcion = baseBruta > 0 ? baseReal / baseBruta : 1;
-  const cobradoServicios = Math.round(totalServicios * proporcion);
+  // El % de servicios solo aplica si el alcance incluye SERVICIOS. El de
+  // productos no afecta este desglose (nunca entra en la comisión).
+  const pctServ =
+    descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS' ? porcentajeDescuento : 0;
+  const cobradoServicios = Math.round(totalServicios * (1 - pctServ / 100));
 
   const aRepartir = Math.max(0, cobradoServicios - totalCostoInsumos);
   const comisionEmpleada = Number((aRepartir * (porcentajeComision / 100)).toFixed(2));

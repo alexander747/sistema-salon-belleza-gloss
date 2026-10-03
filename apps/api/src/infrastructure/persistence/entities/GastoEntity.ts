@@ -56,4 +56,9 @@ export class GastoEntity extends BaseEntity {
 
   @Column({ type: 'int', nullable: true })
   cajaId: number | null;
+
+  // Préstamo que originó este gasto (NULL = gasto suelto). Columna nullable
+  // aditiva; prod corre con DB_SYNCHRONIZE=true, así que se aplica sola.
+  @Column({ type: 'int', nullable: true })
+  prestamoId: number | null;
 }

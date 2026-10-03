@@ -132,6 +132,8 @@ export class PyLMensualUseCase {
           propina,
           montoTotal,
           valorFinal: r.valorFinal != null ? Number(r.valorFinal) : montoTotal,
+          porcentajeDescuento: Number(r.porcentajeDescuento ?? 0),
+          descuentoAlcance: r.descuentoAlcance ?? null,
         });
 
       ingresosBrutos += servBruto + prodBruto;

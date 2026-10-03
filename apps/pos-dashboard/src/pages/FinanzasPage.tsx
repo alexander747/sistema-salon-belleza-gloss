@@ -17,7 +17,7 @@ import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { isPrivilegedRole } from '../utils/roles.js';
 import { buildTiraReconciliacion } from '../utils/tiraReconciliacion.js';
-import { formatCurrency } from '../utils/format.js';
+import { formatCalendarDate, formatCurrency } from '../utils/format.js';
 import type { ReciboSalon } from '../utils/recibo.js';
 import styles from './FinanzasPage.module.css';
 
@@ -95,6 +95,8 @@ interface Registro {
   notas?: string;
   precioAjustado?: boolean;
   porcentajeDescuento?: number;
+  /** Alcance del descuento %: 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS'. */
+  descuentoAlcance?: string | null;
   valorOriginal?: number;
   valorFinal?: number;
   /** Fecha de negocio (PR1): el DTO la expone con fallback a creadoEn; la UI usa fechaHora ?? creadoEn */
@@ -122,6 +124,8 @@ interface Gasto {
   fecha: string;
   metodoPago: string;
   esGastoFijo: boolean;
+  /** Si no es null, el gasto lo originó un préstamo (no se borra suelto). */
+  prestamoId?: number | null;
 }
 
 interface Devolucion {
@@ -309,6 +313,21 @@ const METODO_PAGO_LABELS: Record<string, string> = {
   TRANSFERENCIA: 'Transferencia',
   OTRO: 'Otro',
 };
+
+/**
+ * Etiqueta del método de pago de un registro. Una venta fiada o parcial registra
+ * un pago de monto $0 con el método seleccionado, así que mostrar `pagos[0].metodoPago`
+ * directo diría "Efectivo" aunque no se cobró nada. Acá: 0 cobrado → "Fiado";
+ * parcial → "<método> + Fiado"; total → el método.
+ */
+function labelMetodoPago(reg: Pick<Registro, 'pagos' | 'montoPendiente'>): string {
+  const pagos = reg.pagos ?? [];
+  const cobrado = pagos.reduce((sum, p) => sum + Number(p?.monto ?? 0), 0);
+  const metodo = METODO_PAGO_LABELS[pagos[0]?.metodoPago ?? ''] ?? pagos[0]?.metodoPago ?? '---';
+  if (cobrado <= 0) return 'Fiado';
+  if (Number(reg.montoPendiente ?? 0) > 0) return `${metodo} + Fiado`;
+  return metodo;
+}
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '—';
@@ -944,12 +963,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
           </span>
         </motion.div>
         */}
-        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(251,191,36,0.3)' }}>
-          <span className={styles.summaryLabel}>📦 Productos vendidos</span>
-          <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>
-            {resumen?.cantidadProductosVendidos ?? 0}
-          </span>
-        </motion.div>
         <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(99,102,241,0.3)' }}>
           <span className={styles.summaryLabel}>💇 Servicios</span>
           <span className={styles.summaryValue} style={{ color: '#818cf8' }}>
@@ -1293,7 +1306,19 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                   {/* Descuento */}
                   <td data-label="Dto.%" style={{ textAlign: 'center' }}>
                     {reg.porcentajeDescuento != null && reg.porcentajeDescuento > 0 ? (
-                      <span style={{ color: 'var(--danger)', fontWeight: 500 }}>{reg.porcentajeDescuento}%</span>
+                      <span
+                        style={{ color: 'var(--danger)', fontWeight: 500 }}
+                        title={`Alcance: ${reg.descuentoAlcance ?? 'AMBOS'}`}
+                      >
+                        {reg.porcentajeDescuento}%{' '}
+                        <span style={{ color: 'var(--text-dim)', fontWeight: 400, fontSize: '0.65rem' }}>
+                          {reg.descuentoAlcance === 'SERVICIOS'
+                            ? 'Serv'
+                            : reg.descuentoAlcance === 'PRODUCTOS'
+                              ? 'Prod'
+                              : 'Ambos'}
+                        </span>
+                      </span>
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>—</span>
                     )}
@@ -1301,9 +1326,11 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                   {/* Ajustado */}
                   <td data-label="Ajustado" style={{ textAlign: 'center' }}>
                     {reg.precioAjustado ? (
-                      <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)', fontSize: '0.65rem', fontWeight: 600 }}>Sí</span>
+                      <span style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '0.72rem' }}>
+                        -{formatCurrency(Math.max(0, (reg.valorOriginal ?? reg.montoTotal) - (reg.valorFinal ?? reg.montoTotal)))}
+                      </span>
                     ) : (
-                      <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>No</span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>—</span>
                     )}
                   </td>
                   <td data-label="Total" style={{ fontWeight: 600, color: 'var(--accent)' }}>
@@ -1311,7 +1338,7 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
                   </td>
                   <td data-label="Método de pago">
                     <span style={{ fontSize: '0.75rem' }}>
-                      {METODO_PAGO_LABELS[reg.pagos?.[0]?.metodoPago ?? '---'] ?? '---'}
+                      {labelMetodoPago(reg)}
                     </span>
                   </td>
                   <td data-label="Estado">
@@ -1467,7 +1494,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
                   <span style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>🔁 Retoque</span>
                 )}
                 {registro.precioAjustado && (
-                  <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>💰 Precio ajustado</span>
+                  <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>💰 {registro.porcentajeDescuento}% {registro.descuentoAlcance === 'SERVICIOS' ? 'servicios' : registro.descuentoAlcance === 'PRODUCTOS' ? 'productos' : 'ambos'}</span>
                 )}
                 {registro.montoPendiente > 0 && (
                   <span style={{ background: 'rgba(224,85,106,0.12)', color: 'var(--danger)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>⚠️ {formatCurrency(registro.montoPendiente)} pend.</span>
@@ -1501,7 +1528,7 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
                       fontFamily: "'DM Sans', sans-serif",
                       whiteSpace: 'nowrap',
                     }}>
-                      {METODO_PAGO_LABELS[registro.pagos[0].metodoPago] ?? registro.pagos[0].metodoPago}
+                      {labelMetodoPago(registro)}
                     </span>
                   )}
                 </div>
@@ -1856,7 +1883,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [selectedGasto, setSelectedGasto] = useState<Gasto | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const [form, setForm] = useState({ descripcion: '', monto: '', categoria: 'OTROS', metodoPago: 'EFECTIVO', esGastoFijo: false });
+  const [form, setForm] = useState({ descripcion: '', monto: '', categoria: 'OTROS', metodoPago: 'EFECTIVO', esGastoFijo: false, fecha: new Date().toLocaleDateString('en-CA') });
 
   const [gastoPage, setGastoPage] = useState(1);
   const [gastoMeta, setGastoMeta] = useState({ page: 1, limit: 12, total: 0, totalPages: 0 });
@@ -1889,7 +1916,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   }, [gastos]);
 
   const openForm = () => {
-    setForm({ descripcion: '', monto: '', categoria: 'OTROS', metodoPago: 'EFECTIVO', esGastoFijo: false });
+    setForm({ descripcion: '', monto: '', categoria: 'OTROS', metodoPago: 'EFECTIVO', esGastoFijo: false, fecha: new Date().toLocaleDateString('en-CA') });
     setCreateError(null);
     setFormOpen(true);
   };
@@ -1911,6 +1938,7 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         categoria: form.categoria,
         metodoPago: form.metodoPago,
         esGastoFijo: form.esGastoFijo,
+        fecha: form.fecha || undefined,
       });
       setFormOpen(false);
       fetchGastos();
@@ -2026,16 +2054,26 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     </span>
                   </td>
                   <td data-label="Monto" style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(Number(g.monto ?? 0))}</td>
-                  <td data-label="Fecha" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatDate(g.fecha)}</td>
+                  <td data-label="Fecha" style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{formatCalendarDate(g.fecha, { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
                   <td data-label="Acciones" className={styles.stickyActions}>
-                    <button
-                      className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                      onClick={() => openDelete(g)}
-                      title="Eliminar"
-                      aria-label="Eliminar"
-                    >
-                      🗑️
-                    </button>
+                    {g.prestamoId ? (
+                      <span
+                        title="Gasto de un préstamo — se revierte cancelando el préstamo desde Préstamos"
+                        aria-label="Gasto de préstamo"
+                        style={{ cursor: 'help', opacity: 0.6, fontSize: '1.05rem' }}
+                      >
+                        🔒
+                      </span>
+                    ) : (
+                      <button
+                        className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
+                        onClick={() => openDelete(g)}
+                        title="Eliminar"
+                        aria-label="Eliminar"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </td>
                 </motion.tr>
               ))}
@@ -2133,6 +2171,15 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
                     />
                     ¿Es gasto fijo?
                   </label>
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Fecha</label>
+                  <input
+                    type="date"
+                    className={styles.formInput}
+                    value={form.fecha}
+                    onChange={(e) => setForm((prev) => ({ ...prev, fecha: e.target.value }))}
+                  />
                 </div>
               </div>
 
@@ -2234,6 +2281,7 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 
   const [formOpen, setFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [form, setForm] = useState({ cantidad: '1', motivo: '', montoDevolucion: '', registroServicioId: 0, productoId: 0, regresaAlStock: true });
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [productos, setProductos] = useState<{ id: number; nombre: string }[]>([]);
@@ -2291,6 +2339,7 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const handleCreate = async () => {
     if (!salonId) return;
     setSubmitting(true);
+    setCreateError(null);
     try {
       await api.post(`/salones/${salonId}/devoluciones`, {
         registroServicioId: form.registroServicioId,
@@ -2303,8 +2352,8 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       setFormOpen(false);
       setForm({ cantidad: '1', motivo: '', montoDevolucion: '', registroServicioId: 0, productoId: 0, regresaAlStock: true });
       fetchDevoluciones();
-    } catch {
-      console.error('Error al crear devolución:', error);
+    } catch (err) {
+      setCreateError(extractApiErrorMessage(err, 'Error al crear la devolución. Intentá de nuevo.'));
     } finally {
       setSubmitting(false);
     }
@@ -2534,6 +2583,11 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               </div>
 
               <div className={styles.modalFooter}>
+                {createError && (
+                  <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--danger)', margin: 0, alignSelf: 'center' }}>
+                    {createError}
+                  </p>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => setFormOpen(false)}>Cancelar</Button>
                 <Button variant="primary" size="sm" disabled={!isValid} loading={submitting} onClick={handleCreate}>
                   Registrar devolución
@@ -3723,16 +3777,38 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
 
                           for (const reg of auditarRegistros) {
                             const items = reg.serviciosItems ?? [];
-                            // Proporción de descuento/ajuste del registro (misma lógica que ResumenDiaUseCase):
-                            // valorFinal / montoTotal, excluyendo propina. Así el precio refleja lo que realmente pagó el cliente.
                             const propina = Number(reg.propina ?? 0);
                             const montoTotal = Number(reg.montoTotal ?? 0);
                             const valorFinal = Number(reg.valorFinal ?? montoTotal);
+                            // Modelo E2: % con alcance aplicado a los servicios (espejo de
+                            // calcularContribucionesRegistro). Si el registro no reconcilia
+                            // (legacy con ajuste de "valor total"), se usa el prorrateo previo.
+                            const pct = Number(reg.porcentajeDescuento ?? 0);
+                            const alcance = reg.descuentoAlcance ?? null;
+                            const pctServ =
+                              alcance === 'SERVICIOS' || alcance === 'AMBOS' ? pct : 0;
+                            const pctProd =
+                              alcance === 'PRODUCTOS' || alcance === 'AMBOS' ? pct : 0;
+                            const servBrutoReg = items.reduce(
+                              (sum, si) => sum + Number(si.precioServicio ?? 0),
+                              0,
+                            );
+                            const servNetoReg = Math.round(servBrutoReg * (1 - pctServ / 100));
+                            const prodNetoReg = Math.round(
+                              Number(reg.totalProductos ?? 0) * (1 - pctProd / 100),
+                            );
+                            const realServProd = Math.max(0, valorFinal - propina);
+                            const usarAlcance =
+                              alcance != null &&
+                              Math.abs(servNetoReg + prodNetoReg - realServProd) <= 1;
                             const baseBruta = montoTotal - propina;
-                            const baseReal = valorFinal - propina;
-                            const proporcionAjuste = baseBruta > 0 ? baseReal / baseBruta : 1;
+                            const factorServ = usarAlcance
+                              ? 1 - pctServ / 100
+                              : baseBruta > 0
+                                ? realServProd / baseBruta
+                                : 1;
                             const precioAjustado = (si: { precioServicio: number }) =>
-                              Math.round(Number(si.precioServicio) * proporcionAjuste);
+                              Math.round(Number(si.precioServicio) * factorServ);
 
                             const baseNetaTotal = items.reduce(
                               (sum, si) => sum + Math.max(0, precioAjustado(si) - (si.costoBaseInsumos ?? 0)),

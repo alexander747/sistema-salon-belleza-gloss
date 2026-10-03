@@ -46,6 +46,8 @@ export function registroAMovimiento(registro: RegistroServicioEntity): RegistroM
     propina,
     montoTotal,
     valorFinal: registro.valorFinal != null ? Number(registro.valorFinal) : montoTotal,
+    porcentajeDescuento: Number(registro.porcentajeDescuento ?? 0),
+    descuentoAlcance: registro.descuentoAlcance ?? null,
   });
 
   // Fecha Colombia del creadoEn (UTC → 05:00 UTC = 00:00 COT)

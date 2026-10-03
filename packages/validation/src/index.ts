@@ -71,6 +71,7 @@ export {
   liquidarEmpleadaSchema,
   completarCitaSchema,
   abonarDeudaSchema,
+  descuentoAlcanceSchema,
 } from './finanzas.schema.js';
 export type {
   CreateRegistroInput,
@@ -81,6 +82,7 @@ export type {
   LiquidarEmpleadaInput,
   CompletarCitaInput,
   AbonarDeudaInput,
+  DescuentoAlcance,
 } from './finanzas.schema.js';
 export { abrirCajaSchema, cerrarCajaSchema } from './caja.schema.js';
 export type { AbrirCajaInput, CerrarCajaInput } from './caja.schema.js';

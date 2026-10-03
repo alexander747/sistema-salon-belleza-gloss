@@ -148,6 +148,12 @@ const ReciboModal: React.FC<ReciboModalProps> = ({ open, onClose, salon, recibo 
             </div>
             {showPendiente && (
               <div className={styles.totalRow}>
+                <span>Pagado</span>
+                <span>{formatCurrency(recibo.montoPagado)}</span>
+              </div>
+            )}
+            {showPendiente && (
+              <div className={styles.totalRow}>
                 <span>Pendiente</span>
                 <span className={styles.pendienteVal}>{formatCurrency(recibo.montoPendiente)}</span>
               </div>

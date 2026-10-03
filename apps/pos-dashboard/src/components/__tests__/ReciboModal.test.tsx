@@ -18,6 +18,7 @@ function reciboBase(overrides?: Partial<ReciboData>): ReciboData {
     propina: 0,
     descuento: 0,
     montoPendiente: 0,
+    montoPagado: 50000,
     ...overrides,
   };
 }
@@ -141,5 +142,14 @@ describe('ReciboModal — apertura/cierre', () => {
 
     const imprimir = screen.getByRole('button', { name: /imprimir/i });
     expect(imprimir).toBeInTheDocument();
+  });
+
+  it('muestra "Pagado" (lo cobrado) además de "Pendiente" en un fiado parcial', () => {
+    renderRecibo(reciboBase({ total: 50000, montoPendiente: 15000, montoPagado: 35000 }));
+
+    expect(screen.getByText('Pagado')).toBeInTheDocument();
+    expect(screen.getByText('$ 35.000')).toBeInTheDocument();
+    expect(screen.getByText('Pendiente')).toBeInTheDocument();
+    expect(screen.getByText('$ 15.000')).toBeInTheDocument();
   });
 });

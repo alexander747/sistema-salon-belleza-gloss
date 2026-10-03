@@ -12,6 +12,8 @@ interface MockRegistro {
   propina: number;
   comisionCalculada: number;
   valorFinal?: number;
+  porcentajeDescuento?: number;
+  descuentoAlcance?: 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS' | null;
   serviciosItems?: { costoBaseInsumos?: number }[];
 }
 
@@ -147,6 +149,32 @@ describe('PyLMensualUseCase', () => {
     expect(result.cantidadAtenciones).toBe(3);
     expect(result.desde).toBe('2026-05-01');
     expect(result.hasta).toBe('2026-05-31');
+  });
+
+  it('descuento % con alcance PRODUCTOS: el P&L no descuenta servicios', async () => {
+    mockRegistroRepo.search.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 100000,
+        totalProductos: 50000,
+        propina: 0,
+        montoTotal: 150000,
+        valorFinal: 145000, // −10% solo sobre productos
+        porcentajeDescuento: 10,
+        descuentoAlcance: 'PRODUCTOS',
+        comisionCalculada: 0,
+      }),
+    ]);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.totalServicios).toBe(100000);
+    expect(result.totalProductos).toBe(45000);
+    expect(result.ingresosNetos).toBe(145000);
+    expect(result.descuentos).toBe(5000);
   });
 
   it('ajuste de valor hacia ARRIBA: no reporta descuento, expone incrementos (bug dueño)', async () => {

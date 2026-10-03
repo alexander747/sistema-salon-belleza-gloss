@@ -716,7 +716,7 @@ const ProductosPage: React.FC = () => {
           {/* ── Content area ── */}
           {dataLoading ? (
               <TableSkeleton
-                columns={['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Margen', 'Precio', 'Tipo', 'Marca', 'Código', 'Acción']}
+                columns={['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Precio', 'Marca', 'Código', 'Acción']}
                 rows={5}
               />
           ) : dataError ? (
@@ -814,9 +814,7 @@ const ProductosPage: React.FC = () => {
                   <span>Stock</span>
                   <span>P. Compra</span>
                   <span>P. Venta</span>
-                  <span>Margen</span>
                   <span>Precio</span>
-                  <span>Tipo</span>
                   <span>Marca</span>
                   <span>Código</span>
                   <span style={{ textAlign: 'right' }}>Acción</span>
@@ -875,35 +873,11 @@ const ProductosPage: React.FC = () => {
                       <span style={{ color: 'var(--accent)', fontWeight: 500 }} data-label="P. Venta">
                         {formatCurrency(prod.precioVenta)}
                       </span>
-                      <span style={{ color: getMargenColor(margen), fontWeight: 600, fontSize: '0.75rem' }} data-label="Margen">
-                        {margen}%
-                      </span>
                       <span style={{
-                        fontSize: '0.65rem', fontWeight: 600, whiteSpace: 'nowrap',
-                        color: isMargin ? 'var(--accent)' : 'var(--text-dim)',
+                        fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap',
+                        color: isMargin ? getMargenColor(margen) : 'var(--text-dim)',
                       }} data-label="Precio">
-                        {isMargin ? '📐 %' : '🎯 Fijo'}
-                      </span>
-                      <span data-label="Tipo">
-                        {prod.tipoInventario ? (
-                          <span
-                            style={{
-                              fontSize: '0.65rem',
-                              padding: '0.15rem 0.45rem',
-                              borderRadius: 'var(--radius-sm)',
-                              fontWeight: 600,
-                              fontFamily: "'DM Sans', sans-serif",
-                              whiteSpace: 'nowrap',
-                              background: prod.tipoInventario === 'RETAIL' ? 'rgba(80,200,120,0.15)' : 'rgba(200,160,80,0.15)',
-                              color: prod.tipoInventario === 'RETAIL' ? '#50c878' : '#c8a850',
-                              border: prod.tipoInventario === 'RETAIL' ? '1px solid rgba(80,200,120,0.3)' : '1px solid rgba(200,160,80,0.3)',
-                            }}
-                          >
-                            {prod.tipoInventario === 'RETAIL' ? 'Venta' : 'Interno'}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>—</span>
-                        )}
+                        {isMargin ? `📐 ${margen}%` : '🎯 Fijo'}
                       </span>
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} data-label="Marca">
                         {prod.marca || '—'}

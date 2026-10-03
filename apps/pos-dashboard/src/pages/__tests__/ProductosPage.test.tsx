@@ -103,7 +103,7 @@ describe('ProductosPage — listado y operaciones', () => {
     mockDelete.mockReset();
   });
 
-  it('lista los productos con stock, precios, margen y tipo desde la API', async () => {
+  it('lista los productos con stock, precios y modo de precio desde la API', async () => {
     defaultApiMock();
 
     renderPage();
@@ -112,8 +112,7 @@ describe('ProductosPage — listado y operaciones', () => {
     expect(screen.getByText('15')).toBeInTheDocument(); // stock
     expect(screen.getByText('$ 20.000')).toBeInTheDocument(); // precio compra (rol ve costos)
     expect(screen.getByText('$ 26.000')).toBeInTheDocument(); // precio venta
-    expect(screen.getByText('30%')).toBeInTheDocument(); // margen
-    expect(screen.getByText('Venta')).toBeInTheDocument(); // tipo RETAIL
+    expect(screen.getByText('📐 30%')).toBeInTheDocument(); // modo margen + %
     expect(screen.getByText('Loreal')).toBeInTheDocument(); // marca
     expect(screen.getByText('7701234567890')).toBeInTheDocument(); // código de barras
 
@@ -523,7 +522,7 @@ describe('ProductosPage — móvil (grid apilado ≤640px)', () => {
     setMobileMedia(true);
   });
 
-  const ROW_LABELS = ['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Margen', 'Precio', 'Tipo', 'Marca', 'Código', 'Acciones'];
+  const ROW_LABELS = ['Nombre', 'Stock', 'P. Compra', 'P. Venta', 'Precio', 'Marca', 'Código', 'Acciones'];
 
   it('cada celda de fila expone su data-label en orden (contrato de grids apilados)', async () => {
     defaultApiMock([

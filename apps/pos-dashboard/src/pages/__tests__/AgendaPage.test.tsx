@@ -529,7 +529,7 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
     });
   }, 20000);
 
-  it('ajuste de total: exige nota obligatoria y el registro viaja con precioAjustado', async () => {
+  it('descuento %: exige nota obligatoria y el registro viaja con porcentajeDescuento/alcance', async () => {
     defaultApiMock('CONFIRMADA');
     mockPost.mockResolvedValue({ data: {} });
     renderAgenda();
@@ -537,16 +537,13 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
     fireEvent.click(await screen.findByText('Cliente Test'));
     fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
 
-    // Activar el ajuste de total
-    fireEvent.click(await screen.findByLabelText('Ajustar valor total', {}, WAIT));
+    // 10% sobre servicios: 30.000 → 27.000
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '10' } });
+    fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
-    // Input del total personalizado: placeholder = total calculado ($ 30.000)
-    const totalInputs = screen.getAllByPlaceholderText(/\$\s*30\.000/);
-    fireEvent.change(totalInputs[0], { target: { value: '25000' } });
-
-    // Ajuste sin nota → error visible y botón deshabilitado
+    // Descuento sin nota → error visible y botón deshabilitado
     expect(
-      await screen.findByText(/Este campo es obligatorio cuando hay descuento o ajuste de total/i, {}, WAIT),
+      await screen.findByText(/Este campo es obligatorio cuando hay descuento/i, {}, WAIT),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar y Registrar' })).toBeDisabled();
 
@@ -563,12 +560,21 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
         String(url).includes('/completar'),
       );
       expect(completarCall).toBeDefined();
-      const [, body] = completarCall as [string, { registro: { montoTotal: number; precioAjustado: boolean; valorOriginal: number; valorFinal: number; notas: string } }];
-      expect(body.registro.montoTotal).toBe(25000);
-      expect(body.registro.precioAjustado).toBe(true);
-      expect(body.registro.valorOriginal).toBe(30000);
-      expect(body.registro.valorFinal).toBe(25000);
-      expect(body.registro.notas).toContain('[AJUSTE: total $25000]');
+      const [, body] = completarCall as [
+        string,
+        {
+          registro: {
+            porcentajeDescuento: number;
+            descuentoAlcance: string;
+            totalServicios: number;
+            notas: string;
+          };
+        },
+      ];
+      expect(body.registro.porcentajeDescuento).toBe(10);
+      expect(body.registro.descuentoAlcance).toBe('SERVICIOS');
+      expect(body.registro.totalServicios).toBe(30000);
+      expect(body.registro.notas).toContain('descuento 10% servicios');
     });
   }, 20000);
 
@@ -1112,8 +1118,8 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
     fireEvent.change(screen.getByLabelText('Gramos Tinte'), { target: { value: '95' } });
     await waitFor(() => expect(confirmar).toBeEnabled(), WAIT);
 
-    // Preview en vivo: 95 g × $1200 = $ 114.000 (igual al costoBaseInsumos del server)
-    expect(screen.getByLabelText('Costo de insumo $ 114.000')).toBeInTheDocument();
+    // Preview en vivo: 95 g × $1200 = $ 114.000 precargado en el campo editable
+    expect(screen.getByLabelText('Costo de insumos Tinte')).toHaveValue(114000);
 
     fireEvent.click(confirmar);
 
@@ -1157,11 +1163,14 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
     // Etiqueta visible + sufijo de unidad en la misma fila del input.
     expect(screen.getByText('Gramos usados')).toBeInTheDocument();
     expect(within(gramosInput.parentElement as HTMLElement).getByText('g')).toBeInTheDocument();
-    // Sin gramos todavía: no hay costo engañoso de $ 0.
-    expect(screen.queryByLabelText(/^Costo de insumo/)).not.toBeInTheDocument();
+
+    const costoInput = screen.getByLabelText('Costo de insumos Alisado');
+    // Sin gramos todavía: el campo queda vacío (no un $ 0 engañoso).
+    expect(costoInput).toHaveValue(null);
 
     fireEvent.change(gramosInput, { target: { value: '100' } });
-    expect(screen.getByLabelText('Costo de insumo $ 80.000')).toBeInTheDocument();
+    // 100 g × $800 → el campo editable se pre-carga con el derivado.
+    expect(costoInput).toHaveValue(80000);
   }, 20000);
 });
 
@@ -1239,18 +1248,21 @@ describe('AgendaPage — desglose del reparto al completar (PR5)', () => {
     });
   }
 
-  /** Abre el modal de completar con 30 g y ajusta el total al valor indicado. */
-  async function abrirConAjuste(totalAjustado: number) {
+  /** Abre el modal de completar con 30 g y aplica un descuento % con alcance. */
+  async function abrirConDescuento(
+    pct: number,
+    alcance: 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS' = 'SERVICIOS',
+  ) {
     fireEvent.click(await screen.findByText('Cliente Test'));
     fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
 
     fireEvent.change(screen.getByLabelText('Gramos Alisado permanente brasileño'), {
       target: { value: '30' },
     });
-    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
-    // El input de ajuste es el primero con el placeholder del total calculado.
-    const ajuste = screen.getAllByPlaceholderText(/\$\s*550\.000/)[0];
-    fireEvent.change(ajuste, { target: { value: String(totalAjustado) } });
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: String(pct) } });
+    const label =
+      alcance === 'AMBOS' ? 'Ambos' : alcance === 'SERVICIOS' ? 'Servicios' : 'Productos';
+    fireEvent.click(screen.getByLabelText(`Alcance ${label}`));
   }
 
   it('muestra Cobrado − Insumos = A repartir y el split por % de la empleada', async () => {
@@ -1258,21 +1270,16 @@ describe('AgendaPage — desglose del reparto al completar (PR5)', () => {
     mockPost.mockResolvedValue({ data: {} });
     renderAgenda();
 
-    await abrirConAjuste(300000);
+    await abrirConDescuento(20, 'SERVICIOS'); // 550.000 × 0.8 = 440.000
 
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
-    expect(within(panel).getByText('$ 300.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 440.000')).toBeInTheDocument();
     expect(within(panel).getByText('− $ 24.000')).toBeInTheDocument();
-    expect(within(panel).getByText('$ 276.000')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 416.000')).toBeInTheDocument();
     expect(within(panel).getByText('Comisión empleada (60%)')).toBeInTheDocument();
-    expect(within(panel).getByText('$ 165.600')).toBeInTheDocument();
+    expect(within(panel).getByText('$ 249.600')).toBeInTheDocument();
     expect(within(panel).getByText('Queda para el salón')).toBeInTheDocument();
-    expect(within(panel).getByText('$ 110.400')).toBeInTheDocument();
-    expect(
-      within(panel).getByText(
-        'El costo de insumos se descuenta del total cobrado y el resto se reparte entre la empleada y el salón.',
-      ),
-    ).toBeInTheDocument();
+    expect(within(panel).getByText('$ 166.400')).toBeInTheDocument();
 
     // El número mostrado coincide con lo que viaja al servidor (que deriva el insumo).
     fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo del ajuste/i), {
@@ -1290,13 +1297,15 @@ describe('AgendaPage — desglose del reparto al completar (PR5)', () => {
         {
           registro: {
             totalServicios: number;
-            valorFinal: number;
+            porcentajeDescuento: number;
+            descuentoAlcance: string;
             serviciosItems: Array<Record<string, unknown>>;
           };
         },
       ];
       expect(body.registro.totalServicios).toBe(550000);
-      expect(body.registro.valorFinal).toBe(300000);
+      expect(body.registro.porcentajeDescuento).toBe(20);
+      expect(body.registro.descuentoAlcance).toBe('SERVICIOS');
       expect(body.registro.serviciosItems).toEqual([
         expect.objectContaining({ servicioId: 1, gramosUsados: 30, cantidad: 1 }),
       ]);
@@ -1308,8 +1317,8 @@ describe('AgendaPage — desglose del reparto al completar (PR5)', () => {
     mockPost.mockResolvedValue({ data: {} });
     renderAgenda();
 
-    // 20.000 cobrado < 24.000 de insumo (30 g × $800).
-    await abrirConAjuste(20000);
+    // 550.000 con 96% → 22.000 cobrado < 24.000 de insumo (30 g × $800).
+    await abrirConDescuento(96, 'SERVICIOS');
 
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
     expect(within(panel).getByLabelText('A repartir $ 0')).toBeInTheDocument();
@@ -1441,10 +1450,10 @@ describe('AgendaPage — totales del completar con cantidad > 1 (PR6)', () => {
       expect(completarCall).toBeDefined();
       const [, body] = completarCall as [
         string,
-        { registro: { totalServicios: number; valorOriginal: number } },
+        { registro: { totalServicios: number; porcentajeDescuento: number } },
       ];
       expect(body.registro.totalServicios).toBe(60000);
-      expect(body.registro.valorOriginal).toBe(60000);
+      expect(body.registro.porcentajeDescuento).toBe(0);
     }, WAIT);
   }, 20000);
 
@@ -1468,24 +1477,120 @@ describe('AgendaPage — totales del completar con cantidad > 1 (PR6)', () => {
     expect(within(panel).getByLabelText('Queda para el salón $ 16.000')).toBeInTheDocument();
   }, 20000);
 
-  it('FIJO cantidad=2 + ajuste: la base del total ajustado también es 2 × precio', async () => {
+  it('FIJO cantidad=2 + descuento: la base del total también es 2 × precio', async () => {
     apiMockCantidad({ cantidad: 2 });
     mockPost.mockResolvedValue({ data: {} });
     renderAgenda();
     await abrirCompletar();
 
-    // El placeholder del input de ajuste (y el de "monto recibido") es el total
-    // calculado: 2 × 30.000. Antes del PR6 era 30.000.
-    fireEvent.click(screen.getByLabelText('Ajustar valor total'));
-    const ajuste = screen.getAllByPlaceholderText(/\$\s*60\.000/)[0];
-    fireEvent.change(ajuste, { target: { value: '60000' } });
+    // Descuento 25% sobre SERVICIOS: 2 × 30.000 = 60.000 → 45.000.
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '25' } });
+    fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
-    expect(valorFilaRecibo('Total')).toBe('$ 60.000');
+    expect(valorFilaRecibo('Total')).toBe('$ 45.000');
 
-    // Con el ajuste en el total calculado, el desglose reparte 60.000 sin insumo.
+    // Sin insumo, el desglose reparte los 45.000.
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
-    expect(within(panel).getByLabelText('A repartir $ 60.000')).toBeInTheDocument();
-    expect(within(panel).getByLabelText('Comisión empleada $ 36.000')).toBeInTheDocument();
-    expect(within(panel).getByLabelText('Queda para el salón $ 24.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('A repartir $ 45.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Comisión empleada $ 27.000')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Queda para el salón $ 18.000')).toBeInTheDocument();
+  }, 20000);
+});
+
+describe('AgendaPage — precios editables por línea (E1)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockPatch.mockReset();
+  });
+
+  function apiMock(producto?: Record<string, unknown>) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/agenda/citas')) {
+        const fechaHora = new Date(new Date().setHours(10, 0, 0, 0)).toISOString();
+        return Promise.resolve({
+          data: [
+            {
+              id: 1,
+              salonId: 1,
+              fechaHora,
+              estado: 'CONFIRMADA',
+              clienteId: 1,
+              usuarioId: 1,
+              servicios: [
+                { id: 1, nombre: 'Corte', duracionMinutos: 60, precioBase: 30000, costoBaseInsumos: 0, cantidad: 1 },
+              ],
+              creadoEn: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', telefono: '123456' }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Empleada Test', activo: true }] });
+      }
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', duracionMinutos: 60, precioBase: 30000, costoBaseInsumos: 0, activo: true }],
+        });
+      }
+      if (url.includes('/productos')) return Promise.resolve({ data: producto ? [producto] : [] });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  async function abrirCompletar() {
+    fireEvent.click(await screen.findByText('Cliente Test'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
+  }
+
+  it('editar el precio de un servicio viaja como precioServicio y recalcula el total', async () => {
+    apiMock();
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+    await abrirCompletar();
+
+    fireEvent.change(screen.getByLabelText('Precio Corte'), { target: { value: '45000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const call = mockPost.mock.calls.find(([url]) => String(url).includes('/completar'));
+      expect(call).toBeDefined();
+      const [, body] = call as [
+        string,
+        { registro: { totalServicios: number; serviciosItems: Array<Record<string, unknown>> } },
+      ];
+      expect(body.registro.totalServicios).toBe(45000);
+      expect(body.registro.serviciosItems).toEqual([
+        expect.objectContaining({ servicioId: 1, precioServicio: 45000 }),
+      ]);
+    }, WAIT);
+  }, 20000);
+
+  it('editar el precio de un producto viaja como precioVenta y recalcula el total', async () => {
+    apiMock({ id: 2, nombre: 'Shampoo Barra', marca: null, precioVenta: 15000, cantidadStock: 5 });
+    mockPost.mockResolvedValue({ data: {} });
+    renderAgenda();
+    await abrirCompletar();
+
+    fireEvent.click(await screen.findByText('Shampoo Barra'));
+    fireEvent.change(screen.getByLabelText('Precio Shampoo Barra'), { target: { value: '20000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y Registrar' }));
+
+    await waitFor(() => {
+      const call = mockPost.mock.calls.find(([url]) => String(url).includes('/completar'));
+      expect(call).toBeDefined();
+      const [, body] = call as [
+        string,
+        { registro: { totalProductos: number; productosVendidos: Array<Record<string, unknown>> } },
+      ];
+      expect(body.registro.totalProductos).toBe(20000);
+      expect(body.registro.productosVendidos).toEqual([
+        expect.objectContaining({ productoId: 2, cantidad: 1, precioVenta: 20000 }),
+      ]);
+    }, WAIT);
   }, 20000);
 });

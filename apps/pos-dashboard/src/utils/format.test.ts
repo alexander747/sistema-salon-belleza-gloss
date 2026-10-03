@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCurrency, formatTimeAMPM } from './format';
+import { formatCalendarDate, formatCurrency, formatTimeAMPM } from './format';
 
 /** es-CO currency usa NBSP entre símbolo y número — normalizar para comparar. */
 function normalize(s: string): string {
@@ -63,5 +63,39 @@ describe('formatTimeAMPM', () => {
 
   it('devuelve la entrada sin cambios ante una fecha ISO completa', () => {
     expect(formatTimeAMPM('2026-01-01T10:00:00')).toBe('2026-01-01T10:00:00');
+  });
+});
+
+describe('formatCalendarDate (fecha de calendario TZ-safe)', () => {
+  // Oracle: la misma fecha construida como fecha LOCAL (sin parseo UTC)
+  const expected = new Date(2026, 9, 2).toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  it('formatea YYYY-MM-DD como ese mismo día', () => {
+    expect(formatCalendarDate('2026-10-02')).toBe(expected);
+  });
+
+  it('toma solo la parte de fecha de un instante ISO', () => {
+    expect(formatCalendarDate('2026-10-02T05:00:00.000Z')).toBe(expected);
+  });
+
+  it('NO se corre al día anterior en TZ negativa (Bogotá −5)', () => {
+    const prev = process.env.TZ;
+    process.env.TZ = 'America/Bogota';
+    try {
+      const out = formatCalendarDate('2026-10-02');
+      expect(out).toContain('02');
+      expect(out).not.toContain('01');
+    } finally {
+      process.env.TZ = prev;
+    }
+  });
+
+  it('devuelve — para null/undefined', () => {
+    expect(formatCalendarDate(null)).toBe('—');
+    expect(formatCalendarDate(undefined)).toBe('—');
   });
 });

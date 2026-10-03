@@ -2290,8 +2290,8 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     const tira = await screen.findByTestId('tira-reconciliacion');
     expect(tira.closest('[class*="summaryCard"]')).toBeNull();
     expect(screen.queryByText('🎁 Propinas')).not.toBeInTheDocument();
-    // Mismas tarjetas que antes de PR6 para DUEÑA (7 tarjetas del resumen)
-    expect(container.querySelectorAll('[class*="summaryCard"]')).toHaveLength(7);
+    // Tarjetas del resumen para DUEÑA (6 tras quitar "📦 Productos vendidos")
+    expect(container.querySelectorAll('[class*="summaryCard"]')).toHaveLength(6);
   });
 
   it('las tarjetas Ventas del día/Entró a caja y la tira siguen visibles para rol no privilegiado', async () => {

@@ -67,6 +67,11 @@ export class RegistroServicioEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   porcentajeDescuento: number;
 
+  // Alcance del descuento %: 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS' (default legacy).
+  // Nullable + default para que el ALTER de synchronize no rompa filas existentes.
+  @Column({ type: 'varchar', length: 20, nullable: true, default: 'AMBOS' })
+  descuentoAlcance: 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS' | null;
+
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   valorOriginal: number;
 

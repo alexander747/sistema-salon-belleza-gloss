@@ -13,6 +13,7 @@ import MoneyInput from '../components/MoneyInput.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
 import { calcularPendiente } from '../utils/fiado.js';
+import { alcanceLabel, type DescuentoAlcance } from '../utils/reparto.js';
 import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
 import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
 import ReciboModal from '../components/ReciboModal.js';
@@ -122,6 +123,22 @@ const formLabelStyle: React.CSSProperties = {
   letterSpacing: '0.02em',
 };
 
+/** Compact inline editor for a cart line's unit price (E1). */
+const priceInputStyle: React.CSSProperties = {
+  width: '88px',
+  height: '32px',
+  padding: '0 0.4rem',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border)',
+  background: 'var(--bg-base)',
+  color: 'var(--text-primary)',
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.8125rem',
+  fontWeight: 600,
+  textAlign: 'right',
+  outline: 'none',
+};
+
 /* ── Helpers ── */
 
 /** Fecha local yyyy-mm-dd (mismo patrón que AgendaPage/DashboardPage). */
@@ -175,8 +192,8 @@ const VentasPage: React.FC = () => {
   /* Discount & Adjustment state (mirrors FinanzasPage and AgendaPage) */
   const [propina, setPropina] = useState<number>(0);
   const [descuento, setDescuento] = useState<number>(0);
-  const [ajustarTotal, setAjustarTotal] = useState(false);
-  const [totalPersonalizado, setTotalPersonalizado] = useState<number | null>(null);
+  /** Alcance del % : servicios, productos o ambos (default AMBOS). */
+  const [descuentoAlcance, setDescuentoAlcance] = useState<DescuentoAlcance>('AMBOS');
   const [notaAjuste, setNotaAjuste] = useState('');
 
   /* ── Derived ── */
@@ -203,17 +220,19 @@ const VentasPage: React.FC = () => {
     return cart.reduce((sum, item) => sum + item.precioVenta * item.cantidad, 0);
   }, [cart]);
 
+  // El % se aplica SOLO al alcance elegido. En esta página solo hay productos,
+  // pero el alcance se respeta igual (si es SERVICIOS, no descuenta nada).
+  const pctProd = descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS' ? descuento : 0;
+
   const descuentoMonto = useMemo(() => {
-    return cartSubtotal * (descuento / 100);
-  }, [cartSubtotal, descuento]);
+    return cartSubtotal - Math.round(cartSubtotal * (1 - pctProd / 100));
+  }, [cartSubtotal, pctProd]);
 
   const calculatedTotal = useMemo(() => {
     return cartSubtotal + propina - descuentoMonto;
   }, [cartSubtotal, propina, descuentoMonto]);
 
-  const finalTotal = useMemo(() => {
-    return totalPersonalizado !== null ? totalPersonalizado : calculatedTotal;
-  }, [totalPersonalizado, calculatedTotal]);
+  const finalTotal = calculatedTotal;
 
   const cambio = useMemo(() => {
     if (paymentMethod !== 'EFECTIVO') return 0;
@@ -226,7 +245,7 @@ const VentasPage: React.FC = () => {
     [finalTotal, propina, montoRecibido],
   );
 
-  const hasAdjustment = descuento > 0 || totalPersonalizado !== null;
+  const hasAdjustment = descuento > 0;
   const ajusteNoteRequired = hasAdjustment && notaAjuste.trim().length === 0;
 
   const canCobrar = useMemo(() => {
@@ -348,6 +367,15 @@ const VentasPage: React.FC = () => {
     setCart((prev) => prev.filter((item) => item.productoId !== productoId));
   };
 
+  /** Edita el precio unitario de la línea (E1: precio editable por línea). */
+  const updatePrice = (productoId: number, precio: number) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.productoId === productoId ? { ...item, precioVenta: Math.max(0, precio) } : item,
+      ),
+    );
+  };
+
   const clearCart = () => {
     setCart([]);
     setSelectedCustomerId('');
@@ -358,8 +386,7 @@ const VentasPage: React.FC = () => {
     setPaymentMethod('EFECTIVO');
     setPropina(0);
     setDescuento(0);
-    setAjustarTotal(false);
-    setTotalPersonalizado(null);
+    setDescuentoAlcance('AMBOS');
     setNotaAjuste('');
     setFecha(toISODate(new Date()));
     setSuccessMsg(null);
@@ -376,8 +403,7 @@ const VentasPage: React.FC = () => {
       let finalNotas = `Venta directa: ${cart.map((i) => `${i.cantidad}x ${i.nombre}`).join(', ')}`;
       if (hasAdjustment && notaAjuste.trim()) {
         const ajusteParts: string[] = [];
-        if (descuento > 0) ajusteParts.push(`descuento ${descuento}%`);
-        if (totalPersonalizado !== null) ajusteParts.push(`total $${totalPersonalizado}`);
+        if (descuento > 0) ajusteParts.push(`descuento ${descuento}% ${alcanceLabel(descuentoAlcance)}`);
         const prefix = `[AJUSTE: ${ajusteParts.join(' | ')}] Razón: ${notaAjuste.trim()}`;
         finalNotas = `${prefix}\n${finalNotas}`;
       }
@@ -409,12 +435,12 @@ const VentasPage: React.FC = () => {
         productosVendidos: cart.map((item) => ({
           productoId: item.productoId,
           cantidad: item.cantidad,
+          // E1: precio editado por el usuario (el server cae al del catálogo si falta).
+          precioVenta: item.precioVenta,
         })),
-        // Price adjustment fields (mirroring WalkInModal and AgendaPage)
+        // Descuento % con alcance (el server deriva precioAjustado/valorFinal)
         porcentajeDescuento: descuento,
-        precioAjustado: hasAdjustment,
-        valorOriginal: cartSubtotal + propina,
-        valorFinal: finalTotal,
+        descuentoAlcance,
       };
       const { data } = await api.post(`/salones/${salonId}/registros`, payload);
 
@@ -441,7 +467,8 @@ const VentasPage: React.FC = () => {
           metodoPago: paymentMethod,
           total: finalTotal,
           propina,
-          descuento: descuentoMonto,
+          // Descuento EFECTIVO = subtotal + propina − total (cubre el % y el ajuste de total).
+          descuento: Math.max(0, cartSubtotal + propina - finalTotal),
           descuentoPorcentaje: descuento || undefined,
           montoPendiente: pendiente,
         }),
@@ -456,8 +483,7 @@ const VentasPage: React.FC = () => {
       setPaymentMethod('EFECTIVO');
       setPropina(0);
       setDescuento(0);
-      setAjustarTotal(false);
-      setTotalPersonalizado(null);
+      setDescuentoAlcance('AMBOS');
       setNotaAjuste('');
       setFecha(toISODate(new Date()));
       fetchData();
@@ -950,12 +976,26 @@ const VentasPage: React.FC = () => {
                         </div>
                         <div
                           style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
                             fontFamily: "'DM Sans', sans-serif",
                             fontSize: '0.7rem',
                             color: 'var(--accent)',
                           }}
                         >
-                          {formatCurrency(item.precioVenta)} × {item.cantidad}
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            inputMode="decimal"
+                            aria-label={`Precio ${item.nombre}`}
+                            value={item.precioVenta}
+                            onChange={(e) => updatePrice(item.productoId, Number(e.target.value))}
+                            style={priceInputStyle}
+                            title="Precio unitario"
+                          />
+                          <span>× {item.cantidad}</span>
                         </div>
                       </div>
 
@@ -1440,95 +1480,45 @@ const VentasPage: React.FC = () => {
                         fontSize: '0.75rem',
                         color: 'var(--text-secondary)',
                       }}
-                    >
-                      %
-                    </span>
-                  </div>
-                </div>
-
-                {/* Ajustar valor total toggle */}
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <label
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={ajustarTotal}
-                      onChange={(e) => {
-                        setAjustarTotal(e.target.checked);
-                        if (!e.target.checked) setTotalPersonalizado(null);
-                      }}
-                      style={{ display: 'none' }}
-                    />
-                    <span
-                      style={{
-                        position: 'relative',
-                        width: '36px',
-                        height: '20px',
-                        background: ajustarTotal ? 'var(--accent)' : 'var(--border)',
-                        borderRadius: '10px',
-                        transition: 'background 0.2s',
-                        flexShrink: 0,
-                        display: 'inline-block',
-                      }}
-                    >
-                      <span
-                        style={{
-                          content: '""',
-                          position: 'absolute',
-                          top: '2px',
-                          left: ajustarTotal ? '18px' : '2px',
-                          width: '16px',
-                          height: '16px',
-                          background: 'var(--bg-root)',
-                          borderRadius: '50%',
-                          transition: 'left 0.2s',
-                        }}
-                      />
-                    </span>
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                      Ajustar valor total
-                    </span>
-                  </label>
-                  {ajustarTotal && (
-                    <div style={{ marginTop: '0.5rem' }}>
-                      <MoneyInput
-                        value={totalPersonalizado ?? 0}
-                        onChange={(n) => {
-                          // Regla del dueño: el ajuste de valor SOLO puede ser
-                          // hacia ABAJO (descuento), nunca por encima del precio
-                          // del servicio. Si se ingresa un valor mayor, se ignora.
-                          if (n > calculatedTotal) {
-                            return;
-                          }
-                          setTotalPersonalizado(n === 0 ? null : n);
-                        }}
-                        placeholder={formatCurrency(calculatedTotal)}
-                        ariaLabel="Valor total ajustado"
-                        style={{
-                          ...searchInputStyle,
-                          maxWidth: '100%',
-                        }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--accent)';
-                          e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--border)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      />
+                      >
+                        %
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <label style={{ ...formLabelStyle, marginTop: '0.5rem' }}>Aplicar a</label>
+                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                      {(
+                        [
+                          ['SERVICIOS', 'Servicios'],
+                          ['PRODUCTOS', 'Productos'],
+                          ['AMBOS', 'Ambos'],
+                        ] as Array<[DescuentoAlcance, string]>
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-label={`Alcance ${label}`}
+                          onClick={() => setDescuentoAlcance(value)}
+                          style={{
+                            flex: 1,
+                            padding: '0.35rem 0.5rem',
+                            borderRadius: 'var(--radius-sm)',
+                            border: `1px solid ${descuentoAlcance === value ? 'var(--accent)' : 'var(--border)'}`,
+                            background: descuentoAlcance === value ? 'var(--accent-glow)' : 'var(--bg-base)',
+                            color: descuentoAlcance === value ? 'var(--accent)' : 'var(--text-secondary)',
+                            fontFamily: "'DM Sans', sans-serif",
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                {/* Adjustment note (required if discount or override) */}
+
+                {/* Adjustment note (required if discount) */}
                 {hasAdjustment && (
                   <div>
                     <label
@@ -1657,7 +1647,7 @@ const VentasPage: React.FC = () => {
                         color: 'var(--text-secondary)',
                       }}
                     >
-                      Descuento ({descuento}%)
+                      Descuento ({descuento}% {alcanceLabel(descuentoAlcance)})
                     </span>
                     <span
                       style={{
@@ -1668,37 +1658,6 @@ const VentasPage: React.FC = () => {
                       }}
                     >
                       -{formatCurrency(descuentoMonto)}
-                    </span>
-                  </div>
-                )}
-                {totalPersonalizado !== null && totalPersonalizado !== calculatedTotal && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '0.25rem',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.8125rem',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      Ajuste
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.8125rem',
-                        fontWeight: 600,
-                        color: totalPersonalizado > calculatedTotal ? 'var(--success)' : 'var(--danger)',
-                      }}
-                    >
-                      {totalPersonalizado > calculatedTotal ? '+' : '-'}
-                      {formatCurrency(Math.abs(totalPersonalizado - calculatedTotal))}
                     </span>
                   </div>
                 )}
@@ -1726,7 +1685,7 @@ const VentasPage: React.FC = () => {
                       fontFamily: "'DM Sans', sans-serif",
                       fontSize: '1.25rem',
                       fontWeight: 800,
-                      color: totalPersonalizado !== null ? 'var(--warning)' : 'var(--accent)',
+                      color: 'var(--accent)',
                     }}
                   >
                     {formatCurrency(finalTotal)}

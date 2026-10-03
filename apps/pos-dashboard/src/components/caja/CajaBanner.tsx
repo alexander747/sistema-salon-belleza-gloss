@@ -40,7 +40,9 @@ export function dispatchCajaRefresh(): void {
  */
 export function getColombiaDateString(): string {
   const now = new Date();
-  const colombiaTime = new Date(now.getTime() + now.getTimezoneOffset() * 60_000 - 5 * 3_600_000);
+  // Colombia = UTC-5, sin DST: la fecha Colombia es la fecha UTC corrida -5h,
+  // independiente de la timezone de la máquina (espejo del backend).
+  const colombiaTime = new Date(now.getTime() - 5 * 3_600_000);
   const y = colombiaTime.getUTCFullYear();
   const m = String(colombiaTime.getUTCMonth() + 1).padStart(2, '0');
   const d = String(colombiaTime.getUTCDate()).padStart(2, '0');

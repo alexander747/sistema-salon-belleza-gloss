@@ -12,6 +12,29 @@ export function formatCurrency(n: number | null | undefined): string {
   return currencyFormatter.format(n);
 }
 
+/* ── Formato de fecha de CALENDARIO (sin corrimiento de timezone) ── */
+
+/**
+ * Formatea una fecha de calendario (`YYYY-MM-DD` o ISO) usando sus
+ * componentes locales, para evitar el "timezone trap": `new Date('2026-10-02')`
+ * se interpreta como medianoche UTC y en TZ negativas (Bogotá −5) muestra el
+ * día ANTERIOR. Acá se construye `new Date(y, m-1, d)` (hora local) → sin shift.
+ *
+ * Usar SIEMPRE para columnas `DATE` (fecha de negocio), NO para instantes
+ * (creadoEn/actualizadoEn/fechaHora), donde sí corresponde `new Date(iso)`.
+ */
+export function formatCalendarDate(
+  value: string | Date | null | undefined,
+  options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' },
+  locale = 'es-CO',
+): string {
+  if (!value) return '—';
+  const iso = typeof value === 'string' ? value : value.toISOString();
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return typeof value === 'string' ? value : '—';
+  return new Date(y, m - 1, d).toLocaleDateString(locale, options);
+}
+
 /* ── Formato de hora 12h (AM/PM) para labels de slots ── */
 
 /**
