@@ -9,6 +9,10 @@ vi.mock('../../../../../../infrastructure/persistence/entities/PagoTransaccionEn
 import { CreateGastoUseCase } from '../CreateGastoUseCase';
 import type { MetodoPago } from '../../../../../../infrastructure/persistence/entities/PagoTransaccionEntity';
 import { getColombiaDateString } from '../../../../../../shared/colombia-date';
+import {
+  CajaCerradaError,
+  CajaNoAbiertaEnFechaError,
+} from '../../../../../../shared/errors';
 
 // ── Mocks ──────────────────────────────────────────────────────
 const mockGastoRepo = {
@@ -59,16 +63,12 @@ describe('CreateGastoUseCase', () => {
     expect(result.cajaId).toBe(5);
   });
 
-  it('should create the gasto with cajaId null when no caja is open (NOT gated)', async () => {
+  it('should reject the gasto with CajaCerradaError (422) when no caja is open for today', async () => {
     mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue(null);
-    mockGastoRepo.create.mockResolvedValue({ id: 1, cajaId: null });
 
-    const result = await useCase.execute(validInput);
-
-    expect(mockGastoRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ cajaId: null }),
-    );
-    expect(result.cajaId).toBeNull();
+    await expect(useCase.execute(validInput)).rejects.toBeInstanceOf(CajaCerradaError);
+    // Regla A: sin caja abierta no se persiste nada (antes quedaba cajaId NULL)
+    expect(mockGastoRepo.create).not.toHaveBeenCalled();
   });
 
   describe('fecha (backfill)', () => {

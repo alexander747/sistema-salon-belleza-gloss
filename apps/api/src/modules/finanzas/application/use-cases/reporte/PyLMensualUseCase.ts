@@ -2,6 +2,8 @@ import { injectable, inject } from 'tsyringe';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
 import type { IDevolucionRepository } from '../../../domain/ports/IDevolucionRepository';
+import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionRepository';
+import type { IPagoPrestamoRepository } from '../../../../prestamos/domain/ports/IPagoPrestamoRepository';
 import {
   colombiaDayStartUTC,
   colombiaDayEndUTC,
@@ -13,7 +15,13 @@ export interface PyLMensualInput {
   salonId: number;
   desde?: string; // YYYY-MM-DD (fecha Colombia) — inicio del período
   hasta?: string; // YYYY-MM-DD (fecha Colombia) — fin del período
-  usuarioId?: number; // filtro por empleada (opcional; los gastos/dev. no se filtran)
+  /**
+   * Filtro por empleada (opcional). Cuando está activo, el resultado es la
+   * CONTRIBUCIÓN de la empleada (cobrado − insumos − comisión) y los gastos y
+   * devoluciones del salón NO se le descuentan: se exponen aparte en
+   * `gastosNegocio`/`devolucionesNegocio`.
+   */
+  usuarioId?: number;
   clienteId?: number; // filtro por cliente (opcional)
 }
 
@@ -43,7 +51,27 @@ export interface PyLMensualOutput {
   gastosPorCategoria: Record<string, number>;
   totalGastos: number;
   devoluciones: number;
-  /** Utilidad en base CAJA: cobrado − insumos − comisiones − gastos − devoluciones. */
+  /** Σ totalPagado de nómina EFECTIVO del período (Rule C, cash-basis). */
+  nomina: number;
+  /**
+   * Σ cobros MANUAL de préstamos del período (Rule C, cash-basis). Es un
+   * INGRESO: "Préstamos" son cuentas por cobrar que el deudor devuelve. Incluye
+   * todos los métodos (una transferencia no toca el cajón pero sí es ingreso).
+   */
+  pagosPrestamo: number;
+  /** Contribución del resultado: cobrado − insumos − comisiones (sin gastos del negocio). */
+  contribucion: number;
+  /** Gastos del NEGOCIO (salón). Se exponen aparte y NO se descuentan a una empleada filtrada. */
+  gastosNegocio: number;
+  /** Devoluciones del NEGOCIO (salón). Se exponen aparte y NO se descuentan a una empleada filtrada. */
+  devolucionesNegocio: number;
+  /**
+   * Utilidad en base CAJA.
+   * Sin filtro de empleada: `contribucion − gastosNegocio − devolucionesNegocio
+   * − nómina + pagosPrestamo`.
+   * Con filtro de empleada: solo `contribucion` (los gastos/devoluciones del
+   * salón no se le cargan; se exponen aparte como "del salón").
+   */
   utilidadNeta: number;
 }
 
@@ -61,6 +89,10 @@ export class PyLMensualUseCase {
     private readonly gastoRepo: IGastoRepository,
     @inject('IDevolucionRepository')
     private readonly devolucionRepo: IDevolucionRepository,
+    @inject('ILiquidacionRepository')
+    private readonly liquidacionRepo: ILiquidacionRepository,
+    @inject('IPagoPrestamoRepository')
+    private readonly pagoPrestamoRepo: IPagoPrestamoRepository,
   ) {}
 
   async execute(input: PyLMensualInput): Promise<PyLMensualOutput> {
@@ -79,7 +111,16 @@ export class PyLMensualUseCase {
     const gastoDesde = new Date(`${desde}T00:00:00.000Z`);
     const gastoHasta = new Date(`${hasta}T00:00:00.000Z`);
 
-    const [registros, gastos, devoluciones, cobrado, fiadoPeriodo, deudasPorCobrar] = await Promise.all([
+    const [
+      registros,
+      gastos,
+      devoluciones,
+      nomina,
+      pagosPrestamo,
+      cobrado,
+      fiadoPeriodo,
+      deudasPorCobrar,
+    ] = await Promise.all([
       this.registroRepo.search({
         salonId: input.salonId,
         desde: inicio,
@@ -92,6 +133,11 @@ export class PyLMensualUseCase {
         hasta: gastoHasta,
       }),
       this.devolucionRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
+      // Rule C: la nómina en EFECTIVO es un egreso cash-basis del período.
+      this.liquidacionRepo.sumEfectivoBySalonAndDateRange(input.salonId, inicio, fin),
+      // Rule C (corregido): los cobros MANUAL de préstamos son un INGRESO
+      // cash-basis (cuentas por cobrar que el deudor devuelve).
+      this.pagoPrestamoRepo.sumManualBySalonAndDateRange(input.salonId, inicio, fin),
       // Cash basis: cobrado por fecha de recepción (pago.creadoEn); el filtro de
       // empleada/cliente aplica igual que a los registros devengados.
       this.registroRepo.sumPagosPorPeriodo(
@@ -169,9 +215,28 @@ export class PyLMensualUseCase {
     const margenBruto = round2(ingresosNetos - costoBaseInsumosRounded);
     // Contabilidad de CAJA (decisión owner): el ingreso se cuenta cuando se cobra.
     // Las líneas devengadas (ingresosBrutos/ingresosNetos/…) quedan informativas.
-    const utilidadNeta = round2(
-      cobrado - costoBaseInsumosRounded - comisiones - totalGastos - devoluciones,
-    );
+    //
+    // Contribución = cobrado − insumos − comisiones: el resultado "propio" del
+    // scope (empleada o salón) antes de los gastos/devoluciones del negocio.
+    const contribucion = round2(cobrado - costoBaseInsumosRounded - comisiones);
+    const gastosNegocio = round2(totalGastos);
+    const devolucionesNegocio = round2(devoluciones);
+
+    // Rule C (corregido): los cobros de préstamo son INGRESOS (+), no egresos.
+    // Nuance (follow-up): contablemente solo el interés de un préstamo es
+    // ingreso operativo y el capital es recuperación de una cuenta por cobrar;
+    // el modelo no separa ambos y el desembolso del préstamo ya entra como gasto
+    // (CrearPrestamoUseCase), por lo que este agregado puede sobre-contar el
+    // capital — deuda técnica anotada.
+    //
+    // Filtro por empleada (decisión owner): los gastos y devoluciones son del
+    // NEGOCIO, no de la empleada. Con filtro activo NO se le descuentan: su
+    // resultado es su contribución, y el negocio se expone aparte. Sin filtro se
+    // mantiene el resultado salon-wide (gastos, devoluciones y nómina incluidos).
+    const esFiltroEmpleada = input.usuarioId !== undefined;
+    const utilidadNeta = esFiltroEmpleada
+      ? contribucion
+      : round2(contribucion - gastosNegocio - devolucionesNegocio - nomina + pagosPrestamo);
 
     // Semántica: el ajuste de valor puede ser hacia ABAJO (descuento real) o
     // hacia ARRIBA (incremento — p.ej. cobrar 50.000 un servicio de 40.000).
@@ -203,6 +268,11 @@ export class PyLMensualUseCase {
       gastosPorCategoria,
       totalGastos: round2(totalGastos),
       devoluciones: round2(devoluciones),
+      nomina: round2(nomina),
+      pagosPrestamo: round2(pagosPrestamo),
+      contribucion,
+      gastosNegocio,
+      devolucionesNegocio,
       utilidadNeta,
     };
   }

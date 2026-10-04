@@ -330,4 +330,52 @@ describe('CuentasCobrarUseCase', () => {
     expect(result.data).toHaveLength(1);
     expect(result.data[0]).toMatchObject({ id: 31, tipo: 'PRESTAMO' });
   });
+
+  it('filtra por nombre case-insensitive sobre clientes y préstamos agregados', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([
+      makeRegistro({ id: 1, clienteId: 1, montoPendiente: 40000, cliente: { id: 1, nombre: 'Ana Gómez' } }),
+      makeRegistro({ id: 2, clienteId: 2, montoPendiente: 30000, cliente: { id: 2, nombre: 'Bety Ruiz' } }),
+    ]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([
+      [
+        makePrestamo({ id: 30, saldoPendiente: 90000, usuario: { id: 5, nombre: 'Eder Luna' } }),
+        makePrestamo({ id: 31, saldoPendiente: 10000, usuario: { id: 6, nombre: 'Gina' } }),
+      ],
+      2,
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0, nombre: 'ana' });
+
+    // Coincide "Ana Gómez" (case-insensitive) y no el resto.
+    expect(result.meta).toEqual({ page: 1, limit: 0, total: 1, totalPages: 1 });
+    expect(result.data.map((f) => f.nombre)).toEqual(['Ana Gómez']);
+  });
+
+  it('aplica el filtro por nombre ANTES de paginar (total refleja el conjunto filtrado)', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([
+      makeRegistro({ id: 1, clienteId: 1, montoPendiente: 40000, cliente: { id: 1, nombre: 'Ana Gómez' } }),
+      makeRegistro({ id: 2, clienteId: 2, montoPendiente: 30000, cliente: { id: 2, nombre: 'Anabel Diaz' } }),
+      makeRegistro({ id: 3, clienteId: 3, montoPendiente: 20000, cliente: { id: 3, nombre: 'Bety Ruiz' } }),
+    ]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([[], 0]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 1, nombre: 'AN' });
+
+    expect(result.meta).toEqual({ page: 1, limit: 1, total: 2, totalPages: 2 });
+    expect(result.data).toHaveLength(1);
+    // Orden previo (deudaTotal DESC) preservado dentro del subconjunto filtrado.
+    expect(result.data[0].nombre).toBe('Ana Gómez');
+  });
+
+  it('ignora el filtro cuando nombre viene vacío o solo con espacios', async () => {
+    mockRegistroRepo.findConDeudaBySalon.mockResolvedValue([
+      makeRegistro({ id: 1, clienteId: 1, montoPendiente: 40000, cliente: { id: 1, nombre: 'Ana Gómez' } }),
+    ]);
+    mockPrestamoRepo.findBySalon.mockResolvedValue([[], 0]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0, nombre: '   ' });
+
+    expect(result.meta.total).toBe(1);
+    expect(result.data[0].nombre).toBe('Ana Gómez');
+  });
 });

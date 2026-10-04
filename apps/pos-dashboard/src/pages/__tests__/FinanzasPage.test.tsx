@@ -177,6 +177,9 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     gastosPorCategoria: { ARRIENDO: 200000, SERVICIOS_PUBLICOS: 80000 },
     totalGastos: 280000,
     devoluciones: 20000,
+    contribucion: 42000,
+    gastosNegocio: 280000,
+    devolucionesNegocio: 20000,
     utilidadNeta: -93000,
     cobrado: 150000,
     fiadoPeriodo: 100000,
@@ -251,6 +254,76 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(screen.getByText(fmt(60000))).toBeInTheDocument(); // insumos
     expect(screen.getByText(fmt(20000))).toBeInTheDocument(); // devoluciones
     expect(screen.getByText(fmt(-93000))).toBeInTheDocument(); // utilidad neta
+    // Sin filtro de empleada se conserva el layout salon-wide: Gastos/Devoluciones
+    // totales y utilidad neta, SIN el desglose "Del salón".
+    expect(screen.getByText(fmt(280000))).toBeInTheDocument(); // gastos salon-wide (200000 + 80000)
+    expect(screen.getByText('📊 Utilidad neta')).toBeInTheDocument();
+    expect(screen.queryByText('🏠 Del salón (no se descuenta a la empleada)')).toBeNull();
+    expect(screen.queryByText('👤 Contribución (resultado de la empleada)')).toBeNull();
+  });
+
+  it('con filtro de empleada muestra su contribución y los gastos/devoluciones del salón en un grupo aparte', async () => {
+    const pylFiltrado = {
+      ...pylData,
+      cantidadAtenciones: 2,
+      contribucion: 80000,
+      gastosNegocio: 280000,
+      devolucionesNegocio: 20000,
+      utilidadNeta: 80000, // con filtro de empleada la API devuelve contribución
+    };
+
+    mockGet.mockImplementation(
+      (url: string, config?: { params?: Record<string, string> }) => {
+        if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+        if (url.includes('/caja/actual')) return Promise.reject(error404);
+        if (url.includes('/finanzas/pyl')) {
+          const filtrado = config?.params?.usuarioId != null;
+          return Promise.resolve({ data: filtrado ? pylFiltrado : pylData });
+        }
+        if (url.includes('/finanzas/roi')) {
+          return Promise.resolve({
+            data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+          });
+        }
+        if (url.includes('/empleadas')) {
+          return Promise.resolve({ data: [{ id: 4, nombre: 'Manicurista Test' }] });
+        }
+        return Promise.resolve({ data: {} });
+      },
+    );
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '📊 Reportes' }));
+    await screen.findByText('💰 Ingresos brutos');
+
+    // Seleccionar la empleada en el filtro (dispara el refetch con usuarioId)
+    fireEvent.focus(screen.getByPlaceholderText('🔍 Buscar empleada...'));
+    fireEvent.click(await screen.findByRole('option', { name: /Manicurista Test/ }));
+
+    await waitFor(() => {
+      const calls = mockGet.mock.calls.filter(([url]) =>
+        String(url).includes('/finanzas/pyl'),
+      );
+      expect(calls[calls.length - 1][1].params).toMatchObject({ usuarioId: '4' });
+    });
+
+    // Contribución de la empleada (cobrado − insumos − comisiones)
+    expect(
+      await screen.findByText('👤 Contribución (resultado de la empleada)'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(fmt(80000))).toBeInTheDocument();
+
+    // Gastos/devoluciones del salón en grupo separado y etiquetado
+    expect(
+      screen.getByText('🏠 Del salón (no se descuenta a la empleada)'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('💸 Gastos del salón')).toBeInTheDocument();
+    expect(screen.getByText('↩️ Devoluciones del salón')).toBeInTheDocument();
+    expect(screen.getByText(fmt(280000))).toBeInTheDocument(); // gastosNegocio
+    expect(screen.getByText(fmt(20000))).toBeInTheDocument(); // devolucionesNegocio
+
+    // En modo filtrado no se muestra la utilidad neta salon-wide
+    expect(screen.queryByText('📊 Utilidad neta')).toBeNull();
   });
 
   it('P&L cash-basis: muestra Cobrado, Fiado del período y Deudas por cobrar (PR2)', async () => {
@@ -271,7 +344,12 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(screen.getByText(fmt(150000))).toBeInTheDocument(); // cobrado
     expect(screen.getByText('🧾 Fiado del período')).toBeInTheDocument();
     expect(screen.getByText(fmt(100000))).toBeInTheDocument(); // fiadoPeriodo
-    expect(screen.getByText('📌 Deudas por cobrar')).toBeInTheDocument();
+    // La deuda por cobrar es un snapshot acumulado a la fecha Hasta: se movió
+    // fuera de "Dinero de caja" a su propia sección de cuentas por cobrar.
+    expect(screen.getByText('📌 Cuentas por cobrar')).toBeInTheDocument();
+    expect(
+      screen.getByText('📌 Deudas por cobrar al 2026-05-31 (acumulado)'),
+    ).toBeInTheDocument();
     expect(screen.getByText(fmt(210000))).toBeInTheDocument(); // deudasPorCobrar
   });
 
@@ -334,11 +412,12 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
       return Promise.resolve({ data: {} });
     });
 
-    // Desde arranca en el 1° del mes actual y Hasta en hoy (pueden coincidir
-    // si hoy es el 1° del mes → ambos inputs tienen el mismo display value).
-    const dateInputs = await screen.findAllByDisplayValue(firstOfMonthStr);
-    fireEvent.change(dateInputs[0], { target: { value: '2026-05-01' } });
-    fireEvent.change(dateInputs[1], { target: { value: '2026-05-31' } });
+    // Los inputs de rango del P&L se toman por su label (robusto a la fecha
+    // de hoy: antes se asumía que "Hasta" también mostraba el 1° del mes).
+    const desdeInput = (await screen.findByLabelText(/^Desde:$/i)) as HTMLInputElement;
+    const hastaInput = (await screen.findByLabelText(/^Hasta:$/i)) as HTMLInputElement;
+    fireEvent.change(desdeInput, { target: { value: '2026-05-01' } });
+    fireEvent.change(hastaInput, { target: { value: '2026-05-31' } });
 
     await waitFor(() => {
       const calls = mockGet.mock.calls.filter(([url]) =>
@@ -397,7 +476,7 @@ describe('FinanzasPage — resumen cash del día (Cobrado / Fiado del período, 
   });
 });
 
-describe('FinanzasPage — Registros: tarjeta Total insumos por rol (PR2)', () => {
+describe('FinanzasPage — Registros: tarjetas movidas a Reportes (T4)', () => {
   const fmt = (n: number) =>
     new Intl.NumberFormat('es-CO', {
       style: 'currency',
@@ -433,16 +512,26 @@ describe('FinanzasPage — Registros: tarjeta Total insumos por rol (PR2)', () =
     mockDelete.mockReset();
   });
 
-  it('DUEÑA ve la tarjeta "Total insumos" con el valor del resumen', async () => {
-    resumenApiMock(duena, { totalIngresos: 555000, totalCostoBaseInsumos: 84000 });
+  it('DUEÑA: el resumen del período ya no muestra Servicios/Productos/Total insumos', async () => {
+    resumenApiMock(duena, {
+      totalIngresos: 555000,
+      totalServicios: 270000,
+      totalProductos: 45000,
+      totalCostoBaseInsumos: 84000,
+    });
 
     renderPage();
 
-    expect(await screen.findByText('🧴 Total insumos')).toBeInTheDocument();
-    expect(screen.getByText(fmt(84000))).toBeInTheDocument();
+    expect(await screen.findByTestId('card-ventas-dia')).toBeInTheDocument();
+    // T4: las tres tarjetas se fueron a Reportes.
+    expect(screen.queryByText('💇 Servicios')).not.toBeInTheDocument();
+    expect(screen.queryByText('🧴 Productos')).not.toBeInTheDocument();
+    expect(screen.queryByText('🧴 Total insumos')).not.toBeInTheDocument();
+    // El resumen se consultó: la ausencia se decide con datos reales.
+    expect(screen.queryByText(fmt(84000))).not.toBeInTheDocument();
   });
 
-  it('RECEPCIONISTA no ve la tarjeta "Total insumos" ni el tab Reportes', async () => {
+  it('RECEPCIONISTA no ve las tarjetas retiradas ni el tab Reportes', async () => {
     resumenApiMock(
       { ...duena, id: 5, rol: Rol.RECEPCIONISTA },
       { totalIngresos: 555000, totalCostoBaseInsumos: 84000 },
@@ -457,6 +546,8 @@ describe('FinanzasPage — Registros: tarjeta Total insumos por rol (PR2)', () =
       ).toBe(true),
     );
     expect(screen.queryByText('🧴 Total insumos')).not.toBeInTheDocument();
+    expect(screen.queryByText('💇 Servicios')).not.toBeInTheDocument();
+    expect(screen.queryByText('🧴 Productos')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '📊 Reportes' })).not.toBeInTheDocument();
   });
 });
@@ -1009,6 +1100,76 @@ describe('FinanzasPage — tab Cuentas (por cobrar / por pagar)', () => {
     expect(await screen.findByText(/error al cargar las cuentas/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
   });
+
+  it('Cobrar: filtra por nombre (debounced), envía el query param y resetea a página 1', async () => {
+    await openCuentasTab((url) => {
+      // total 25 → habilita la paginación (3 páginas)
+      if (url.includes('/finanzas/cuentas/cobrar')) return Promise.resolve(cuentasResponse(cuentasCobrar, 25));
+      return cuentasApiMock(url);
+    });
+    await screen.findByText('Ana Gómez');
+
+    // Ir a página 2 antes de buscar
+    fireEvent.click(screen.getByRole('button', { name: /siguiente/i }));
+    await waitFor(() => {
+      const calls = mockGet.mock.calls.filter(([u]) => String(u).includes('/finanzas/cuentas/cobrar'));
+      expect(calls[calls.length - 1][1].params).toMatchObject({ page: 2 });
+    });
+
+    fireEvent.change(screen.getByLabelText('Buscar deuda por cliente o préstamo'), {
+      target: { value: 'ana' },
+    });
+
+    await waitFor(
+      () => {
+        const calls = mockGet.mock.calls.filter(([u]) => String(u).includes('/finanzas/cuentas/cobrar'));
+        expect(calls[calls.length - 1][1].params).toMatchObject({ page: 1, nombre: 'ana' });
+      },
+      { timeout: 2000 },
+    );
+  });
+
+  it('Pagar: filtra por nombre (debounced) y envía el query param', async () => {
+    await openCuentasTab();
+    fireEvent.click(screen.getByRole('button', { name: /por pagar/i }));
+    await screen.findByText('María Torres');
+
+    fireEvent.change(screen.getByLabelText('Buscar empleada por nombre'), {
+      target: { value: 'sofía' },
+    });
+
+    await waitFor(
+      () => {
+        const calls = mockGet.mock.calls.filter(([u]) => String(u).includes('/finanzas/cuentas/pagar'));
+        expect(calls[calls.length - 1][1].params).toMatchObject({ page: 1, nombre: 'sofía' });
+      },
+      { timeout: 2000 },
+    );
+  });
+
+  it('Cobrar: limpiar el buscador envía la consulta sin el filtro nombre', async () => {
+    await openCuentasTab();
+    await screen.findByText('Ana Gómez');
+
+    const input = screen.getByLabelText('Buscar deuda por cliente o préstamo');
+    fireEvent.change(input, { target: { value: 'ana' } });
+    await waitFor(
+      () => {
+        const calls = mockGet.mock.calls.filter(([u]) => String(u).includes('/finanzas/cuentas/cobrar'));
+        expect(calls[calls.length - 1][1].params).toMatchObject({ nombre: 'ana' });
+      },
+      { timeout: 2000 },
+    );
+
+    fireEvent.change(input, { target: { value: '' } });
+    await waitFor(
+      () => {
+        const calls = mockGet.mock.calls.filter(([u]) => String(u).includes('/finanzas/cuentas/cobrar'));
+        expect(calls[calls.length - 1][1].params).not.toHaveProperty('nombre');
+      },
+      { timeout: 2000 },
+    );
+  });
 });
 
 describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () => {
@@ -1060,6 +1221,143 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
     expect(
       await screen.findByText('Período QUINCENAL · 01/08/2026 → 15/08/2026'),
     ).toBeInTheDocument();
+  });
+
+  it('filtra los pendientes por empleada (con opción "Todas")', async () => {
+    const rows = [
+      {
+        empleadaId: 1,
+        nombre: 'Ana',
+        totalComisionesPendientes: 100000,
+        totalPropinas: 0,
+        bonoHorario: 0,
+        sueldoFijo: 0,
+        sueldoFijoMensual: 0,
+        porcentajeComisionServicio: 0,
+        totalAPagar: 100000,
+        cantidadRegistros: 3,
+        periodoInicio: '2026-08-01T05:00:00.000Z',
+        periodoFin: '2026-08-16T05:00:00.000Z',
+        frecuenciaPago: 'QUINCENAL',
+      },
+      {
+        empleadaId: 2,
+        nombre: 'Beto',
+        totalComisionesPendientes: 200000,
+        totalPropinas: 0,
+        bonoHorario: 0,
+        sueldoFijo: 0,
+        sueldoFijoMensual: 0,
+        porcentajeComisionServicio: 0,
+        totalAPagar: 200000,
+        cantidadRegistros: 7,
+        periodoInicio: '2026-08-01T05:00:00.000Z',
+        periodoFin: '2026-08-16T05:00:00.000Z',
+        frecuenciaPago: 'QUINCENAL',
+      },
+    ];
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: [] });
+      if (url.includes('/finanzas/nomina')) return Promise.resolve({ data: rows });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+
+    // Both employee cards are visible by default.
+    expect(await screen.findByText('3 servicios realizados')).toBeInTheDocument();
+    expect(screen.getByText('7 servicios realizados')).toBeInTheDocument();
+
+    const select = screen.getByLabelText('Filtrar por empleada');
+    expect(within(select).getByRole('option', { name: 'Todas' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: 'Ana' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: 'Beto' })).toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: '1' } });
+    expect(screen.getByText('3 servicios realizados')).toBeInTheDocument();
+    expect(screen.queryByText('7 servicios realizados')).not.toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: '2' } });
+    expect(screen.queryByText('3 servicios realizados')).not.toBeInTheDocument();
+    expect(screen.getByText('7 servicios realizados')).toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: '' } });
+    expect(screen.getByText('3 servicios realizados')).toBeInTheDocument();
+    expect(screen.getByText('7 servicios realizados')).toBeInTheDocument();
+  });
+
+  it('el filtro por empleada también aplica al historial de liquidaciones', async () => {
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      })
+        .format(n)
+        .replace(/\u00a0/g, ' ');
+
+    const historialRows = [
+      {
+        id: 101,
+        usuarioId: 1,
+        totalComisiones: 0,
+        totalPropinas: 0,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        totalPagado: 111111,
+        fechaDesde: '2026-08-01T05:00:00.000Z',
+        fechaHasta: '2026-08-16T05:00:00.000Z',
+        creadoEn: '2026-08-16T12:00:00.000Z',
+      },
+      {
+        id: 102,
+        usuarioId: 2,
+        totalComisiones: 0,
+        totalPropinas: 0,
+        sueldoFijo: 0,
+        bonoHorario: 0,
+        totalPagado: 222222,
+        fechaDesde: '2026-08-01T05:00:00.000Z',
+        fechaHasta: '2026-08-16T05:00:00.000Z',
+        creadoEn: '2026-08-16T12:00:00.000Z',
+      },
+    ];
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: historialRows });
+      if (url.includes('/finanzas/nomina')) return Promise.resolve({ data: [] });
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }, { id: 2, nombre: 'Beto' }] });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Historial' }));
+
+    expect(await screen.findByText(fmt(111111))).toBeInTheDocument();
+    expect(screen.getByText(fmt(222222))).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filtrar por empleada'), { target: { value: '1' } });
+
+    // After filtering, only Ana's liquidation remains (the amount also shows in "Total filtrado").
+    expect(screen.getAllByText(fmt(111111)).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(fmt(222222))).not.toBeInTheDocument();
   });
 });
 
@@ -1275,6 +1573,30 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     fireEvent.change(descuentoInput, { target: { value: '50000' } });
     expect(screen.getByDisplayValue('50.000')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('150.000')).not.toBeInTheDocument();
+  });
+
+  it('quita la tarjeta y la fila de Propinas de la auditoría (el salón no acepta propinas)', async () => {
+    auditApiMock();
+    await openAuditModal();
+
+    const dialog = screen.getByRole('dialog', { name: 'Auditoría pre-liquidación' });
+    // No tip card and no tip line inside the modal.
+    expect(within(dialog).queryByText('Propinas')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('🎁')).not.toBeInTheDocument();
+
+    // Total bruto no longer includes tips: 50000 comisiones + 62500 bono+sueldo.
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      })
+        .format(n)
+        .replace(/\u00a0/g, ' ');
+    expect(within(dialog).getByText('Total bruto')).toBeInTheDocument();
+    expect(within(dialog).getByText(fmt(112500))).toBeInTheDocument();
+    expect(within(dialog).queryByText(fmt(117500))).not.toBeInTheDocument();
   });
 });
 
@@ -1912,7 +2234,8 @@ describe('FinanzasPage — Nómina: insumo informativo por rol (PR3)', () => {
   async function openNomina() {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
-    await screen.findByText('Lucía');
+    // The employee filter renders names as <option>, so 'Lucía' is no longer unique.
+    await screen.findAllByText('Lucía');
   }
 
   beforeEach(() => {
@@ -2206,7 +2529,9 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
 
     const tira = await screen.findByTestId('tira-reconciliacion');
     expect(within(tira).getByText('Entró a caja')).toBeInTheDocument();
-    expect(within(tira).getByText('TU CAJA REAL (sin propinas)')).toBeInTheDocument();
+    // T3: propina rows are hidden while propinas are not accepted.
+    expect(within(tira).queryByText('TU CAJA REAL (sin propinas)')).not.toBeInTheDocument();
+    expect(within(tira).queryByText('Propinas (van a las chicas)')).not.toBeInTheDocument();
   });
 
   it('oculta las filas de componente en 0 y mantiene los cierres', async () => {
@@ -2225,17 +2550,21 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     expect(within(tira).queryByText('Deudas viejas que te pagaron')).not.toBeInTheDocument();
     expect(within(tira).queryByText('Propinas')).not.toBeInTheDocument();
     expect(within(tira).getByText('Entró a caja')).toBeInTheDocument();
-    expect(within(tira).getByText('Propinas (van a las chicas)')).toBeInTheDocument();
-    expect(within(tira).getByText('TU CAJA REAL (sin propinas)')).toBeInTheDocument();
+    // T3: the propina closing rows are hidden from the UI.
+    expect(within(tira).queryByText('Propinas (van a las chicas)')).not.toBeInTheDocument();
+    expect(within(tira).queryByText('TU CAJA REAL (sin propinas)')).not.toBeInTheDocument();
   });
 
-  it('TU CAJA REAL = Entró a caja − Propinas', async () => {
+  it('T3: la fila "TU CAJA REAL" no se renderiza (lógica de la tira intacta, ocultamiento reversible)', async () => {
     mockResumen(duena, { totalCobrado: 940000, totalPropinas: 5000 });
 
     renderPage();
 
     await screen.findByTestId('tira-reconciliacion');
-    expect(within(screen.getByTestId('tira-row-caja-real')).getByText(fmt(935000))).toBeInTheDocument();
+    expect(screen.queryByTestId('tira-row-caja-real')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tira-row-propinas-cierre')).not.toBeInTheDocument();
+    // "Entró a caja" sigue visible como último cierre.
+    expect(within(screen.getByTestId('tira-row-cobrado')).getByText(fmt(940000))).toBeInTheDocument();
   });
 
   it('reconcilia el día completo en orden (identidad del owner)', async () => {
@@ -2253,21 +2582,20 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     const rowKeys = within(tira)
       .getAllByTestId(/^tira-row-/)
       .map((el) => el.getAttribute('data-testid'));
+    // T3: propinas-cierre and caja-real are hidden; the component row remains
+    // because its value is non-zero.
     expect(rowKeys).toEqual([
       'tira-row-ventas',
       'tira-row-fiado',
       'tira-row-cobros-anteriores',
       'tira-row-propinas',
       'tira-row-cobrado',
-      'tira-row-propinas-cierre',
-      'tira-row-caja-real',
     ]);
     expect(within(screen.getByTestId('tira-row-ventas')).getByText(fmt(100000))).toBeInTheDocument();
     expect(within(screen.getByTestId('tira-row-fiado')).getByText(fmt(40000))).toBeInTheDocument();
     expect(within(screen.getByTestId('tira-row-cobros-anteriores')).getByText(fmt(20000))).toBeInTheDocument();
     expect(within(screen.getByTestId('tira-row-propinas')).getByText(fmt(5000))).toBeInTheDocument();
     expect(within(screen.getByTestId('tira-row-cobrado')).getByText(fmt(85000))).toBeInTheDocument();
-    expect(within(screen.getByTestId('tira-row-caja-real')).getByText(fmt(80000))).toBeInTheDocument();
   });
 
   it('resumen vacío → tira con cierres en $0 y sin componentes', async () => {
@@ -2278,7 +2606,7 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     const tira = await screen.findByTestId('tira-reconciliacion');
     expect(within(tira).getByText('Entró a caja')).toBeInTheDocument();
     expect(within(screen.getByTestId('tira-row-cobrado')).getByText(fmt(0))).toBeInTheDocument();
-    expect(within(screen.getByTestId('tira-row-caja-real')).getByText(fmt(0))).toBeInTheDocument();
+    expect(screen.queryByTestId('tira-row-caja-real')).not.toBeInTheDocument();
     expect(within(tira).queryByText('Ventas del día')).not.toBeInTheDocument();
   });
 
@@ -2290,8 +2618,8 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     const tira = await screen.findByTestId('tira-reconciliacion');
     expect(tira.closest('[class*="summaryCard"]')).toBeNull();
     expect(screen.queryByText('🎁 Propinas')).not.toBeInTheDocument();
-    // Tarjetas del resumen para DUEÑA (6 tras quitar "📦 Productos vendidos")
-    expect(container.querySelectorAll('[class*="summaryCard"]')).toHaveLength(6);
+    // Tarjetas del resumen para DUEÑA (3 tras quitar Servicios/Productos/Insumos, T4)
+    expect(container.querySelectorAll('[class*="summaryCard"]')).toHaveLength(3);
   });
 
   it('las tarjetas Ventas del día/Entró a caja y la tira siguen visibles para rol no privilegiado', async () => {
@@ -2304,7 +2632,9 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     expect(screen.getByTestId('card-entro-caja')).toBeInTheDocument();
     expect(screen.getByTestId('tira-reconciliacion')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Qué significa Entró a caja' })).toBeInTheDocument();
-    // La tarjeta privilegiada sigue oculta
+    // T4: las tarjetas movidas a Reportes no se renderizan para ningún rol.
+    expect(screen.queryByText('💇 Servicios')).not.toBeInTheDocument();
+    expect(screen.queryByText('🧴 Productos')).not.toBeInTheDocument();
     expect(screen.queryByText('🧴 Total insumos')).not.toBeInTheDocument();
   });
 
@@ -2327,7 +2657,197 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     // ⇒ la tira se encoge sin scroll horizontal y el texto permanece legible.
     expect(container.querySelector('[class*="tiraReconciliacion"]')).not.toBeNull();
     expect(within(tira).getByText('Ventas del día')).toBeInTheDocument();
-    expect(within(tira).getByText('TU CAJA REAL (sin propinas)')).toBeInTheDocument();
+    expect(within(tira).getByText('Entró a caja')).toBeInTheDocument();
+    // T3: propina rows hidden in mobile too.
+    expect(within(tira).queryByText('TU CAJA REAL (sin propinas)')).not.toBeInTheDocument();
     setMobileMedia(false);
+  });
+});
+
+describe('FinanzasPage — detalle del registro (rediseño T2)', () => {
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(n)
+      .replace(/\u00a0/g, ' ');
+
+  const registroDetalle = {
+    id: 77,
+    salonId: 1,
+    clienteId: 1,
+    usuarioId: 2,
+    totalServicios: 60000,
+    totalProductos: 25000,
+    montoTotal: 85000,
+    montoPendiente: 0,
+    propina: 0,
+    comisionCalculada: 18000,
+    esRetoque: false,
+    descripcionServicio: 'Corte y color',
+    estaPagadaEmpleada: false,
+    estado: 'ACTIVO',
+    notas: 'Cliente frecuente',
+    precioAjustado: true,
+    porcentajeDescuento: 10,
+    descuentoAlcance: 'SERVICIOS',
+    valorOriginal: 90000,
+    valorFinal: 85000,
+    fechaHora: '2026-09-10T15:30:00.000Z',
+    creadoEn: '2026-09-10T15:30:00.000Z',
+    actualizadoEn: '2026-09-10T15:30:00.000Z',
+    pagos: [
+      { id: 1, monto: 90000, metodoPago: 'EFECTIVO', referencia: 'REF-1', creadoEn: '2026-09-10T15:30:00.000Z' },
+    ],
+    divisiones: [{ id: 1, usuarioId: 2, porcentajeParticipacion: 60, comisionCorrespondiente: 18000 }],
+    productosVendidos: [
+      { id: 5, productoId: 9, nombre: 'Aceite Argan', cantidad: 1, precioVentaUnitario: 25000, subtotal: 25000 },
+    ],
+    serviciosItems: [
+      { id: 1, servicioId: 1, nombreServicio: 'Corte', precioServicio: 30000, costoBaseInsumos: 1500, gramosUsados: 10, precioPorGramo: 150 },
+      { id: 2, servicioId: 2, nombreServicio: 'Color', precioServicio: 30000, costoBaseInsumos: 2000 },
+    ],
+    _clienteNombre: 'Ana Gómez',
+    _empleadaNombre: 'Dueña Test',
+  };
+
+  function detalleApiMock(registro: Record<string, unknown>) {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: { ok: true, data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({
+          data: { data: [registro], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+        });
+      }
+      if (url.includes('/finanzas/resumen')) return Promise.resolve({ data: {} });
+      return Promise.resolve({ data: {} });
+    });
+  }
+
+  async function openDetail(registro: Record<string, unknown> = registroDetalle) {
+    detalleApiMock(registro);
+    renderPage();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ver detalle' }))[0]);
+    return screen.findByRole('dialog', { name: /Detalle del registro #77/ });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+    setMobileMedia(false);
+  });
+
+  it('muestra header con estado, cliente/empleada y fecha (sin Descripción)', async () => {
+    const dialog = await openDetail();
+
+    expect(within(dialog).getAllByText('Registro #77').length).toBeGreaterThanOrEqual(1);
+    expect(within(dialog).getByText('Activo')).toBeInTheDocument();
+    expect(within(dialog).getByText('Ana Gómez')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('Dueña Test').length).toBeGreaterThanOrEqual(1);
+    expect(within(dialog).getByText(/10\/09\/2026/)).toBeInTheDocument();
+    // La Descripción se quitó: duplicaba los ítems de la tabla.
+    expect(within(dialog).queryByText('Descripción')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Corte y color')).not.toBeInTheDocument();
+  });
+
+  it('presenta los ítems en una tabla con columnas y el detalle de insumos por línea', async () => {
+    const dialog = await openDetail();
+
+    expect(within(dialog).getByText('Ítems del registro')).toBeInTheDocument();
+
+    const table = within(dialog).getByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Concepto' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Cant.' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Precio unit.' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Subtotal' })).toBeInTheDocument();
+
+    expect(within(table).getByText('Corte')).toBeInTheDocument();
+    expect(within(table).getByText('Color')).toBeInTheDocument();
+    // POR_GRAMO line spells out grams × $/g; FIJO line shows the flat cost.
+    expect(within(table).getByText(/Insumos: 10 g/)).toBeInTheDocument();
+    expect(within(table).getByText(/Insumos:.*2\.000/)).toBeInTheDocument();
+  });
+
+  it('muestra el flujo de totales: precio original → descuento (%, alcance) → total final', async () => {
+    const dialog = await openDetail();
+
+    expect(within(dialog).getByText('Aceite Argan')).toBeInTheDocument();
+    // Subtotals live in the items table footer (nothing is lost from the old view).
+    expect(within(dialog).getByText('Subtotal servicios')).toBeInTheDocument();
+    expect(within(dialog).getByText('Subtotal productos')).toBeInTheDocument();
+    expect(within(dialog).getByText('Total ítems')).toBeInTheDocument();
+
+    expect(within(dialog).getByText('Precio original')).toBeInTheDocument();
+    expect(within(dialog).getByText('Descuento')).toBeInTheDocument();
+    // Anchored: the header badge also contains "10% · servicios".
+    expect(within(dialog).getByText(/^10% · servicios$/)).toBeInTheDocument();
+    expect(within(dialog).getByText('Total final')).toBeInTheDocument();
+    expect(within(dialog).getAllByText(fmt(85000)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('sin descuento no muestra el flujo de descuento y conserva los totales limpios', async () => {
+    const dialog = await openDetail({
+      ...registroDetalle,
+      precioAjustado: false,
+      porcentajeDescuento: 0,
+      valorOriginal: 85000,
+      valorFinal: 85000,
+    });
+
+    expect(within(dialog).queryByText('Precio original')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Descuento')).not.toBeInTheDocument();
+    expect(within(dialog).getByText('Total final')).toBeInTheDocument();
+    expect(within(dialog).getByText('Subtotal servicios')).toBeInTheDocument();
+    expect(within(dialog).getByText('Subtotal productos')).toBeInTheDocument();
+  });
+
+  it('muestra los pagos con método/referencia/monto y el cambio', async () => {
+    const dialog = await openDetail();
+
+    expect(within(dialog).getByText('Pagos')).toBeInTheDocument();
+    // "Efectivo" appears in both the payment row and the totals method row.
+    expect(within(dialog).getAllByText('Efectivo').length).toBeGreaterThanOrEqual(1);
+    expect(within(dialog).getByText(/Ref: REF-1/)).toBeInTheDocument();
+    expect(within(dialog).getByText('Cambio:')).toBeInTheDocument();
+  });
+
+  it('usa el nombre legible de la empleada en las divisiones y muestra notas', async () => {
+    const dialog = await openDetail();
+
+    expect(within(dialog).getByText('Divisiones y comisión')).toBeInTheDocument();
+    // usuarioId de la división === usuarioId del registro → nombre legible.
+    expect(within(dialog).getAllByText('Dueña Test').length).toBeGreaterThanOrEqual(2);
+    expect(within(dialog).getByText('60%')).toBeInTheDocument();
+    expect(within(dialog).getByText('Notas')).toBeInTheDocument();
+    expect(within(dialog).getByText('Cliente frecuente')).toBeInTheDocument();
+  });
+
+  it('no muestra la fila de propina cuando es 0', async () => {
+    const dialog = await openDetail();
+    expect(within(dialog).queryByText('Propina')).not.toBeInTheDocument();
+  });
+
+  it('muestra la propina cuando es mayor a 0', async () => {
+    const dialog = await openDetail({ ...registroDetalle, propina: 5000 });
+
+    expect(within(dialog).getByText('Propina')).toBeInTheDocument();
+    expect(within(dialog).getAllByText(fmt(5000)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('muestra el badge "Anulado" para un registro anulado', async () => {
+    const dialog = await openDetail({ ...registroDetalle, estado: 'ANULADO' });
+    expect(within(dialog).getByText('Anulado')).toBeInTheDocument();
   });
 });

@@ -7,6 +7,8 @@ import {
 import { BaseEntity } from './BaseEntity';
 import { PrestamoEntity } from './PrestamoEntity';
 import { LiquidacionEntity } from './LiquidacionEntity';
+import { CajaEntity } from './CajaEntity';
+import { MetodoPago } from './MetodoPago';
 
 export type TipoPagoPrestamo = 'MANUAL' | 'LIQUIDACION';
 
@@ -38,4 +40,17 @@ export class PagoPrestamoEntity extends BaseEntity {
 
   @Column({ type: 'varchar', length: 300, nullable: true })
   observacion: string;
+
+  // Egreso de caja (Rule C). Un pago MANUAL en EFECTIVO sale del cajón y debe
+  // restar del arqueo del día; el método decide si afecta el arqueo (solo
+  // EFECTIVO) igual que en gastos. Columna aditiva nullable/default.
+  @Column({ type: 'enum', enum: MetodoPago, default: MetodoPago.EFECTIVO })
+  metodoPago: MetodoPago;
+
+  @ManyToOne(() => CajaEntity, { nullable: true })
+  @JoinColumn({ name: 'cajaId' })
+  caja: CajaEntity | null;
+
+  @Column({ type: 'int', nullable: true })
+  cajaId: number | null;
 }

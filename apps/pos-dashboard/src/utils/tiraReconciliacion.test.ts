@@ -109,4 +109,13 @@ describe('buildTiraReconciliacion', () => {
     const rows = buildTiraReconciliacion({ totalCobrado: 1000, totalPropinas: 5000 });
     expect(rows.find((r) => r.key === 'caja-real')?.value).toBe(-4000);
   });
+
+  it('T3: el builder sigue emitiendo las filas de propina; la UI las oculta (ocultamiento reversible)', () => {
+    const rows = buildTiraReconciliacion({ totalCobrado: 1000, totalPropinas: 5000 });
+    // The math is preserved here on purpose: FinanzasPage filters these keys
+    // out at render time, so restoring the rows only requires removing that filter.
+    expect(rows.map((r) => r.key)).toContain('propinas-cierre');
+    expect(rows.map((r) => r.key)).toContain('caja-real');
+    expect(rows.find((r) => r.key === 'caja-real')?.value).toBe(-4000);
+  });
 });

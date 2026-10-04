@@ -33,6 +33,15 @@ const mockGastoRepo = {
 const mockPagoRepo = {
   findByCajaConFallback: vi.fn(),
 };
+const mockDevolucionRepo = {
+  findByCajaId: vi.fn(),
+};
+const mockPagoPrestamoRepo = {
+  findByCajaId: vi.fn(),
+};
+const mockLiquidacionRepo = {
+  findByCajaId: vi.fn(),
+};
 
 const cajaAbierta = {
   id: 5,
@@ -69,13 +78,19 @@ describe('CerrarCajaUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: caja sin pagos (arqueo solo con fondo) — cada test sobrescribe
+    // Default: caja sin pagos ni egresos (arqueo solo con fondo) — cada test sobrescribe
     mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
+    mockDevolucionRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoPrestamoRepo.findByCajaId.mockResolvedValue([]);
+    mockLiquidacionRepo.findByCajaId.mockResolvedValue([]);
     useCase = new CerrarCajaUseCase(
       mockCajaRepo as never,
       mockRegistroRepo as never,
       mockGastoRepo as never,
       mockPagoRepo as never,
+      mockDevolucionRepo as never,
+      mockPagoPrestamoRepo as never,
+      mockLiquidacionRepo as never,
     );
   });
 
@@ -140,6 +155,49 @@ describe('CerrarCajaUseCase', () => {
     // Fondo 50000 + abono EFECTIVO 25000 = 75000 esperado
     expect(result.reporte.porMetodoPago.EFECTIVO).toBe(25000);
     expect(result.reporte.montoEsperado).toBe(75000);
+    expect(result.reporte.diferencia).toBe(0);
+  });
+
+  it('Rule B/C: SUMA el cobro de préstamo MANUAL (inflow) y resta devolución + nómina; excluye TRANSFERENCIA y LIQUIDACION', async () => {
+    mockCajaRepo.findBySalonYFecha.mockResolvedValue(cajaAbierta);
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 180000, metodoPago: 'EFECTIVO' }]);
+    mockDevolucionRepo.findByCajaId.mockResolvedValue([
+      { id: 1, montoDevolucion: 20000, metodoPago: 'EFECTIVO' },
+      { id: 2, montoDevolucion: 9999, metodoPago: 'TRANSFERENCIA' }, // no toca el cajón
+    ]);
+    mockPagoPrestamoRepo.findByCajaId.mockResolvedValue([
+      { id: 1, monto: 15000, metodoPago: 'EFECTIVO', tipoPago: 'MANUAL' }, // INFLOW
+      { id: 2, monto: 5000, metodoPago: 'EFECTIVO', tipoPago: 'LIQUIDACION' }, // ya neto en la liquidación
+    ]);
+    mockLiquidacionRepo.findByCajaId.mockResolvedValue([
+      { id: 1, totalPagado: 25000, metodoPago: 'EFECTIVO' },
+    ]);
+    mockCajaRepo.cerrar.mockResolvedValue(true);
+
+    const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 200000 });
+
+    // 50000 fondo + 180000 EFECTIVO + 15000 cobro préstamo − 20000 dev. − 25000 nómina = 200000
+    expect(result.reporte.montoEsperado).toBe(200000);
+    expect(result.reporte.diferencia).toBe(0);
+  });
+
+  it('Rule C: un cobro de préstamo por TRANSFERENCIA no mueve el cajón pero se reporta en el breakdown', async () => {
+    mockCajaRepo.findBySalonYFecha.mockResolvedValue(cajaAbierta);
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
+    mockPagoPrestamoRepo.findByCajaId.mockResolvedValue([
+      { id: 1, monto: 30000, metodoPago: 'TRANSFERENCIA', tipoPago: 'MANUAL' },
+    ]);
+    mockCajaRepo.cerrar.mockResolvedValue(true);
+
+    const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 50000 });
+
+    // El cajón solo tiene el fondo (la transferencia no entra al efectivo)
+    expect(result.reporte.montoEsperado).toBe(50000);
+    expect(result.reporte.porMetodoPago.TRANSFERENCIA).toBe(30000);
     expect(result.reporte.diferencia).toBe(0);
   });
 

@@ -78,6 +78,8 @@ export class PrestamoController {
         monto: Number(req.body.monto),
         observacion: req.body.observacion,
         tipoPago: 'MANUAL',
+        // Opcional: si el schema no lo envía, el use case asume EFECTIVO.
+        metodoPago: req.body.metodoPago,
       });
       res.status(201).json(result);
     } catch (error) {

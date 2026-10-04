@@ -1036,7 +1036,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
           <motion.div data-testid="detalle-cierre-modal" className="mobileBottomSheet" style={overlayStyle} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={(e) => { if (e.target === e.currentTarget) setDetalleOpen(false); }}>
             <motion.div
               className="mobileBottomSheetContent"
-              style={{ ...modalStyle, maxWidth: 640 }}
+              /* Wider on desktop so the full movement table fits; on ≤600px the
+                 global `.mobileBottomSheetContent` rule forces max-width:100%. */
+              style={{ ...modalStyle, maxWidth: 920 }}
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}

@@ -46,6 +46,9 @@ const mockPrestamoRepo = {
   findById: vi.fn(),
 };
 const mockPagoPrestamoRepo = {};
+const mockCajaRepo = {
+  findAbiertaBySalonYFecha: vi.fn(),
+};
 
 const makeEmpleada = (overrides: Record<string, unknown> = {}) => ({
   id: 2,
@@ -85,12 +88,14 @@ describe('LiquidarEmpleadaUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({ id: 77, salonId: 1, estado: 'ABIERTA' });
     useCase = new LiquidarEmpleadaUseCase(
       mockLiquidacionRepo as never,
       mockRegistroRepo as never,
       mockUsuarioRepo as never,
       mockPrestamoRepo as never,
       mockPagoPrestamoRepo as never,
+      mockCajaRepo as never,
     );
   });
 
@@ -137,6 +142,42 @@ describe('LiquidarEmpleadaUseCase', () => {
       expect.anything(),
     );
     expect(result).toEqual(expect.objectContaining({ id: 10, totalPagado: 250000 }));
+  });
+
+  it('Rule C: persiste metodoPago (default EFECTIVO) y la caja abierta para restar la nómina del arqueo', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 10 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 10, totalPagado: 200000 });
+
+    await useCase.execute(baseInput);
+
+    expect(mockCajaRepo.findAbiertaBySalonYFecha).toHaveBeenCalled();
+    expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ metodoPago: 'EFECTIVO', cajaId: 77 }),
+      expect.anything(),
+    );
+  });
+
+  it('Rule C: respeta un metodoPago explícito (TRANSFERENCIA) sin caja', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 10 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 10, totalPagado: 200000 });
+    mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue(null);
+
+    await useCase.execute({ ...baseInput, metodoPago: 'TRANSFERENCIA' as never });
+
+    expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ metodoPago: 'TRANSFERENCIA', cajaId: null }),
+      expect.anything(),
+    );
   });
 
   it('lanza error 4xx cuando hay 0 registros y sueldoFijo/bonoHorario en 0', async () => {
@@ -362,10 +403,21 @@ describe('LiquidarEmpleadaUseCase', () => {
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, sueldoFijo: 200000 }),
     );
-    // Dos registros: uno viejo (antes de la liquidación previa) y uno nuevo (después)
+    // Dos registros: uno viejo (fecha de negocio antes de la liquidación previa) y
+    // uno nuevo (fecha de negocio después). El guard compara fechaHora ?? creadoEn.
     mockRegistroRepo.search.mockResolvedValue([
-      makeRegistro({ id: 1, comisionCalculada: 30000, creadoEn: new Date('2026-08-01T10:00:00') }),
-      makeRegistro({ id: 2, comisionCalculada: 5000, creadoEn: new Date('2026-08-15T10:00:00') }),
+      makeRegistro({
+        id: 1,
+        comisionCalculada: 30000,
+        fechaHora: new Date('2026-08-01T10:00:00'),
+        creadoEn: new Date('2026-08-01T10:00:00'),
+      }),
+      makeRegistro({
+        id: 2,
+        comisionCalculada: 5000,
+        fechaHora: new Date('2026-08-15T10:00:00'),
+        creadoEn: new Date('2026-08-15T10:00:00'),
+      }),
     ]);
     mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
       { id: 10, creadoEn: new Date('2026-08-10T10:00:00') },
@@ -389,12 +441,13 @@ describe('LiquidarEmpleadaUseCase', () => {
     expect(result).toEqual(expect.objectContaining({ id: 13, totalPagado: 205000 }));
   });
 
-  it('liquida registros backfilleados: el período lo filtra el repo (COALESCE) y el guard anti-doble-pago usa creadoEn', async () => {
+  it('rechaza re-liquidar un registro backfilleado cuya fecha de negocio ya fue cubierta por la liquidación previa', async () => {
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, sueldoFijo: 200000 }),
     );
-    // El repo (mocked) ya filtró por fechaHora (COALESCE): devuelve el registro
-    // backfilleado con fechaHora 05/08 pero creadoEn 15/08 (después de la liquidación 10/08).
+    // Backfill: fecha de negocio 05/08 (ya cubierta por la liquidación creada el
+    // 10/08), pero creadoEn 15/08 (posterior). El guard debe usar la fecha de
+    // negocio (fechaHora ?? creadoEn) para no re-liquidar y pagar dos veces.
     mockRegistroRepo.search.mockResolvedValue([
       makeRegistro({
         id: 1,
@@ -406,18 +459,37 @@ describe('LiquidarEmpleadaUseCase', () => {
     mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
       { id: 10, creadoEn: new Date('2026-08-10T10:00:00') },
     ]);
-    mockLiquidacionRepo.create.mockResolvedValue({ id: 14 });
-    mockLiquidacionRepo.findById.mockResolvedValue({ id: 14, totalPagado: 230000 });
+
+    await expect(useCase.execute(baseInput)).rejects.toThrow(/ya fue liquidada en el período/);
+    expect(mockLiquidacionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('liquida registros backfilleados con fecha de negocio posterior a la última liquidación', async () => {
+    mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
+      makeEmpleada({ id: 2, sueldoFijo: 200000 }),
+    );
+    // Fecha de negocio 15/08 (posterior a la liquidación del 10/08) → se liquida.
+    mockRegistroRepo.search.mockResolvedValue([
+      makeRegistro({
+        id: 1,
+        comisionCalculada: 30000,
+        fechaHora: new Date('2026-08-15T10:00:00'),
+        creadoEn: new Date('2026-08-20T10:00:00'),
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
+      { id: 10, creadoEn: new Date('2026-08-10T10:00:00') },
+    ]);
+    mockLiquidacionRepo.create.mockResolvedValue({ id: 15 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 15, totalPagado: 230000 });
 
     const result = await useCase.execute(baseInput);
 
-    // Guard: creadoEn (15/08) > última liquidación (10/08) → se mantiene pese a
-    // que su fecha de negocio (05/08) es anterior a la liquidación.
     expect(mockLiquidacionRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({ totalComisiones: 30000, totalPagado: 230000 }),
       expect.anything(),
     );
-    expect(result).toEqual(expect.objectContaining({ id: 14, totalPagado: 230000 }));
+    expect(result).toEqual(expect.objectContaining({ id: 15, totalPagado: 230000 }));
   });
 
   it('liquida a empleada QUINCENAL prorrateando el comp fijo por días del período (coherente con NominaPendiente)', async () => {

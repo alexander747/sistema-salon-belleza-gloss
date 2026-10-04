@@ -33,6 +33,15 @@ const mockGastoRepo = {
 const mockPagoRepo = {
   findByCajaConFallback: vi.fn(),
 };
+const mockDevolucionRepo = {
+  findByCajaId: vi.fn(),
+};
+const mockPagoPrestamoRepo = {
+  findByCajaId: vi.fn(),
+};
+const mockLiquidacionRepo = {
+  findByCajaId: vi.fn(),
+};
 
 describe('ListarCierresCajaUseCase', () => {
   let useCase: ListarCierresCajaUseCase;
@@ -118,11 +127,17 @@ describe('ObtenerEsperadoCajaUseCase', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
+    mockDevolucionRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoPrestamoRepo.findByCajaId.mockResolvedValue([]);
+    mockLiquidacionRepo.findByCajaId.mockResolvedValue([]);
     useCase = new ObtenerEsperadoCajaUseCase(
       mockCajaRepo as never,
       mockRegistroRepo as never,
       mockGastoRepo as never,
       mockPagoRepo as never,
+      mockDevolucionRepo as never,
+      mockPagoPrestamoRepo as never,
+      mockLiquidacionRepo as never,
     );
   });
 
@@ -166,6 +181,35 @@ describe('ObtenerEsperadoCajaUseCase', () => {
     expect(mockPagoRepo.findByCajaConFallback).toHaveBeenCalledWith(5);
     // preview no debe cerrar la caja
     expect(mockCajaRepo.listBySalonPaginated).not.toHaveBeenCalled();
+  });
+
+  it('Rule C (corregido): un cobro de préstamo MANUAL EFECTIVO SUMA al esperado del preview', async () => {
+    mockCajaRepo.findAbiertaBySalonYFecha.mockResolvedValue({
+      id: 5,
+      salonId: 1,
+      fechaCaja: '2026-08-16',
+      montoInicial: 50000,
+      estado: 'ABIERTA',
+      aperturaPorId: 9,
+      aperturaEn: new Date(),
+      cierrePorId: null,
+      cierreEn: null,
+      montoEsperado: null,
+      montoRealEfectivo: null,
+      diferencia: null,
+    });
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 100000, metodoPago: 'EFECTIVO' }]);
+    mockPagoPrestamoRepo.findByCajaId.mockResolvedValue([
+      { id: 1, monto: 30000, metodoPago: 'EFECTIVO', tipoPago: 'MANUAL' }, // INFLOW
+    ]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    // fondo 50000 + EFECTIVO 100000 + cobro préstamo 30000 = 180000
+    expect(result.montoEsperado).toBe(180000);
+    expect(result.porMetodoPago.EFECTIVO).toBe(130000);
   });
 
   it('should lanzar CajaNoAbiertaError cuando no hay caja abierta', async () => {

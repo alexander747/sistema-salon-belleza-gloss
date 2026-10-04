@@ -48,7 +48,7 @@ vi.mock('../../../../../../shared/database.js', () => ({
 }));
 
 import { CreateDevolucionUseCase } from '../CreateDevolucionUseCase';
-import { CajaCerradaError, NotFoundError } from '../../../../../../shared/errors';
+import { CajaCerradaError, NotFoundError, UnprocessableEntityError, ValidationError } from '../../../../../../shared/errors';
 
 // ── Repos mockeados ─────────────────────────────────────────────
 
@@ -143,6 +143,54 @@ describe('CreateDevolucionUseCase', () => {
     expect(qr!.commitTransaction).toHaveBeenCalledTimes(1);
   });
 
+  it('persiste metodoPago (default EFECTIVO) y la caja abierta para que el arqueo la reste', async () => {
+    await useCase.execute({
+      salonId: 1,
+      registroServicioId: 10,
+      motivo: 'Reintegro por transferencia',
+      cantidad: 1,
+      montoDevolucion: 30000,
+      regresaAlStock: false,
+      metodoPago: 'TRANSFERENCIA' as never,
+    });
+
+    expect(mockDevolucionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ metodoPago: 'TRANSFERENCIA', cajaId: 5 }),
+      expect.anything(),
+    );
+  });
+
+  it('default EFECTIVO cuando no se especifica metodoPago', async () => {
+    await useCase.execute({
+      salonId: 1,
+      registroServicioId: 10,
+      motivo: 'Reintegro en efectivo',
+      cantidad: 1,
+      montoDevolucion: 30000,
+      regresaAlStock: false,
+    });
+
+    expect(mockDevolucionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ metodoPago: 'EFECTIVO', cajaId: 5 }),
+      expect.anything(),
+    );
+  });
+
+  it('rechaza un metodoPago inválido sin persistir', async () => {
+    await expect(
+      useCase.execute({
+        salonId: 1,
+        registroServicioId: 10,
+        motivo: 'Metodo inválido',
+        cantidad: 1,
+        montoDevolucion: 30000,
+        regresaAlStock: false,
+        metodoPago: 'BITCOIN' as never,
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(mockDevolucionRepo.create).not.toHaveBeenCalled();
+  });
+
   it('es conservadora: nunca resta más del montoPendiente (deuda no negativa)', async () => {
     mockRegistroRepo.findById.mockResolvedValue(makeRegistro({ montoPendiente: 20000 }));
     mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 3, deudaTotal: 20000 });
@@ -212,6 +260,31 @@ describe('CreateDevolucionUseCase', () => {
 
     await expect(promise).rejects.toBeInstanceOf(NotFoundError);
     expect(mockDevolucionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una devolución sobre un registro ANULADO sin reponer stock ni tocar la deuda', async () => {
+    // AnularRegistroUseCase ya repuso el stock, borró las líneas de producto y
+    // dejó montoPendiente/montoTotal en 0: una devolución encima duplicaría el stock.
+    mockRegistroRepo.findById.mockResolvedValue(makeRegistro({ estado: 'ANULADO' }));
+
+    const promise = useCase.execute({
+      salonId: 1,
+      registroServicioId: 10,
+      motivo: 'Devolución sobre venta anulada',
+      cantidad: 2,
+      montoDevolucion: 15000,
+      regresaAlStock: true,
+      productoId: 7,
+    });
+
+    await expect(promise).rejects.toBeInstanceOf(UnprocessableEntityError);
+    expect(mockDevolucionRepo.create).not.toHaveBeenCalled();
+    expect(mockProductoRepo.incrementStock).not.toHaveBeenCalled();
+    expect(mockRegistroRepo.update).not.toHaveBeenCalled();
+    expect(mockRepoUpdate).not.toHaveBeenCalled();
+    // La transacción se revierte
+    expect(mockQrRefs[0]!.rollbackTransaction).toHaveBeenCalledTimes(1);
+    expect(mockQrRefs[0]!.commitTransaction).not.toHaveBeenCalled();
   });
 
   it('hace rollback si algo falla después de la transacción iniciada', async () => {

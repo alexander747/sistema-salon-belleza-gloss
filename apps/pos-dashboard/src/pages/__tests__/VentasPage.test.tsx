@@ -434,20 +434,26 @@ describe('VentasPage — fecha de negocio / backfill (PR3)', () => {
     expect(dateInput.value).toBe(toISODateLocal(new Date()));
   }, 20000);
 
-  it('cobrar sin tocar la fecha envía fechaHora = hoy a las 12:00 local', async () => {
+  it('cobrar sin tocar la fecha envía fechaHora = el momento real de hoy', async () => {
     mockPost.mockResolvedValue({ data: {} });
+    const before = Date.now();
     renderPage();
 
     await cobrarCarrito();
+    const after = Date.now();
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
         '/salones/1/registros',
-        expect.objectContaining({
-          fechaHora: new Date(`${toISODateLocal(new Date())}T12:00:00`).toISOString(),
-        }),
+        expect.objectContaining({ fechaHora: expect.any(String) }),
       );
     });
+
+    // Real now, not the former fixed 12:00 anchor.
+    const [, payload] = mockPost.mock.calls[0] as [string, { fechaHora: string }];
+    const timestamp = new Date(payload.fechaHora).getTime();
+    expect(timestamp).toBeGreaterThanOrEqual(before);
+    expect(timestamp).toBeLessThanOrEqual(after);
   }, 20000);
 
   it('cobrar con fecha pasada envía fechaHora = esa fecha a las 12:00 local (backfill)', async () => {
@@ -646,5 +652,105 @@ describe('VentasPage — fiado y pago parcial (PR3)', () => {
         }),
       );
     });
+  }, 20000);
+});
+
+describe('VentasPage — ajustes de precio opcionales (switch)', () => {
+  const producto = { id: 1, nombre: 'Shampoo', marca: null, precioVenta: 20000, cantidadStock: 10, categoriaId: 1 };
+
+  function cartApiMock() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/productos')) return Promise.resolve({ data: [producto] });
+      if (url.includes('/categorias')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Cliente Test', activo: true }] });
+      }
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'María', activo: true }] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    cartApiMock();
+  });
+
+  it('el switch de descuento arranca OFF y oculta el input de descuento', async () => {
+    renderPage();
+
+    await screen.findByText('Shampoo');
+
+    const toggle = screen.getByLabelText(/agregar descuento por %/i) as HTMLInputElement;
+    expect(toggle).not.toBeChecked();
+    expect(screen.queryByLabelText('Descuento (%)')).not.toBeInTheDocument();
+  }, 20000);
+
+  it('no muestra la sección Propina (tips no longer accepted)', async () => {
+    renderPage();
+
+    await screen.findByText('Shampoo');
+
+    expect(screen.queryByText('Propina')).not.toBeInTheDocument();
+  }, 20000);
+
+  it('activar el switch revela el descuento; el % se aplica al total y al payload (sin propina)', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Shampoo'));
+    const combos = screen.getAllByRole('combobox');
+    fireEvent.change(combos[1], { target: { value: '1' } });
+    fireEvent.change(combos[2], { target: { value: '1' } });
+
+    // OFF → the discount input is not rendered.
+    expect(screen.queryByLabelText('Descuento (%)')).not.toBeInTheDocument();
+
+    // ON → the discount input appears.
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
+    const descInput = await screen.findByLabelText('Descuento (%)');
+    fireEvent.change(descInput, { target: { value: '10' } });
+
+    // 10% off 20.000 = 18.000 (products-only cart → PRODUCTOS is the only scope).
+    expect(screen.getAllByText('$ 18.000').length).toBeGreaterThanOrEqual(1);
+
+    // The adjustment note is required while a discount exists.
+    fireEvent.change(screen.getByPlaceholderText(/motivo del ajuste/i), {
+      target: { value: 'Descuento autorizado' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Cobrar\s+\$\s*18\.000/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          porcentajeDescuento: 10,
+          descuentoAlcance: 'PRODUCTOS',
+        }),
+      );
+    });
+
+    // The payload no longer carries a propina field.
+    const [, payload] = mockPost.mock.calls[0] as [string, Record<string, unknown>];
+    expect(payload).not.toHaveProperty('propina');
+  }, 20000);
+
+  it('apagar el switch resetea el descuento y vuelve a ocultar el input', async () => {
+    renderPage();
+
+    await screen.findByText('Shampoo');
+
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
+    const descInput = await screen.findByLabelText('Descuento (%)');
+    fireEvent.change(descInput, { target: { value: '15' } });
+    expect(screen.getByLabelText('Descuento (%)')).toHaveValue(15);
+
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
+    expect(screen.queryByLabelText('Descuento (%)')).not.toBeInTheDocument();
   }, 20000);
 });

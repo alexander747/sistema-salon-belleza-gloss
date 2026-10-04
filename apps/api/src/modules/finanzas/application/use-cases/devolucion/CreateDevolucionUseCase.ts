@@ -7,9 +7,10 @@ import type { IClienteRepository } from '../../../../personas/domain/ports/IClie
 import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { DevolucionEntity } from '../../../../../infrastructure/persistence/entities/DevolucionEntity';
 import { ClienteEntity } from '../../../../../infrastructure/persistence/entities/ClienteEntity';
+import { MetodoPago } from '../../../../../infrastructure/persistence/entities/MetodoPago';
 import { AppDataSource } from '../../../../../shared/database';
 import { verificarCajaAbierta } from '../../services/verificarCajaAbierta';
-import { NotFoundError } from '../../../../../shared/errors';
+import { NotFoundError, UnprocessableEntityError, ValidationError } from '../../../../../shared/errors';
 
 export interface CreateDevolucionInput {
   salonId: number;
@@ -20,6 +21,8 @@ export interface CreateDevolucionInput {
   regresaAlStock: boolean;
   productoId?: number;
   procesada?: boolean;
+  /** Cómo se reintegró el dinero (default EFECTIVO). */
+  metodoPago?: MetodoPago;
 }
 
 /**
@@ -47,7 +50,14 @@ export class CreateDevolucionUseCase {
 
   async execute(input: CreateDevolucionInput): Promise<DevolucionEntity> {
     // ── 0. Regla de oro: no se devuelve dinero sin caja abierta ──
-    await verificarCajaAbierta(this.cajaRepo, input.salonId);
+    // La caja abierta se conserva: la devolución se liga a ESA caja para que el
+    // arqueo reste su monto cuando el reintegro es EFECTIVO (Rule B).
+    const caja = await verificarCajaAbierta(this.cajaRepo, input.salonId);
+
+    const metodoPago = input.metodoPago ?? MetodoPago.EFECTIVO;
+    if (!['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'].includes(metodoPago)) {
+      throw new ValidationError('Método de pago inválido');
+    }
 
     const qr = AppDataSource.createQueryRunner();
     await qr.connect();
@@ -58,6 +68,15 @@ export class CreateDevolucionUseCase {
       const registro = await this.registroRepo.findById(input.registroServicioId);
       if (!registro) {
         throw new NotFoundError('Registro no encontrado');
+      }
+
+      // Un registro ANULADO ya fue revertido por AnularRegistroUseCase: deuda a 0,
+      // stock repuesto y líneas de producto eliminadas. Una devolución encima
+      // restauraría stock por segunda vez y no tendría deuda que ajustar.
+      if (registro.estado === 'ANULADO') {
+        throw new UnprocessableEntityError(
+          'No se puede crear una devolución sobre un registro anulado',
+        );
       }
 
       const montoPendiente = Number(registro.montoPendiente ?? 0);
@@ -75,6 +94,8 @@ export class CreateDevolucionUseCase {
           regresaAlStock: input.regresaAlStock,
           productoId: input.productoId,
           procesada: input.procesada ?? false,
+          metodoPago,
+          cajaId: caja.id,
         },
         qr,
       );

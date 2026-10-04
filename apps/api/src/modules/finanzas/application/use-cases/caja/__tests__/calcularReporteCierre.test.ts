@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularReporteCierre, type MovimientoCajaInput, type GastoCajaInput, type PagoExtraCajaInput } from '../calcularReporteCierre';
+import { calcularReporteCierre, type MovimientoCajaInput, type GastoCajaInput, type PagoExtraCajaInput, type EgresoCajaInput } from '../calcularReporteCierre';
 import { EstadoRegistro } from '../../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -158,6 +158,54 @@ describe('calcularReporteCierre', () => {
     // Fondo 50000 + ventas EFECTIVO 10000 = 60000 esperado en cajón
     expect(reporte.montoEsperado).toBe(60000);
     expect(reporte.diferencia).toBe(0);
+  });
+
+  it('Rule B/C: resta egresos EFECTIVO (devoluciones + nómina) y excluye TRANSFERENCIA', () => {
+    const registros = [makeRegistro({ totalServicios: 180000 })];
+    const gastos: never[] = [];
+    const pagosExtra = [makePago(180000, 'EFECTIVO')];
+    const egresos: EgresoCajaInput[] = [
+      { monto: 20000, metodoPago: 'EFECTIVO' }, // devolución cash
+      { monto: 25000, metodoPago: 'EFECTIVO' }, // nómina cash
+      { monto: 9999, metodoPago: 'TRANSFERENCIA' }, // no toca el cajón
+    ];
+
+    const reporte = calcularReporteCierre(registros, gastos, 185000, 50000, pagosExtra, egresos);
+
+    // 50000 + 180000 − 20000 − 25000 = 185000
+    expect(reporte.montoEsperado).toBe(185000);
+    expect(reporte.montoReal).toBe(185000);
+    expect(reporte.diferencia).toBe(0);
+  });
+
+  it('Rule C (corregido): el cobro de préstamo (pagosExtra) SUMA al arqueo; la transferencia se reporta pero no mueve el cajón', () => {
+    const registros = [makeRegistro({ totalServicios: 180000 })];
+    const pagosExtra = [
+      makePago(180000, 'EFECTIVO'),
+      makePago(15000, 'EFECTIVO'), // cobro de préstamo cash (INFLOW)
+      makePago(9999, 'TRANSFERENCIA'), // cobro por transferencia: no toca el cajón
+    ];
+
+    const reporte = calcularReporteCierre(registros, [], 245000, 50000, pagosExtra, []);
+
+    // 50000 + 180000 + 15000 = 245000 (la transferencia NO entra al efectivo)
+    expect(reporte.montoEsperado).toBe(245000);
+    expect(reporte.montoReal).toBe(245000);
+    expect(reporte.porMetodoPago.EFECTIVO).toBe(195000);
+    expect(reporte.porMetodoPago.TRANSFERENCIA).toBe(9999);
+  });
+
+  it('Rule B/C: sin egresos el esperado no cambia (default [])', () => {
+    const reporte = calcularReporteCierre(
+      [makeRegistro({ totalServicios: 100000 })],
+      [],
+      150000,
+      50000,
+      [makePago(100000, 'EFECTIVO')],
+      [],
+    );
+
+    expect(reporte.montoEsperado).toBe(150000);
   });
 
   it('should default pagosExtra a [] (fiado total sin pagos): esperado = fondo − gastos EFECTIVO', () => {

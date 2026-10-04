@@ -1,7 +1,10 @@
 import { injectable, inject } from 'tsyringe';
 import type { IPrestamoRepository } from '../../domain/ports/IPrestamoRepository';
 import type { IPagoPrestamoRepository } from '../../domain/ports/IPagoPrestamoRepository';
+import type { ICajaRepository } from '../../../finanzas/domain/ports/ICajaRepository';
 import type { RegistrarPagoInput } from '../dtos/RegistrarPagoDTO';
+import { MetodoPago } from '../../../../infrastructure/persistence/entities/MetodoPago';
+import { getColombiaDateString } from '../../../../shared/colombia-date';
 import { NotFoundError, UnprocessableEntityError, ValidationError } from '../../../../shared/errors';
 
 @injectable()
@@ -11,6 +14,8 @@ export class RegistrarPagoUseCase {
     private readonly prestamoRepo: IPrestamoRepository,
     @inject('IPagoPrestamoRepository')
     private readonly pagoRepo: IPagoPrestamoRepository,
+    @inject('ICajaRepository')
+    private readonly cajaRepo: ICajaRepository,
   ) {}
 
   async execute(input: RegistrarPagoInput): Promise<Record<string, unknown>> {
@@ -28,6 +33,21 @@ export class RegistrarPagoUseCase {
       throw new ValidationError('El monto del pago no puede exceder el saldo pendiente');
     }
 
+    // Rule C (corregido): "Préstamos" son cuentas por COBRAR — el pago del
+    // deudor es un INGRESO. Si es en EFECTIVO ENTRA al cajón y SUMA al arqueo
+    // del día. Se liga a la caja ABIERTA de hoy (si no hay, cajaId NULL — igual
+    // que un ingreso sin caja no entra al arqueo).
+    //
+    // Nuance (follow-up): contablemente solo el INTERÉS de un préstamo es
+    // ingreso operativo; el capital es recuperación de una cuenta por cobrar.
+    // El modelo actual no separa ambos, así que se registra el flujo de caja
+    // completo y se deja la distinción capital/interés como deuda técnica.
+    const metodoPago = input.metodoPago ?? MetodoPago.EFECTIVO;
+    const caja = await this.cajaRepo.findAbiertaBySalonYFecha(
+      prestamo.salonId,
+      getColombiaDateString(),
+    );
+
     const pago = await this.pagoRepo.create({
       prestamoId: input.prestamoId,
       monto: input.monto,
@@ -35,6 +55,8 @@ export class RegistrarPagoUseCase {
       liquidacionId: input.liquidacionId ?? undefined,
       observacion: input.observacion ?? undefined,
       fechaPago: new Date(),
+      metodoPago,
+      cajaId: caja?.id ?? null,
     });
 
     // Actualizar saldo pendiente
@@ -54,6 +76,8 @@ export class RegistrarPagoUseCase {
       tipoPago: pago.tipoPago,
       liquidacionId: pago.liquidacionId,
       observacion: pago.observacion,
+      metodoPago: pago.metodoPago,
+      cajaId: pago.cajaId,
       creadoEn: pago.creadoEn?.toISOString?.() ?? String(pago.creadoEn),
       saldoRestante: Math.max(0, nuevoSaldo),
       nuevoEstado,

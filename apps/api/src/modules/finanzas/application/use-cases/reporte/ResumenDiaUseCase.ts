@@ -1,6 +1,7 @@
 import { injectable, inject } from 'tsyringe';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
+import type { IDevolucionRepository } from '../../../domain/ports/IDevolucionRepository';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { calcularContribucionesRegistro } from './calculo-registro';
 
@@ -32,6 +33,8 @@ export interface ResumenDiaOutput {
    *  (cobros de deuda vieja). Campo NO sensible: presente para todos los roles. */
   cobrosDeudaAnterior: number;
   totalGastos: number;
+  /** Σ montoDevolucion del período por creadoEn (misma base que el P&L). */
+  totalDevoluciones: number;
   balanceNeto: number;
 }
 
@@ -42,6 +45,8 @@ export class ResumenDiaUseCase {
     private readonly registroRepo: IRegistroServicioRepository,
     @inject('IGastoRepository')
     private readonly gastoRepo: IGastoRepository,
+    @inject('IDevolucionRepository')
+    private readonly devolucionRepo: IDevolucionRepository,
   ) {}
 
   async execute(input: ResumenDiaInput): Promise<ResumenDiaOutput> {
@@ -74,7 +79,7 @@ export class ResumenDiaUseCase {
     // The sum keeps spanning the full date range regardless of the input filters.
     const hasFiltroPersona = input.usuarioId !== undefined || input.clienteId !== undefined;
 
-    const [registros, totalGastos, totalCobrado, totalFiadoDia, cobrosDeudaAnterior] = await Promise.all([
+    const [registros, totalGastos, totalDevoluciones, totalCobrado, totalFiadoDia, cobrosDeudaAnterior] = await Promise.all([
       hasFiltroPersona
         ? this.registroRepo.search({
             salonId: input.salonId,
@@ -85,6 +90,9 @@ export class ResumenDiaUseCase {
           })
         : this.registroRepo.findBySalonAndDateRange(input.salonId, inicio, fin),
       this.gastoRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
+      // Devoluciones del período por creadoEn — MISMA base que PyLMensualUseCase,
+      // para que el resumen y el P&L del mismo día concilien.
+      this.devolucionRepo.sumBySalonAndDateRange(input.salonId, inicio, fin),
       // Cash basis: Σ pagos recibidos en el período (pago.creadoEn), con el mismo
       // filtro de empleada/cliente cuando el resumen se filtra por persona.
       this.registroRepo.sumPagosPorPeriodo(input.salonId, inicio, fin, input.usuarioId, input.clienteId),
@@ -150,7 +158,8 @@ export class ResumenDiaUseCase {
       totalCostoBaseInsumos += Math.round(costoBaseItems);
     }
 
-    const balanceNeto = totalIngresos - totalGastos - totalComisiones - totalCostoBaseInsumos;
+    const balanceNeto =
+      totalIngresos - totalGastos - totalComisiones - totalCostoBaseInsumos - totalDevoluciones;
 
     return {
       totalServicios,
@@ -170,6 +179,7 @@ export class ResumenDiaUseCase {
       totalFiadoDia,
       cobrosDeudaAnterior,
       totalGastos,
+      totalDevoluciones,
       balanceNeto,
     };
   }

@@ -3,6 +3,9 @@ import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
 import type { IPagoTransaccionRepository } from '../../../domain/ports/IPagoTransaccionRepository';
+import type { IDevolucionRepository } from '../../../domain/ports/IDevolucionRepository';
+import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionRepository';
+import type { IPagoPrestamoRepository } from '../../../../prestamos/domain/ports/IPagoPrestamoRepository';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { CajaNoAbiertaError, CajaNoEncontradaError, CajaYaCerradaError } from '../../../../../shared/errors';
 import { calcularReporteCierre } from './calcularReporteCierre';
@@ -30,6 +33,12 @@ export class CerrarCajaUseCase {
     private readonly gastoRepo: IGastoRepository,
     @inject('IPagoTransaccionRepository')
     private readonly pagoRepo: IPagoTransaccionRepository,
+    @inject('IDevolucionRepository')
+    private readonly devolucionRepo: IDevolucionRepository,
+    @inject('IPagoPrestamoRepository')
+    private readonly pagoPrestamoRepo: IPagoPrestamoRepository,
+    @inject('ILiquidacionRepository')
+    private readonly liquidacionRepo: ILiquidacionRepository,
   ) {}
 
   async execute(input: CerrarCajaInput): Promise<ReporteCierreDTO> {
@@ -37,20 +46,41 @@ export class CerrarCajaUseCase {
       ? await this.cajaPorId(input.salonId, input.cajaId)
       : await this.cajaDeHoy(input.salonId);
 
-    const [registros, gastos, pagosDeLaCaja] = await Promise.all([
-      this.registroRepo.search({ salonId: input.salonId, cajaId: caja.id }),
-      this.gastoRepo.findByCajaId(caja.id),
-      // Arqueo por caja: todos los pagos recibidos en ESTA caja (pago.cajaId = C,
-      // incluye abonos de hoy sobre registros de otra caja; legacy → registro.cajaId)
-      this.pagoRepo.findByCajaConFallback(caja.id),
-    ]);
+    const [registros, gastos, pagosDeLaCaja, devoluciones, pagosPrestamo, liquidaciones] =
+      await Promise.all([
+        this.registroRepo.search({ salonId: input.salonId, cajaId: caja.id }),
+        this.gastoRepo.findByCajaId(caja.id),
+        // Arqueo por caja: todos los pagos recibidos en ESTA caja (pago.cajaId = C,
+        // incluye abonos de hoy sobre registros de otra caja; legacy → registro.cajaId)
+        this.pagoRepo.findByCajaConFallback(caja.id),
+        // Rule B: devoluciones ligadas a la caja (solo EFECTIVO restan del cajón).
+        this.devolucionRepo.findByCajaId(caja.id),
+        // Rule C (corregido): los préstamos son cuentas por COBRAR — el cobro
+        // MANUAL del deudor ENTRA al cajón y suma al arqueo. Los
+        // tipoPago=LIQUIDACION ya van netos dentro de totalPagado de la liquidación.
+        this.pagoPrestamoRepo.findByCajaId(caja.id),
+        // Rule C: nómina pagada en efectivo desde esta caja.
+        this.liquidacionRepo.findByCajaId(caja.id),
+      ]);
+
+    // Cobros de préstamo MANUAL: INFLOW. Solo su parte EFECTIVO mueve el
+    // esperado (una transferencia se reporta en el breakdown pero no toca el cajón).
+    const cobrosPrestamo = pagosPrestamo
+      .filter((p) => p.tipoPago === 'MANUAL')
+      .map((p) => ({ monto: Number(p.monto), metodoPago: p.metodoPago }));
+
+    const egresos = [
+      ...devoluciones.map((d) => ({ monto: Number(d.montoDevolucion), metodoPago: d.metodoPago })),
+      ...liquidaciones.map((l) => ({ monto: Number(l.totalPagado), metodoPago: l.metodoPago })),
+    ];
 
     const reporte = calcularReporteCierre(
       registros,
       gastos,
       input.montoRealEfectivo,
       Number(caja.montoInicial),
-      pagosDeLaCaja,
+      [...pagosDeLaCaja, ...cobrosPrestamo],
+      egresos,
     );
 
     // UPDATE condicional: guard atómico contra doble cierre (race)

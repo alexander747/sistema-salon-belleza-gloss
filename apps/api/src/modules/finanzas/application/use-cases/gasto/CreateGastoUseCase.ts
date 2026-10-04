@@ -4,6 +4,7 @@ import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { GastoEntity } from '../../../../../infrastructure/persistence/entities/GastoEntity';
 import { MetodoPago } from '../../../../../infrastructure/persistence/entities/PagoTransaccionEntity';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
+import { verificarCajaAbierta } from '../../services/verificarCajaAbierta';
 
 export interface CreateGastoInput {
   salonId: number;
@@ -31,7 +32,11 @@ export class CreateGastoUseCase {
     // La caja se resuelve por ESA fecha → el gasto backfilleado cae en el
     // arqueo de la caja de su día (y en los reportes por fecha).
     const fecha = input.fecha ?? getColombiaDateString();
-    const caja = await this.cajaRepo.findAbiertaBySalonYFecha(input.salonId, fecha);
+
+    // Regla A (owner): un gasto SIN caja abierta nunca entra a un arqueo
+    // (cajaId NULL) → el arqueo leería de más. Mismo guard que registros y
+    // devoluciones: sin caja abierta para la fecha de negocio, se rechaza.
+    const caja = await verificarCajaAbierta(this.cajaRepo, input.salonId, fecha);
 
     return this.gastoRepo.create({
       salonId: input.salonId,
@@ -41,7 +46,7 @@ export class CreateGastoUseCase {
       esGastoFijo: input.esGastoFijo,
       categoria: input.categoria,
       reportadoPorId: input.reportadoPorId,
-      cajaId: caja?.id ?? null,
+      cajaId: caja.id,
       // Medianoche UTC: los filtros de reportes (PyL/ResumenDia) comparan
       // la columna DATE contra límites a medianoche UTC (patrón TZ-safe).
       fecha: new Date(`${fecha}T00:00:00.000Z`),

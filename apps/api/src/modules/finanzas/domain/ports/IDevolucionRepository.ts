@@ -5,6 +5,8 @@ export interface IDevolucionRepository {
   create(data: Partial<DevolucionEntity>, queryRunner?: QueryRunner): Promise<DevolucionEntity>;
   findBySalon(salonId: number): Promise<DevolucionEntity[]>;
   findByRegistro(registroServicioId: number): Promise<DevolucionEntity[]>;
+  /** Devoluciones ligadas a una caja (para restar las EFECTIVO del arqueo). */
+  findByCajaId(cajaId: number): Promise<DevolucionEntity[]>;
   search(params: {
     salonId: number;
     registroServicioId?: number;

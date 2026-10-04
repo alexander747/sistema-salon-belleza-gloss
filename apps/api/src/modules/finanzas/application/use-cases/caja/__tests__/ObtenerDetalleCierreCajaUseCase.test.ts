@@ -31,6 +31,15 @@ const mockGastoRepo = {
 const mockPagoRepo = {
   findByCajaConFallback: vi.fn(),
 };
+const mockDevolucionRepo = {
+  findByCajaId: vi.fn(),
+};
+const mockPagoPrestamoRepo = {
+  findByCajaId: vi.fn(),
+};
+const mockLiquidacionRepo = {
+  findByCajaId: vi.fn(),
+};
 
 const cajaCerrada = {
   id: 5,
@@ -54,11 +63,17 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
+    mockDevolucionRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoPrestamoRepo.findByCajaId.mockResolvedValue([]);
+    mockLiquidacionRepo.findByCajaId.mockResolvedValue([]);
     useCase = new ObtenerDetalleCierreCajaUseCase(
       mockCajaRepo as never,
       mockRegistroRepo as never,
       mockGastoRepo as never,
       mockPagoRepo as never,
+      mockDevolucionRepo as never,
+      mockPagoPrestamoRepo as never,
+      mockLiquidacionRepo as never,
     );
   });
 
@@ -220,6 +235,23 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
         metodoPago: null,
       },
     ]);
+  });
+
+  it('Rule C (corregido): un cobro de préstamo MANUAL EFECTIVO SUMA al arqueo del cierre', async () => {
+    mockCajaRepo.findById.mockResolvedValue(cajaCerrada);
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 100000, metodoPago: 'EFECTIVO' }]);
+    mockPagoPrestamoRepo.findByCajaId.mockResolvedValue([
+      { id: 1, monto: 30000, metodoPago: 'EFECTIVO', tipoPago: 'MANUAL' }, // INFLOW
+      { id: 2, monto: 5000, metodoPago: 'EFECTIVO', tipoPago: 'LIQUIDACION' }, // ya neto en la liquidación
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, cajaId: 5 });
+
+    // fondo 50000 + EFECTIVO 100000 + cobro préstamo 30000 = 180000
+    expect(result.reporte.montoEsperado).toBe(180000);
+    expect(result.reporte.porMetodoPago.EFECTIVO).toBe(130000);
   });
 
   it('should devolver caja ABIERTA sin arqueo falso: montoReal null y diferencia null (no fabricar 0)', async () => {

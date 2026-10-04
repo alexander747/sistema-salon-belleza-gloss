@@ -3,6 +3,9 @@ import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistroServicioRepository';
 import type { IGastoRepository } from '../../../domain/ports/IGastoRepository';
 import type { IPagoTransaccionRepository } from '../../../domain/ports/IPagoTransaccionRepository';
+import type { IDevolucionRepository } from '../../../domain/ports/IDevolucionRepository';
+import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionRepository';
+import type { IPagoPrestamoRepository } from '../../../../prestamos/domain/ports/IPagoPrestamoRepository';
 import { NotFoundError } from '../../../../../shared/errors';
 import { calcularReporteCierre, type MetodoPagoCaja, type ReporteCierre } from './calcularReporteCierre';
 import type { CajaDTO } from '../../dtos/CajaDTO';
@@ -44,6 +47,12 @@ export class ObtenerDetalleCierreCajaUseCase {
     private readonly gastoRepo: IGastoRepository,
     @inject('IPagoTransaccionRepository')
     private readonly pagoRepo: IPagoTransaccionRepository,
+    @inject('IDevolucionRepository')
+    private readonly devolucionRepo: IDevolucionRepository,
+    @inject('IPagoPrestamoRepository')
+    private readonly pagoPrestamoRepo: IPagoPrestamoRepository,
+    @inject('ILiquidacionRepository')
+    private readonly liquidacionRepo: ILiquidacionRepository,
   ) {}
 
   async execute(input: ObtenerDetalleCierreCajaInput): Promise<ObtenerDetalleCierreCajaResult> {
@@ -53,23 +62,39 @@ export class ObtenerDetalleCierreCajaUseCase {
       throw new NotFoundError('Caja no encontrada');
     }
 
-    const [registros, gastos, pagosDeLaCaja] = await Promise.all([
-      this.registroRepo.search({ salonId: input.salonId, cajaId: caja.id }),
-      this.gastoRepo.findByCajaId(caja.id),
-      // Arqueo por caja: pagos recibidos en ESTA caja (abonos incluidos)
-      this.pagoRepo.findByCajaConFallback(caja.id),
-    ]);
+    const [registros, gastos, pagosDeLaCaja, devoluciones, pagosPrestamo, liquidaciones] =
+      await Promise.all([
+        this.registroRepo.search({ salonId: input.salonId, cajaId: caja.id }),
+        this.gastoRepo.findByCajaId(caja.id),
+        // Arqueo por caja: pagos recibidos en ESTA caja (abonos incluidos)
+        this.pagoRepo.findByCajaConFallback(caja.id),
+        this.devolucionRepo.findByCajaId(caja.id),
+        this.pagoPrestamoRepo.findByCajaId(caja.id),
+        this.liquidacionRepo.findByCajaId(caja.id),
+      ]);
 
     // Caja ABIERTA → montoRealEfectivo null (aún no hay arqueo): pasar null en vez
     // de Number(null)=0 para no fabricar un arqueo falso (mismo patrón que el preview).
     const montoRealEfectivo = caja.montoRealEfectivo === null ? null : Number(caja.montoRealEfectivo);
+
+    // Cobros de préstamo MANUAL: INFLOW (cuenta por cobrar que el deudor
+    // devuelve). Solo EFECTIVO mueve el arqueo; transferencia solo se reporta.
+    const cobrosPrestamo = pagosPrestamo
+      .filter((p) => p.tipoPago === 'MANUAL')
+      .map((p) => ({ monto: Number(p.monto), metodoPago: p.metodoPago }));
+
+    const egresos = [
+      ...devoluciones.map((d) => ({ monto: Number(d.montoDevolucion), metodoPago: d.metodoPago })),
+      ...liquidaciones.map((l) => ({ monto: Number(l.totalPagado), metodoPago: l.metodoPago })),
+    ];
 
     const reporte = calcularReporteCierre(
       registros,
       gastos,
       montoRealEfectivo,
       Number(caja.montoInicial),
-      pagosDeLaCaja,
+      [...pagosDeLaCaja, ...cobrosPrestamo],
+      egresos,
     );
 
     // Movimientos: registros ACTIVOS como SERVICIO + gastos como GASTO.

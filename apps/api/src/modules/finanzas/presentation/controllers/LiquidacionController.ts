@@ -41,6 +41,8 @@ export class LiquidacionController {
         periodoFin: new Date(fechaHasta),
         totalPagado: req.body.totalPagado ? Number(req.body.totalPagado) : undefined,
         descuentosPrestamos: req.body.descuentosPrestamos,
+        // Opcional: si no viene, el use case asume EFECTIVO (default del entity).
+        metodoPago: req.body.metodoPago,
       });
       res.status(201).json(result);
     } catch (error) {

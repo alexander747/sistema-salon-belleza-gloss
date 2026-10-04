@@ -13,6 +13,7 @@ vi.mock('../../services/api.js', () => ({
 }));
 
 import WalkInModal from '../WalkInModal';
+import { setMobileMedia } from '../../test/setMobileMedia';
 
 const cajaCerradaError = {
   response: {
@@ -73,12 +74,26 @@ function fechaPasada(): string {
   return toISODateLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
 }
 
+/**
+ * Elige la primera opción del buscador type-ahead (Cliente/Empleada).
+ * `indice` 0 = Cliente, 1 = Empleada (orden de render).
+ */
+function elegirDelTypeahead(indice: number) {
+  const input = screen.getAllByRole('combobox')[indice];
+  fireEvent.focus(input);
+  fireEvent.click(screen.getAllByRole('option')[0]);
+}
+
+/** Selecciona cliente (0) y empleada (1) con los buscadores type-ahead. */
+function elegirClienteYEmpleada() {
+  elegirDelTypeahead(0);
+  elegirDelTypeahead(1);
+}
+
 /** Llena el formulario y dispara el submit: carrito (1 servicio) + cliente + empleada + pago Tarjeta. */
 async function completarFormYEnviar(fechaISO?: string) {
   fireEvent.click(await screen.findByText('Corte'));
-  const combos = screen.getAllByRole('combobox');
-  fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
-  fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+  elegirClienteYEmpleada();
   if (fechaISO) {
     fireEvent.change(document.querySelector('input[type="date"]')!, {
       target: { value: fechaISO },
@@ -170,21 +185,27 @@ describe('WalkInModal — fecha de negocio / backfill (PR3)', () => {
     expect(dateInput.value).toBe(toISODateLocal(new Date()));
   });
 
-  it('POST por defecto (sin tocar la fecha) envía fechaHora = hoy a las 12:00 local', async () => {
+  it('POST por defecto (sin tocar la fecha) envía fechaHora = el momento real de hoy', async () => {
     mockPost.mockResolvedValue({ data: {} });
     const onSuccess = vi.fn();
+    const before = Date.now();
     renderModal({ onSuccess });
 
     await completarFormYEnviar();
+    const after = Date.now();
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
         '/salones/1/registros',
-        expect.objectContaining({
-          fechaHora: new Date(`${toISODateLocal(new Date())}T12:00:00`).toISOString(),
-        }),
+        expect.objectContaining({ fechaHora: expect.any(String) }),
       );
     });
+
+    // Real now, not the former fixed 12:00 anchor.
+    const [, payload] = mockPost.mock.calls[0] as [string, { fechaHora: string }];
+    const timestamp = new Date(payload.fechaHora).getTime();
+    expect(timestamp).toBeGreaterThanOrEqual(before);
+    expect(timestamp).toBeLessThanOrEqual(after);
   });
 
   it('cambiar la fecha a una pasada envía fechaHora = esa fecha a las 12:00 local', async () => {
@@ -263,12 +284,17 @@ describe('WalkInModal — empleadas inactivas filtradas', () => {
     const empleadasCall = mockGet.mock.calls.find(([url]) => String(url).includes('/empleadas'));
     expect(empleadasCall?.[1]).toEqual({ params: { activo: true } });
 
-    // La empleada activa aparece; la inactiva NO
-    expect(await screen.findByText('María')).toBeInTheDocument();
-    const combos = screen.getAllByRole('combobox');
-    const empleadaSelect = combos[1];
-    expect(within(empleadaSelect).getByText('María')).toBeInTheDocument();
-    expect(within(empleadaSelect).queryByText('Inactiva')).not.toBeInTheDocument();
+    // Esperar a que cargue el catálogo (los buscadores viven en el checkout).
+    await screen.findByText('Corte');
+
+    // La empleada activa aparece en el buscador; la inactiva NO.
+    const empleadaInput = screen.getAllByRole('combobox')[1];
+    fireEvent.focus(empleadaInput);
+    const opciones = screen
+      .getAllByRole('option')
+      .map((o) => o.textContent ?? '');
+    expect(opciones.some((t) => t.includes('María'))).toBe(true);
+    expect(opciones.some((t) => t.includes('Inactiva'))).toBe(false);
   });
 });
 
@@ -290,9 +316,7 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
 
   /** Cliente + empleada (sin tocar método de pago: EFECTIVO default). */
   function llenarClienteYEmpleada() {
-    const combos = screen.getAllByRole('combobox');
-    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
-    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    elegirClienteYEmpleada();
   }
 
   beforeEach(() => {
@@ -365,40 +389,35 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     });
   });
 
-  it('los bloques opcionales (propina, % y notas) están ocultos hasta activar el switch', async () => {
+  it('los bloques opcionales (% y notas) están ocultos hasta activar el switch', async () => {
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
 
     fireEvent.click(await screen.findByText('Corte'));
     llenarClienteYEmpleada();
 
-    // Ocultos por defecto (no agrandan el modal)
+    // Ocultos por defecto (no agrandan el modal). La propina NO existe (feature removida).
     expect(screen.queryByLabelText('Propina')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/agregar propina/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Descuento (%)')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Notas adicionales…')).not.toBeInTheDocument();
 
     // Se activan con su switch
-    fireEvent.click(screen.getByLabelText(/agregar propina/i));
-    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
     fireEvent.click(screen.getByLabelText(/agregar notas/i));
 
-    expect(screen.getByLabelText('Propina')).toBeInTheDocument();
     expect(screen.getByLabelText('Descuento (%)')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Notas adicionales…')).toBeInTheDocument();
   });
 
-  it('fiado con propina: la propina nunca se fía — queda fuera de la deuda', async () => {
-    // Servicio 90.000 + propina 10.000 → total 100.000; fiado con pago 0 → pendiente 90.000
+  it('fiado total (sin pago): el pago es $0 y queda pendiente el total', async () => {
+    // Servicio 90.000, fiado con pago 0 → pendiente 90.000
     apiMockServicio(90000, 'Corte Premium');
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
 
     fireEvent.click(await screen.findByText('Corte Premium'));
     llenarClienteYEmpleada();
-
-    // La propina ahora vive detrás de un switch
-    fireEvent.click(screen.getByLabelText(/agregar propina/i));
-    fireEvent.change(screen.getByLabelText('Propina'), { target: { value: '10000' } });
     fireEvent.click(screen.getByLabelText(/fiado/i));
 
     expect(await screen.findByText(/Queda pendiente: \$\s*90\.000/)).toBeInTheDocument();
@@ -447,7 +466,7 @@ describe('WalkInModal — fiado y pago parcial (PR3)', () => {
     llenarClienteYEmpleada();
 
     // Activar el bloque de descuento y aplicar 10% a SERVICIOS.
-    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '10' } });
     fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
@@ -603,9 +622,7 @@ describe('WalkInModal — recibo tras registrar (PR2)', () => {
   /** Carrito: servicio Corte + cliente Ana + empleada María; pago Tarjeta. */
   async function registrarConTarjeta() {
     fireEvent.click(await screen.findByText('Corte'));
-    const combos = screen.getAllByRole('combobox');
-    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
-    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    elegirClienteYEmpleada();
     fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
     fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
   }
@@ -651,11 +668,9 @@ describe('WalkInModal — recibo tras registrar (PR2)', () => {
     renderModal();
 
     fireEvent.click(await screen.findByText('Corte')); // 30.000
-    const combos = screen.getAllByRole('combobox');
-    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
-    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    elegirClienteYEmpleada();
     // Descuento 10% → total 27.000 + pago parcial 10.000 (fiado)
-    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '10' } });
     fireEvent.change(screen.getByPlaceholderText(/Indicá el motivo/i), { target: { value: 'promo' } });
     // Pago parcial: fiado con monto a cobrar 10.000
@@ -725,9 +740,7 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
 
   /** Cliente + empleada + pago Tarjeta (sin monto recibido manual). */
   function llenarYSeleccionarTarjeta() {
-    const combos = screen.getAllByRole('combobox');
-    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
-    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    elegirClienteYEmpleada();
     fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
   }
 
@@ -801,7 +814,7 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     });
   });
 
-  it('permite editar el costo de insumos y lo envía como costoInsumosOverride (descuento)', async () => {
+  it('no ofrece editar el costo de insumos: solo lectura y el payload no manda costoInsumosOverride', async () => {
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
 
@@ -810,9 +823,11 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     fireEvent.change(screen.getByLabelText('Gramos usados Tintura Global'), {
       target: { value: '95' },
     });
-    fireEvent.change(screen.getByLabelText('Costo de insumos Tintura Global'), {
-      target: { value: '50000' },
-    });
+
+    // El costo de insumos ya no es editable: no hay input numérico para esa línea.
+    expect(
+      screen.queryByRole('spinbutton', { name: 'Costo de insumos Tintura Global' }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
 
@@ -820,19 +835,17 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
       expect(mockPost).toHaveBeenCalledWith(
         '/salones/1/registros',
         expect.objectContaining({
-          serviciosItems: [
-            expect.objectContaining({
-              servicioId: 7,
-              gramosUsados: 95,
-              costoInsumosOverride: 50000,
-            }),
-          ],
+          serviciosItems: [expect.objectContaining({ servicioId: 7, gramosUsados: 95 })],
         }),
       );
     });
+    const payload = mockPost.mock.calls[0][1] as {
+      serviciosItems: Array<Record<string, unknown>>;
+    };
+    expect(payload.serviciosItems[0].costoInsumosOverride).toBeUndefined();
   });
 
-  it('muestra el costo de insumos en un input editable pre-cargado con el derivado (100 g × $800 = $ 80.000)', async () => {
+  it('muestra el costo de insumos derivado en solo lectura (100 g × $800 = $ 80.000)', async () => {
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
 
@@ -844,28 +857,31 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
     expect(screen.getByText('Gramos usados')).toBeInTheDocument();
     expect(within(gramosInput.parentElement as HTMLElement).getByText('g')).toBeInTheDocument();
 
-    const costoInput = screen.getByLabelText('Costo de insumos Alisado permanente brasileño');
-    // Sin gramos todavía: el campo queda vacío (no un $ 0 engañoso).
-    expect(costoInput).toHaveValue(null);
+    // El costo de insumos se muestra como texto derivado, no como input.
+    const costoReadonly = screen.getByLabelText('Costo de insumos Alisado permanente brasileño');
+    expect(costoReadonly.tagName).toBe('SPAN');
+    // Sin gramos todavía: no se muestra un $ 0 engañoso.
+    expect(costoReadonly).toHaveTextContent('—');
 
     fireEvent.change(gramosInput, { target: { value: '100' } });
 
-    // 100 g × $800 → el campo editable se pre-carga con el derivado.
-    expect(costoInput).toHaveValue(80000);
+    // 100 g × $800 → el valor derivado se actualiza en vivo (solo lectura).
+    expect(costoReadonly).toHaveTextContent('80.000');
   });
 
-  it('deja el costo de insumos vacío cuando los gramos son ∅ o 0 (no muestra $ 0)', async () => {
+  it('no muestra costo de insumos cuando los gramos son ∅ o 0 (sin $ 0)', async () => {
     mockPost.mockResolvedValue({ data: {} });
     renderModal();
 
     fireEvent.click(await screen.findByText('Tintura Global'));
     llenarYSeleccionarTarjeta();
     const gramosInput = screen.getByLabelText('Gramos usados Tintura Global');
+    const costoReadonly = screen.getByLabelText('Costo de insumos Tintura Global');
 
-    expect(screen.getByLabelText('Costo de insumos Tintura Global')).toHaveValue(null);
+    expect(costoReadonly).toHaveTextContent('—');
 
     fireEvent.change(gramosInput, { target: { value: '0' } });
-    expect(screen.getByLabelText('Costo de insumos Tintura Global')).toHaveValue(null);
+    expect(costoReadonly).toHaveTextContent('—');
   });
 
   it('the receipt reflects the quantity of the service line', async () => {
@@ -888,8 +904,9 @@ describe('WalkInModal — cantidad y gramos por servicio (PR2)', () => {
 });
 
 describe('WalkInModal — captura de gramos usable en móvil (PR4)', () => {
+  // The grams capture UI now lives in the shared CarritoVenta component.
   const css = readFileSync(
-    join(process.cwd(), 'src/components/WalkInModal.module.css'),
+    join(process.cwd(), 'src/components/CarritoVenta.module.css'),
     'utf-8',
   );
 
@@ -944,9 +961,7 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
 
   /** Cliente + empleada (60%) sin tocar el método de pago. */
   function seleccionarClienteYEmpleada() {
-    const combos = screen.getAllByRole('combobox');
-    fireEvent.change(combos[0], { target: { value: '1' } });
-    fireEvent.change(combos[1], { target: { value: '1' } });
+    elegirClienteYEmpleada();
   }
 
   beforeEach(() => {
@@ -966,10 +981,11 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
     });
 
     // Descuento 20% sobre SERVICIOS: 550.000 → 440.000
-    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '20' } });
     fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
+    fireEvent.click(screen.getByRole('button', { name: /ver reparto/i }));
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
     expect(within(panel).getByText('Cobrado')).toBeInTheDocument();
     expect(within(panel).getByText('$ 440.000')).toBeInTheDocument();
@@ -988,10 +1004,12 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
 
     fireEvent.click(await screen.findByText('Corte'));
     seleccionarClienteYEmpleada();
-    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '20' } });
-    fireEvent.click(screen.getByLabelText('Alcance Ambos'));
+    // Services-only cart → SERVICIOS is the only applicable scope (Task A).
+    fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
+    fireEvent.click(screen.getByRole('button', { name: /ver reparto/i }));
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
     expect(within(panel).getByText('$ 80.000')).toBeInTheDocument();
     expect(within(panel).getByText('− $ 15.000')).toBeInTheDocument();
@@ -1010,10 +1028,11 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
       target: { value: '30' },
     });
     // Descuento 96%: 550.000 → 22.000 < 24.000 de insumo.
-    fireEvent.click(screen.getByLabelText(/ajustar precio por %/i));
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '96' } });
     fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
+    fireEvent.click(screen.getByRole('button', { name: /ver reparto/i }));
     const panel = screen.getByRole('group', { name: 'Desglose del reparto' });
     // A repartir y comisión quedan en 0 (el server clampa), nunca negativos.
     expect(within(panel).getByLabelText('A repartir $ 0')).toBeInTheDocument();
@@ -1021,6 +1040,33 @@ describe('WalkInModal — desglose del reparto visible (PR5)', () => {
     expect(
       within(panel).getByText('La comisión queda en $0 porque el insumo supera el total cobrado.'),
     ).toBeInTheDocument();
+  });
+
+  it('el reparto vive en un modal: se abre con "Ver reparto" y se cierra volviendo al detalle', async () => {
+    apiMockReparto([CORTE_FIJO]);
+    renderModal();
+
+    fireEvent.click(await screen.findByText('Corte'));
+    seleccionarClienteYEmpleada();
+    fireEvent.click(screen.getByLabelText(/agregar descuento por %/i));
+    fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '20' } });
+
+    // Cerrado: el desglose no ocupa espacio inline.
+    expect(
+      screen.queryByRole('group', { name: 'Desglose del reparto' }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /ver reparto/i }));
+    expect(
+      screen.getByRole('group', { name: 'Desglose del reparto' }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar reparto' }));
+    expect(
+      screen.queryByRole('group', { name: 'Desglose del reparto' }),
+    ).not.toBeInTheDocument();
+    // Sigue en el detalle (modal de venta abierto).
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
   });
 });
 
@@ -1049,9 +1095,7 @@ describe('WalkInModal — precios editables por línea (E1)', () => {
   }
 
   function llenarClienteEmpleadaYTarjeta() {
-    const combos = screen.getAllByRole('combobox');
-    fireEvent.change(combos[0], { target: { value: '1' } }); // cliente
-    fireEvent.change(combos[1], { target: { value: '1' } }); // empleada
+    elegirClienteYEmpleada();
     fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
   }
 
@@ -1110,5 +1154,261 @@ describe('WalkInModal — precios editables por línea (E1)', () => {
         }),
       );
     });
+  });
+});
+
+describe('WalkInModal — wizard móvil de 3 pasos', () => {
+  const productoWizard = {
+    id: 2,
+    nombre: 'Shampoo Barra',
+    marca: null,
+    precioVenta: 15000,
+    cantidadStock: 5,
+    categoriaId: 1,
+    codigoBarras: '7701234567890',
+  };
+
+  function apiMockWizard() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [
+            { id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 },
+            {
+              id: 7,
+              nombre: 'Tintura Global',
+              descripcion: null,
+              precioFinal: 450000,
+              duracionMinutos: 120,
+              categoriaId: 1,
+              tipoCostoInsumo: 'POR_GRAMO',
+              precioPorGramo: 1200,
+            },
+          ],
+        });
+      }
+      if (url.includes('/clientes')) {
+        return Promise.resolve({
+          data: [
+            { id: 1, nombre: 'Ana' },
+            { id: 2, nombre: 'Beto' },
+          ],
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María' }] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [productoWizard] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  /** Renderiza el modal simulando viewport móvil (donde vive el wizard). */
+  function renderWizard() {
+    setMobileMedia(true);
+    return render(
+      <MemoryRouter>
+        <WalkInModal salonId={1} isOpen onClose={() => {}} onSuccess={() => {}} />
+      </MemoryRouter>,
+    );
+  }
+
+  const paso = (n: 1 | 2 | 3, label: string) =>
+    screen.getByRole('button', { name: `Paso ${n}: ${label}` });
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+    apiMockWizard();
+  });
+
+  afterEach(() => {
+    setMobileMedia(false);
+  });
+
+  it('arranca en el paso 1 con el grid de SERVICIOS (sin productos ni escáner)', async () => {
+    renderWizard();
+
+    expect(await screen.findByText('Corte')).toBeInTheDocument();
+    expect(screen.queryByText('Shampoo Barra')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/escanear código/i)).not.toBeInTheDocument();
+    expect(paso(1, 'Servicios')).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('"Siguiente" avanza al paso 2: solo PRODUCTOS, con escáner y botón "Saltar"', async () => {
+    renderWizard();
+    await screen.findByText('Corte');
+
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+
+    expect(await screen.findByText('Shampoo Barra')).toBeInTheDocument();
+    expect(screen.queryByText('Corte')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/escanear código/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Saltar' })).toBeInTheDocument();
+    expect(paso(2, 'Productos')).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('"Saltar" avanza al paso Detalle sin elegir productos', async () => {
+    renderWizard();
+    fireEvent.click(await screen.findByText('Corte')); // 1 servicio en el carrito
+
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
+
+    // Paso Detalle: total + cliente/empleada + submit; el catálogo ya no está montado.
+    expect(
+      await screen.findByRole('button', { name: /^Registrar\s+\$\s*30\.000/ }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('combobox')).toHaveLength(2);
+    expect(screen.queryByText('Shampoo Barra')).not.toBeInTheDocument();
+    expect(paso(3, 'Detalle')).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('"Volver" y el stepper clickeable regresan a pasos anteriores', async () => {
+    renderWizard();
+    await screen.findByText('Corte');
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByRole('button', { name: /^Registrar/ });
+
+    // Volver → Productos
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+    expect(await screen.findByText('Shampoo Barra')).toBeInTheDocument();
+
+    // Stepper clickeable → Paso 1 Servicios
+    fireEvent.click(paso(1, 'Servicios'));
+    expect(await screen.findByText('Corte')).toBeInTheDocument();
+    expect(screen.queryByText('Shampoo Barra')).not.toBeInTheDocument();
+  });
+
+  it('el submit del paso Detalle envía el mismo payload que el flujo de una pantalla', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderWizard();
+
+    fireEvent.click(await screen.findByText('Corte'));
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
+
+    elegirClienteYEmpleada();
+    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/salones/1/registros',
+        expect.objectContaining({
+          totalServicios: 30000,
+          serviciosItems: [
+            expect.objectContaining({ servicioId: 1, precioServicio: 30000, cantidad: 1 }),
+          ],
+          pagos: [{ monto: 30000, metodoPago: 'TARJETA' }],
+        }),
+      );
+    });
+  });
+
+  it('conserva carrito, gramos y precios al navegar entre pasos (persistencia)', async () => {
+    mockPost.mockResolvedValue({ data: {} });
+    renderWizard();
+
+    // Paso 1: agrego un servicio FIJO y uno POR_GRAMO.
+    fireEvent.click(await screen.findByText('Corte'));
+    fireEvent.click(screen.getByText('Tintura Global'));
+    // Paso 2: agrego un producto y avanzo.
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByText('Shampoo Barra'));
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+
+    // Paso 3: edito precio y gramos.
+    fireEvent.change(await screen.findByLabelText('Precio Corte'), { target: { value: '45000' } });
+    fireEvent.change(screen.getByLabelText('Gramos usados Tintura Global'), {
+      target: { value: '95' },
+    });
+
+    // Vuelvo al paso 1 y regreso al paso 3: todo debe persistir.
+    fireEvent.click(paso(1, 'Servicios'));
+    expect(await screen.findByText('Corte')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+
+    expect(await screen.findByLabelText('Precio Corte')).toHaveValue(45000);
+    expect(screen.getByLabelText('Gramos usados Tintura Global')).toHaveValue(95);
+    expect(screen.getByLabelText('Precio Shampoo Barra')).toHaveValue(15000);
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
+  });
+
+  it('el cliente se elige con un buscador type-ahead (no un <select>)', async () => {
+    renderWizard();
+    fireEvent.click(await screen.findByText('Corte'));
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
+
+    const clienteInput = screen.getByRole('combobox', { name: 'Cliente' });
+    expect(clienteInput.tagName).toBe('INPUT');
+
+    // Filtra por nombre y el resultado es clickeable.
+    fireEvent.focus(clienteInput);
+    fireEvent.change(clienteInput, { target: { value: 'Bet' } });
+    const opciones = screen.getAllByRole('option');
+    expect(opciones).toHaveLength(1);
+    expect(opciones[0]).toHaveTextContent('Beto');
+    fireEvent.click(opciones[0]);
+    expect(clienteInput).toHaveValue('Beto');
+  });
+
+  it('en el wizard el switch "Agregar propina" no aparece en el paso Detalle', async () => {
+    renderWizard();
+    fireEvent.click(await screen.findByText('Corte'));
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
+
+    expect(screen.queryByLabelText(/agregar propina/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Propina')).not.toBeInTheDocument();
+  });
+
+  it('el reparto se abre en modal desde el paso Detalle y al cerrarlo vuelve al detalle', async () => {
+    renderWizard();
+    // Tintura es POR_GRAMO → el botón "Ver reparto" siempre está disponible.
+    fireEvent.click(await screen.findByText('Tintura Global'));
+    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
+    await screen.findByText('Shampoo Barra');
+    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
+
+    expect(
+      screen.queryByRole('group', { name: 'Desglose del reparto' }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /ver reparto/i }));
+    expect(
+      screen.getByRole('group', { name: 'Desglose del reparto' }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar reparto' }));
+    expect(
+      screen.queryByRole('group', { name: 'Desglose del reparto' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
+    expect(paso(3, 'Detalle')).toHaveAttribute('aria-current', 'step');
+  });
+});
+
+describe('WalkInModal — wizard móvil (CSS)', () => {
+  const css = readFileSync(
+    join(process.cwd(), 'src/components/WalkInModal.module.css'),
+    'utf-8',
+  );
+
+  it('stepper y barra de navegación exponen touch targets ≥44px', () => {
+    expect(css).toMatch(/\.wizardStep\s*\{[^}]*min-height:\s*48px/s);
+    expect(css).toMatch(/\.wizardNavBack\s*\{[^}]*min-height:\s*44px/s);
+    expect(css).toMatch(/\.wizardNavNext\s*\{[^}]*min-height:\s*44px/s);
+    expect(css).toMatch(/\.wizardNavSubmit\s*\{[^}]*min-height:\s*44px/s);
+    expect(css).toMatch(/\.wizardNavSkip\s*\{[^}]*min-height:\s*44px/s);
   });
 });

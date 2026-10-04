@@ -72,6 +72,39 @@ describe('CuentasController', () => {
       expect(error).toBeInstanceOf(ValidationError);
       expect(error.statusCode).toBe(400);
     });
+
+    it('pasa el filtro nombre trimado al use case', async () => {
+      mockCobrarUseCase.execute.mockResolvedValue({ data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 0 } });
+
+      const req = { salonId: 1, query: { nombre: '  Ana  ' } } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.cobrar(req, res, next);
+
+      expect(mockCobrarUseCase.execute).toHaveBeenCalledWith({ salonId: 1, page: 1, limit: 0, nombre: 'Ana' });
+    });
+
+    it('nombre vacío o solo espacios NO se propaga al use case', async () => {
+      mockCobrarUseCase.execute.mockResolvedValue({ data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 0 } });
+
+      const req = { salonId: 1, query: { nombre: '   ' } } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.cobrar(req, res, next);
+
+      expect(mockCobrarUseCase.execute).toHaveBeenCalledWith({ salonId: 1, page: 1, limit: 0 });
+    });
+
+    it('nombre demasiado largo (>100) → next(ValidationError) sin llamar al use case', async () => {
+      const req = { salonId: 1, query: { nombre: 'x'.repeat(101) } } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.cobrar(req, res, next);
+
+      expect(mockCobrarUseCase.execute).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next.mock.calls[0][0]).toBeInstanceOf(ValidationError);
+    });
   });
 
   describe('pagar', () => {
@@ -86,6 +119,17 @@ describe('CuentasController', () => {
 
       expect(res.json).toHaveBeenCalledWith({ ok: true, data: expected });
       expect(mockPagarUseCase.execute).toHaveBeenCalledWith({ salonId: 1, page: 1, limit: 5 });
+    });
+
+    it('pasa el filtro nombre trimado al use case', async () => {
+      mockPagarUseCase.execute.mockResolvedValue({ data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 0 } });
+
+      const req = { salonId: 1, query: { nombre: ' Zuleidy ' } } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.pagar(req, res, next);
+
+      expect(mockPagarUseCase.execute).toHaveBeenCalledWith({ salonId: 1, page: 1, limit: 0, nombre: 'Zuleidy' });
     });
 
     it('paginación inválida → next(ValidationError) sin llamar al use case', async () => {

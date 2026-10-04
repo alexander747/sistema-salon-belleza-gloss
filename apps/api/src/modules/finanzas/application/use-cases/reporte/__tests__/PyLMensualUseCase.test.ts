@@ -51,6 +51,8 @@ describe('PyLMensualUseCase', () => {
   };
   let mockGastoRepo: { search: ReturnType<typeof vi.fn> };
   let mockDevolucionRepo: { sumBySalonAndDateRange: ReturnType<typeof vi.fn> };
+  let mockLiquidacionRepo: { sumEfectivoBySalonAndDateRange: ReturnType<typeof vi.fn> };
+  let mockPagoPrestamoRepo: { sumManualBySalonAndDateRange: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRegistroRepo = {
@@ -61,10 +63,14 @@ describe('PyLMensualUseCase', () => {
     };
     mockGastoRepo = { search: vi.fn() };
     mockDevolucionRepo = { sumBySalonAndDateRange: vi.fn() };
+    mockLiquidacionRepo = { sumEfectivoBySalonAndDateRange: vi.fn() };
+    mockPagoPrestamoRepo = { sumManualBySalonAndDateRange: vi.fn() };
     useCase = new PyLMensualUseCase(
       mockRegistroRepo as never,
       mockGastoRepo as never,
       mockDevolucionRepo as never,
+      mockLiquidacionRepo as never,
+      mockPagoPrestamoRepo as never,
     );
     mockRegistroRepo.search.mockResolvedValue([]);
     mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(0);
@@ -72,6 +78,8 @@ describe('PyLMensualUseCase', () => {
     mockRegistroRepo.sumMontoPendienteHasta.mockResolvedValue(0);
     mockGastoRepo.search.mockResolvedValue([]);
     mockDevolucionRepo.sumBySalonAndDateRange.mockResolvedValue(0);
+    mockLiquidacionRepo.sumEfectivoBySalonAndDateRange.mockResolvedValue(0);
+    mockPagoPrestamoRepo.sumManualBySalonAndDateRange.mockResolvedValue(0);
   });
 
   it('calcula el P&L completo con todos los factores (escenario spec)', async () => {
@@ -146,6 +154,10 @@ describe('PyLMensualUseCase', () => {
     expect(result.fiadoPeriodo).toBe(0);
     expect(result.deudasPorCobrar).toBe(0);
     expect(result.utilidadNeta).toBe(-78000);
+    // Contribución = cobrado − insumos − comisiones; el negocio se expone aparte
+    expect(result.contribucion).toBe(222000);
+    expect(result.gastosNegocio).toBe(280000);
+    expect(result.devolucionesNegocio).toBe(20000);
     expect(result.cantidadAtenciones).toBe(3);
     expect(result.desde).toBe('2026-05-01');
     expect(result.hasta).toBe('2026-05-31');
@@ -225,9 +237,62 @@ describe('PyLMensualUseCase', () => {
       cobrado: 0,
       fiadoPeriodo: 0,
       deudasPorCobrar: 0,
+      contribucion: 0,
+      gastosNegocio: 0,
+      devolucionesNegocio: 0,
       utilidadNeta: 0,
       cantidadAtenciones: 0,
     });
+  });
+
+  it('Rule C (corregido): los cobros de préstamo son INFLOW y suman al resultado cash-basis', async () => {
+    mockRegistroRepo.search.mockResolvedValue([
+      buildRegistro({ totalServicios: 100000, montoTotal: 100000, valorFinal: 100000 }),
+    ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(100000);
+    mockPagoPrestamoRepo.sumManualBySalonAndDateRange.mockResolvedValue(30000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.pagosPrestamo).toBe(30000);
+    expect(result.contribucion).toBe(100000);
+    // 100000 cobrado − 0 insumos/comisiones − 0 gastos/dev/nómina + 30000 préstamo
+    expect(result.utilidadNeta).toBe(130000);
+  });
+
+  it('filtro por empleada: NO descuenta gastos/devoluciones del salón; expone contribución y negocio aparte', async () => {
+    mockRegistroRepo.search.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 100000,
+        montoTotal: 100000,
+        valorFinal: 100000,
+        comisionCalculada: 10000,
+        serviciosItems: [{ costoBaseInsumos: 5000 }],
+      }),
+    ]);
+    mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(100000);
+    mockGastoRepo.search.mockResolvedValue([
+      buildGasto({ monto: 400000, esGastoFijo: true, categoria: 'ARRIENDO' }),
+    ]);
+    mockDevolucionRepo.sumBySalonAndDateRange.mockResolvedValue(50000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+      usuarioId: 7,
+    });
+
+    // Contribución = 100000 − 5000 insumos − 10000 comisión
+    expect(result.contribucion).toBe(85000);
+    // El negocio se expone aparte (no se resta a la empleada)
+    expect(result.gastosNegocio).toBe(400000);
+    expect(result.devolucionesNegocio).toBe(50000);
+    expect(result.utilidadNeta).toBe(85000);
   });
 
   it('deduce las devoluciones como línea explícita del período', async () => {

@@ -33,6 +33,29 @@ export class TypeORMLiquidacionRepository implements ILiquidacionRepository {
     });
   }
 
+  async findByCajaId(cajaId: number): Promise<LiquidacionEntity[]> {
+    return this.getRepo().find({
+      where: { cajaId },
+      order: { creadoEn: 'DESC' },
+    });
+  }
+
+  async sumEfectivoBySalonAndDateRange(
+    salonId: number,
+    fechaInicio: Date,
+    fechaFin: Date,
+  ): Promise<number> {
+    const result = await this.getRepo()
+      .createQueryBuilder('l')
+      .select('COALESCE(SUM(l.totalPagado), 0)', 'total')
+      .where('l.salonId = :salonId', { salonId })
+      .andWhere('l.metodoPago = :metodo', { metodo: 'EFECTIVO' })
+      .andWhere('l.creadoEn >= :fechaInicio', { fechaInicio })
+      .andWhere('l.creadoEn < :fechaFin', { fechaFin })
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
+
   async findBySalonAndEmpleada(salonId: number, usuarioId: number): Promise<LiquidacionEntity[]> {
     return this.getRepo().find({
       where: { salonId, usuarioId },

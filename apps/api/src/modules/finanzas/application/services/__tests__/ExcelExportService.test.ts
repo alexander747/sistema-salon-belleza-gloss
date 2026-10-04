@@ -27,6 +27,11 @@ const pylData: PyLMensualOutput = {
   gastosPorCategoria: { ARRIENDO: 200000, SERVICIOS_PUBLICOS: 80000 },
   totalGastos: 280000,
   devoluciones: 20000,
+  nomina: 0,
+  pagosPrestamo: 0,
+  contribucion: 222000,
+  gastosNegocio: 280000,
+  devolucionesNegocio: 20000,
   utilidadNeta: -78000,
 };
 
@@ -77,6 +82,11 @@ const emptyPyl: PyLMensualOutput = {
   gastosPorCategoria: {},
   totalGastos: 0,
   devoluciones: 0,
+  nomina: 0,
+  pagosPrestamo: 0,
+  contribucion: 0,
+  gastosNegocio: 0,
+  devolucionesNegocio: 0,
   utilidadNeta: 0,
 };
 

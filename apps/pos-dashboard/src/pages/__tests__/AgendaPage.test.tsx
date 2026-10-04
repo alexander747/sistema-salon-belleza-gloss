@@ -538,6 +538,9 @@ describe('AgendaPage — happy paths de cita (D6)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Completar' }, WAIT));
 
     // 10% sobre servicios: 30.000 → 27.000
+    // El descuento está plegado por defecto (misma regla que el carrito compartido).
+    expect(screen.queryByLabelText('Descuento (%)')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Agregar descuento por %'));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '10' } });
     fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 
@@ -1118,8 +1121,10 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
     fireEvent.change(screen.getByLabelText('Gramos Tinte'), { target: { value: '95' } });
     await waitFor(() => expect(confirmar).toBeEnabled(), WAIT);
 
-    // Preview en vivo: 95 g × $1200 = $ 114.000 precargado en el campo editable
+    // Preview en vivo: 95 g × $1200 = $ 114.000 precargado en el campo (solo lectura)
     expect(screen.getByLabelText('Costo de insumos Tinte')).toHaveValue(114000);
+    // El costo de insumos ya NO es editable en venta (derivado del catálogo).
+    expect(screen.getByLabelText('Costo de insumos Tinte')).toHaveAttribute('readonly');
 
     fireEvent.click(confirmar);
 
@@ -1169,7 +1174,7 @@ describe('AgendaPage — cantidad por servicio (PR3)', () => {
     expect(costoInput).toHaveValue(null);
 
     fireEvent.change(gramosInput, { target: { value: '100' } });
-    // 100 g × $800 → el campo editable se pre-carga con el derivado.
+    // 100 g × $800 → el campo (solo lectura) muestra el derivado.
     expect(costoInput).toHaveValue(80000);
   }, 20000);
 });
@@ -1259,6 +1264,7 @@ describe('AgendaPage — desglose del reparto al completar (PR5)', () => {
     fireEvent.change(screen.getByLabelText('Gramos Alisado permanente brasileño'), {
       target: { value: '30' },
     });
+    fireEvent.click(screen.getByLabelText('Agregar descuento por %'));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: String(pct) } });
     const label =
       alcance === 'AMBOS' ? 'Ambos' : alcance === 'SERVICIOS' ? 'Servicios' : 'Productos';
@@ -1484,6 +1490,7 @@ describe('AgendaPage — totales del completar con cantidad > 1 (PR6)', () => {
     await abrirCompletar();
 
     // Descuento 25% sobre SERVICIOS: 2 × 30.000 = 60.000 → 45.000.
+    fireEvent.click(screen.getByLabelText('Agregar descuento por %'));
     fireEvent.change(screen.getByLabelText('Descuento (%)'), { target: { value: '25' } });
     fireEvent.click(screen.getByLabelText('Alcance Servicios'));
 

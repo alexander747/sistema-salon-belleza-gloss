@@ -9,6 +9,7 @@ import SalonSwitcher from '../components/SalonSwitcher.js';
 import WalkInModal from '../components/WalkInModal.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import EmpleadaSearchableSelect from '../components/EmpleadaSearchableSelect.js';
+import TypeaheadSelect from '../components/TypeaheadSelect.js';
 import CajaBanner from '../components/caja/CajaBanner.js';
 import CajaTab from '../components/caja/CajaTab.js';
 import MoneyInput from '../components/MoneyInput.js';
@@ -16,6 +17,7 @@ import PaginationBar from '../components/PaginationBar.js';
 import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { isPrivilegedRole } from '../utils/roles.js';
+import { alcanceLabel, type DescuentoAlcance } from '../utils/reparto.js';
 import { buildTiraReconciliacion } from '../utils/tiraReconciliacion.js';
 import { formatCalendarDate, formatCurrency } from '../utils/format.js';
 import type { ReciboSalon } from '../utils/recibo.js';
@@ -75,6 +77,10 @@ interface ServicioItemDTO {
   nombreServicio: string;
   precioServicio: number;
   costoBaseInsumos?: number;
+  /** Grams used — only present for `POR_GRAMO` service lines. */
+  gramosUsados?: number | null;
+  /** Price per gram — only present for `POR_GRAMO` service lines. */
+  precioPorGramo?: number | null;
 }
 
 interface Registro {
@@ -201,6 +207,20 @@ interface PyLData {
   gastosPorCategoria: Record<string, number>;
   totalGastos: number;
   devoluciones: number;
+  /**
+   * Contribución = cobrado − insumos − comisiones. Es el resultado "propio" del
+   * scope (empleada filtrada o salón) antes de gastos/devoluciones del negocio.
+   */
+  contribucion?: number;
+  /** Gastos del NEGOCIO (salón). Con filtro de empleada se exponen aparte y no se descuentan. */
+  gastosNegocio?: number;
+  /** Devoluciones del NEGOCIO (salón). Con filtro de empleada se exponen aparte y no se descuentan. */
+  devolucionesNegocio?: number;
+  /**
+   * Utilidad en base CAJA. Con filtro de empleada equivale a `contribucion`
+   * (los gastos/devoluciones del salón no se le cargan). Sin filtro es el
+   * resultado salon-wide.
+   */
   utilidadNeta?: number;
   /** PR2 — cash: Σ pagos recibidos en el período (fecha de recepción, no ANULADO). */
   cobrado?: number;
@@ -327,6 +347,38 @@ function labelMetodoPago(reg: Pick<Registro, 'pagos' | 'montoPendiente'>): strin
   if (cobrado <= 0) return 'Fiado';
   if (Number(reg.montoPendiente ?? 0) > 0) return `${metodo} + Fiado`;
   return metodo;
+}
+
+/** Human-readable label for a discount scope slug ('SERVICIOS' | 'PRODUCTOS' | 'AMBOS'). */
+function labelAlcanceDescuento(alcance?: string | null): string {
+  if (alcance === 'SERVICIOS' || alcance === 'PRODUCTOS' || alcance === 'AMBOS') {
+    return alcanceLabel(alcance as DescuentoAlcance);
+  }
+  // Missing/legacy scope behaved as AMBOS.
+  return alcanceLabel('AMBOS');
+}
+
+/**
+ * Supply-cost sub-line for a service item, or null when there is nothing to show.
+ * `POR_GRAMO` lines expose grams and price-per-gram, so the math is spelled out.
+ * When an edited cost override made `costoBaseInsumos` differ from the derived
+ * product, the note shows the real cost with the computation in parentheses
+ * instead of claiming a wrong equality.
+ */
+function detalleInsumos(item: ServicioItemDTO): string | null {
+  const costo = item.costoBaseInsumos ?? 0;
+  const gramos = item.gramosUsados ?? null;
+  const porGramo = item.precioPorGramo ?? null;
+
+  if (gramos != null && porGramo != null) {
+    const derivado = Math.round(gramos * porGramo * 100) / 100;
+    const calculo = `${gramos} g × ${formatCurrency(porGramo)}/g`;
+    return Math.abs(derivado - costo) < 0.01
+      ? `Insumos: ${calculo} = ${formatCurrency(costo)}`
+      : `Insumos: ${formatCurrency(costo)} (${calculo})`;
+  }
+  if (costo > 0) return `Insumos: ${formatCurrency(costo)}`;
+  return null;
 }
 
 function formatDate(dateStr?: string): string {
@@ -858,6 +910,13 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
   /* PR6 revisión — tira de reconciliación (texto, fuera del summaryGrid). SIEMPRE presente. */
   const tiraRows = buildTiraReconciliacion(resumen ?? {});
 
+  /* T3 — propinas are no longer accepted: hide their two closing rows from the UI
+   * ("de momento" = reversible). The builder and its math stay intact, so removing
+   * this filter restores them. The trailing divider only separated "TU CAJA REAL"
+   * from the rest, so it is hidden with it. */
+  const hiddenTiraKeys = new Set(['propinas-cierre', 'divider-2', 'caja-real']);
+  const visibleTiraRows = tiraRows.filter((row) => !hiddenTiraKeys.has(row.key));
+
   /* ── Skeleton ── */
   if (loading) {
     return (
@@ -963,27 +1022,6 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
           </span>
         </motion.div>
         */}
-        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(99,102,241,0.3)' }}>
-          <span className={styles.summaryLabel}>💇 Servicios</span>
-          <span className={styles.summaryValue} style={{ color: '#818cf8' }}>
-            {resumen ? formatCurrency(resumen.totalServicios) : '$0'}
-          </span>
-        </motion.div>
-        <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
-          <span className={styles.summaryLabel}>🧴 Productos</span>
-          <span className={styles.summaryValue} style={{ color: '#34d399' }}>
-            {resumen ? formatCurrency(resumen.totalProductos) : '$0'}
-          </span>
-        </motion.div>
-        {/* PR2 — insumos: solo roles privilegiados (la API omite la clave al resto) */}
-        {isPrivileged && (
-          <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
-            <span className={styles.summaryLabel}>🧴 Total insumos</span>
-            <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
-              {formatCurrency(resumen?.totalCostoBaseInsumos ?? 0)}
-            </span>
-          </motion.div>
-        )}
         {/* Comentado por decisión de negocio: no mostrar métricas sensibles a todo rol
         <motion.div variants={itemVariants} className={styles.summaryCard}>
           <span className={styles.summaryLabel}>💸 Comisiones</span>
@@ -1028,9 +1066,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
       </motion.div>
 
       {/* PR6 revisión — tira de reconciliación (solo texto, no es una tarjeta).
-          Filas de componente en 0 ocultas; filas de cierre siempre visibles. */}
+          Filas de componente en 0 ocultas; filas de cierre siempre visibles
+          (salvo las filas de propina, ocultas por T3). */}
       <div className={styles.tiraReconciliacion} data-testid="tira-reconciliacion">
-        {tiraRows.map((row) =>
+        {visibleTiraRows.map((row) =>
           row.kind === 'divider' ? (
             <hr key={row.key} className={styles.tiraDivider} data-testid={`tira-${row.key}`} />
           ) : (
@@ -1456,6 +1495,30 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
   const totalPagos = registro.pagos?.reduce((s, p) => s + p.monto, 0) ?? 0;
   const cambio = totalPagos > totalFinal ? totalPagos - totalFinal : 0;
 
+  const anulado = registro.estado === 'ANULADO';
+  const estadoLabel = anulado ? 'Anulado' : registro.estaPagadaEmpleada ? 'Liquidado' : 'Activo';
+  const estadoClass = anulado
+    ? styles.badgeEliminado
+    : registro.estaPagadaEmpleada
+      ? styles.badgeLiquidado
+      : styles.badgeServicios;
+
+  const servicios = registro.serviciosItems ?? [];
+  const productos = registro.productosVendidos ?? [];
+  const divisiones = registro.divisiones ?? [];
+  const pagos = registro.pagos ?? [];
+  const descuentoMonto = originalTotal > totalFinal ? originalTotal - totalFinal : 0;
+  // Gross line-item total (subtotals kept for the items table footer).
+  const totalItems = registro.totalServicios + registro.totalProductos;
+  // The discount flow (original → discount → final) only applies to adjusted sales.
+  const tieneDescuento =
+    Boolean(registro.precioAjustado) || Number(registro.porcentajeDescuento ?? 0) > 0;
+  const nombreEmpleada = registro._empleadaNombre ?? `Usuaria #${registro.usuarioId}`;
+  const nombreDivision = (usuarioId: number) =>
+    usuarioId === registro.usuarioId && registro._empleadaNombre
+      ? registro._empleadaNombre
+      : `Empleada #${usuarioId}`;
+
   return (
     <motion.div
       className={`${styles.modalOverlay} mobileBottomSheet`}
@@ -1467,6 +1530,9 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
     >
       <motion.div
         className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Detalle del registro #${registro.id}`}
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1479,293 +1545,251 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
         </div>
 
           <div className={styles.modalBody}>
-            {/* ── Header: Registro # + badges + date ── */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem', gap: '0.35rem' }}>
-              <div>
-                <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                  Registro #{registro.id}
-                </h2>
-                <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', margin: '0.25rem 0 0', lineHeight: 1.5 }}>
+            {/* ── Header: Registro # + estado + date ── */}
+            <header className={styles.detailHeader}>
+              <div className={styles.detailHeaderMeta}>
+                <h2 className={styles.detailTitle}>Registro #{registro.id}</h2>
+                <p className={styles.detailDate}>
+                  <span aria-hidden="true">🗓️</span>{' '}
                   {formatDateTimeAMPM(registro.fechaHora ?? registro.creadoEn)}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'flex-start' }}>
+              <div className={styles.detailBadges}>
+                <span className={`${styles.badge} ${estadoClass}`}>{estadoLabel}</span>
                 {registro.esRetoque && (
-                  <span style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>🔁 Retoque</span>
+                  <span className={`${styles.badge} ${styles.badgeRetoque}`}>🔁 Retoque</span>
                 )}
                 {registro.precioAjustado && (
-                  <span style={{ background: 'rgba(212,168,83,0.15)', color: 'var(--accent)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>💰 {registro.porcentajeDescuento}% {registro.descuentoAlcance === 'SERVICIOS' ? 'servicios' : registro.descuentoAlcance === 'PRODUCTOS' ? 'productos' : 'ambos'}</span>
+                  <span className={`${styles.badge} ${styles.badgeDescuento}`}>
+                    💰 {registro.porcentajeDescuento}% · {labelAlcanceDescuento(registro.descuentoAlcance)}
+                  </span>
                 )}
                 {registro.montoPendiente > 0 && (
-                  <span style={{ background: 'rgba(224,85,106,0.12)', color: 'var(--danger)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>⚠️ {formatCurrency(registro.montoPendiente)} pend.</span>
+                  <span className={`${styles.badge} ${styles.badgePendiente}`}>
+                    ⚠️ {formatCurrency(registro.montoPendiente)} pendiente
+                  </span>
                 )}
-                {!registro.estaPagadaEmpleada && (
-                  <span style={{ background: 'rgba(224,85,106,0.1)', color: 'var(--danger)', padding: '0.15rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: '0.6rem', fontWeight: 600, fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}>⏳ Pago emp. pend.</span>
+                {!registro.estaPagadaEmpleada && !anulado && (
+                  <span className={`${styles.badge} ${styles.badgeNomina}`}>
+                    ⏳ Pago empleada pendiente
+                  </span>
                 )}
               </div>
-            </div>
+            </header>
 
             <hr className={styles.sectionDivider} />
 
             {/* ── Customer & Employee ── */}
-            <div style={{ marginBottom: '0.75rem' }}>
+            <section className={styles.detailSection}>
               <h4 className={styles.sectionSubtitle}>Cliente y empleada</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>👤</span>
-                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {registro._clienteNombre ?? `Cliente #${registro.clienteId}`}
-                  </span>
-                  {registro.pagos?.[0] && (
-                    <span style={{
-                      marginLeft: '0.5rem',
-                      background: 'rgba(92,186,123,0.12)',
-                      color: 'var(--success)',
-                      padding: '0.1rem 0.5rem',
-                      borderRadius: '999px',
-                      fontSize: '0.6rem',
-                      fontWeight: 600,
-                      fontFamily: "'DM Sans', sans-serif",
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {labelMetodoPago(registro)}
+              <div className={styles.detailPartyGrid}>
+                <div className={styles.detailPartyCard}>
+                  <span className={styles.partyIcon} aria-hidden="true">👤</span>
+                  <div className={styles.partyInfo}>
+                    <span className={styles.partyRole}>Cliente</span>
+                    <span className={styles.partyName}>
+                      {registro._clienteNombre ?? `Cliente #${registro.clienteId}`}
                     </span>
-                  )}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>💇</span>
-                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {registro._empleadaNombre ?? `Usuaria #${registro.usuarioId}`}
-                  </span>
+                <div className={styles.detailPartyCard}>
+                  <span className={styles.partyIcon} aria-hidden="true">💇</span>
+                  <div className={styles.partyInfo}>
+                    <span className={styles.partyRole}>Atendido por</span>
+                    <span className={styles.partyName}>{nombreEmpleada}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            </section>
+
+            {/* Descripción removida: duplicaba los ítems de la tabla */}
 
             <hr className={styles.sectionDivider} />
 
-            {/* ── Servicio items section (detail table: name + price) ── */}
-            {registro.serviciosItems && registro.serviciosItems.length > 0 && (
-              <div style={{ marginBottom: '0.75rem' }}>
-                <h4 className={styles.sectionSubtitle}>Servicios realizados</h4>
-                <div style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
-                  overflow: 'hidden',
-                  background: 'var(--bg-surface)',
-                }}>
-                  {/* Table header */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1.6fr 1fr',
-                    gap: '0.5rem',
-                    padding: '0.45rem 0.65rem',
-                    background: 'var(--bg-elevated)',
-                    borderBottom: '1px solid var(--border)',
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.6rem',
-                    fontWeight: 600,
-                    color: 'var(--text-dim)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                  }}>
-                    <span>Servicio</span>
-                    <span style={{ textAlign: 'right' }}>Precio</span>
-                  </div>
-
-                  {/* Table rows */}
-                  {registro.serviciosItems.map((si, idx) => (
-                    <motion.div
-                      key={si.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: idx * 0.03, duration: 0.2 }}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1.6fr 1fr',
-                        gap: '0.5rem',
-                        padding: '0.45rem 0.65rem',
-                        borderBottom: '1px solid var(--border)',
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.7rem',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <span style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {si.nombreServicio}
-                      </span>
-                      <span style={{ textAlign: 'right', color: 'var(--text-primary)' }}>{formatCurrency(si.precioServicio)}</span>
-                    </motion.div>
-                  ))}
-                  {/* Totals row */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1.6fr 1fr',
-                    gap: '0.5rem',
-                    padding: '0.45rem 0.65rem',
-                    background: 'var(--bg-elevated)',
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    alignItems: 'center',
-                  }}>
-                    <span style={{ color: 'var(--text-primary)' }}>Total servicios</span>
-                    <span style={{ textAlign: 'right', color: 'var(--accent)' }}>{formatCurrency(registro.totalServicios)}</span>
-                  </div>
+            {/* ── Line items: services + products in one table ── */}
+            {(servicios.length > 0 || productos.length > 0) && (
+              <section className={styles.detailSection}>
+                <h4 className={styles.sectionSubtitle}>Ítems del registro</h4>
+                <div className={styles.detailItemsScroll}>
+                  <table className={styles.detailItemsTable}>
+                    <thead>
+                      <tr>
+                        <th scope="col">Concepto</th>
+                        <th scope="col" className={styles.detailItemsColNum}>Cant.</th>
+                        <th scope="col" className={styles.detailItemsColPrice}>Precio unit.</th>
+                        <th scope="col" className={styles.detailItemPrice}>Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {servicios.map((si) => {
+                        const insumos = detalleInsumos(si);
+                        return (
+                          <tr key={`servicio-${si.id}`}>
+                            <td>
+                              <div className={styles.detailItemMain}>
+                                <span className={styles.detailItemName}>{si.nombreServicio}</span>
+                                <div className={styles.detailItemTags}>
+                                  <span className={`${styles.detailTypeChip} ${styles.detailTypeServicio}`}>
+                                    Servicio
+                                  </span>
+                                  {insumos && <span className={styles.detailItemMeta}>{insumos}</span>}
+                                </div>
+                              </div>
+                            </td>
+                            {/* Services carry no per-line quantity in the DTO:
+                                the server expands `cantidad` into N unit rows. */}
+                            <td className={styles.detailItemsColNum}>1</td>
+                            <td className={styles.detailItemsColPrice}>{formatCurrency(si.precioServicio)}</td>
+                            <td className={styles.detailItemPrice}>{formatCurrency(si.precioServicio)}</td>
+                          </tr>
+                        );
+                      })}
+                      {productos.map((pv) => (
+                        <tr key={`producto-${pv.id}`}>
+                          <td>
+                            <div className={styles.detailItemMain}>
+                              <span className={styles.detailItemName}>{pv.nombre}</span>
+                              <div className={styles.detailItemTags}>
+                                <span className={`${styles.detailTypeChip} ${styles.detailTypeProducto}`}>
+                                  Producto
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className={styles.detailItemsColNum}>{pv.cantidad}</td>
+                          <td className={styles.detailItemsColPrice}>{formatCurrency(pv.precioVentaUnitario)}</td>
+                          <td className={styles.detailItemPrice}>{formatCurrency(pv.subtotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      {servicios.length > 0 && (
+                        <tr>
+                          <td colSpan={3}>Subtotal servicios</td>
+                          <td className={styles.detailItemPrice}>{formatCurrency(registro.totalServicios)}</td>
+                        </tr>
+                      )}
+                      {productos.length > 0 && (
+                        <tr>
+                          <td colSpan={3}>Subtotal productos</td>
+                          <td className={styles.detailItemPrice}>{formatCurrency(registro.totalProductos)}</td>
+                        </tr>
+                      )}
+                      <tr className={styles.detailItemsTotalRow}>
+                        <td colSpan={3}>Total ítems</td>
+                        <td className={styles.detailItemPrice}>{formatCurrency(totalItems)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* ── Products section (mini-cards with accent border) ── */}
-            {registro.productosVendidos && registro.productosVendidos.length > 0 && (
-              <div style={{ marginBottom: '0.75rem' }}>
-                <h4 className={styles.sectionSubtitle}>Productos vendidos</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  {registro.productosVendidos.map((pv, idx) => (
-                    <motion.div
-                      key={pv.id}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.2, delay: idx * 0.04 }}
-                      className={styles.miniCard}
-                      style={{
-                        borderLeft: `3px solid ${idx % 2 === 0 ? 'var(--accent)' : 'var(--success)'}`,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {pv.nombre}
-                        </div>
-                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)', marginTop: '0.1rem' }}>
-                          {pv.cantidad} × {formatCurrency(pv.precioVentaUnitario)}
-                        </div>
-                      </div>
-                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
-                        {formatCurrency(pv.subtotal)}
+            {/* ── Totals flow: original → discount → final (discount only when adjusted) ── */}
+            <section className={styles.detailSection}>
+              <h4 className={styles.sectionSubtitle}>Totales</h4>
+              <div className={styles.detailTotals}>
+                {tieneDescuento && (
+                  <>
+                    <div className={styles.detailTotalsRow}>
+                      <span className={styles.detailTotalsLabel}>Precio original</span>
+                      <span className={`${styles.detailTotalsValue} ${styles.detailOriginal}`}>
+                        {formatCurrency(originalTotal)}
                       </span>
-                    </motion.div>
-                  ))}
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.4rem 0.6rem 0.2rem',
-                    borderTop: '1px solid var(--border)',
-                    marginTop: '0.1rem',
-                  }}>
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Total productos
-                    </span>
-                    <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem', fontWeight: 700, color: 'var(--accent)' }}>
-                      {formatCurrency(registro.totalProductos)}
-                    </span>
-                  </div>
+                    </div>
+                    <div className={styles.detailTotalsRow}>
+                      <span className={styles.detailTotalsLabel}>Descuento</span>
+                      <span className={`${styles.detailTotalsValue} ${styles.detailDescuento}`}>
+                        <span className={styles.detailDiscountScope}>
+                          {registro.porcentajeDescuento ?? 0}% · {labelAlcanceDescuento(registro.descuentoAlcance)}
+                        </span>
+                        <span>{descuentoMonto > 0 ? `-${formatCurrency(descuentoMonto)}` : formatCurrency(0)}</span>
+                      </span>
+                    </div>
+                  </>
+                )}
+                <div className={`${styles.detailTotalsRow} ${styles.detailTotalsFinal}`}>
+                  <span>Total final</span>
+                  <span>{formatCurrency(totalFinal)}</span>
                 </div>
-              </div>
-            )}
-
-            {/* ── Resumen (total original / final + nota de ajuste) ── */}
-            <div style={{ marginBottom: '0.75rem' }}>
-              <h4 className={styles.sectionSubtitle}>Resumen</h4>
-              <div style={{
-                background: 'var(--bg-elevated)',
-                border: '1px dashed var(--border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '0.6rem 0.9rem',
-              }}>
-                {registro.precioAjustado && (
-                  <div className={styles.infoRow} style={{ padding: '0.2rem 0', border: 'none' }}>
-                    <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.75rem' }}>Total original</span>
-                    <span className={styles.infoValue} style={{ fontSize: '0.75rem', textDecoration: 'line-through', color: 'var(--text-dim)', marginLeft: 'auto' }}>{formatCurrency(originalTotal)}</span>
+                {registro.propina > 0 && (
+                  <div className={styles.detailTotalsRow}>
+                    <span className={styles.detailTotalsLabel}>Propina</span>
+                    <span className={styles.detailTotalsValue}>{formatCurrency(registro.propina)}</span>
                   </div>
                 )}
-                <div className={styles.infoRow} style={{ borderTop: '2px solid var(--border)', marginTop: '0.2rem', padding: '0.3rem 0 0' }}>
-                  <span className={styles.infoLabel} style={{ minWidth: 'auto', fontWeight: 700, fontSize: '0.8125rem' }}>Total final</span>
-                  <span className={styles.infoValue} style={{ fontWeight: 800, color: 'var(--accent)', fontSize: '1rem', marginLeft: 'auto' }}>{formatCurrency(totalFinal)}</span>
+                <div className={styles.detailTotalsRow}>
+                  <span className={styles.detailTotalsLabel}>Método de pago</span>
+                  <span className={styles.detailTotalsValue}>{labelMetodoPago(registro)}</span>
                 </div>
-                {registro.precioAjustado && registro.notas && (
-                  <div className={styles.infoRow} style={{ border: 'none', padding: '0.2rem 0 0' }}>
-                    <span className={styles.infoLabel} style={{ minWidth: 'auto', fontSize: '0.7rem' }}>Nota de ajuste</span>
-                    <span className={styles.infoValue} style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontStyle: 'italic', marginLeft: 'auto' }}>"{registro.notas}"</span>
+                {registro.montoPendiente > 0 && (
+                  <div className={styles.detailTotalsRow}>
+                    <span className={styles.detailTotalsLabel}>Pendiente (fiado)</span>
+                    <span className={`${styles.detailTotalsValue} ${styles.detailDescuento}`}>
+                      {formatCurrency(registro.montoPendiente)}
+                    </span>
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* ── Payments section (compact list) ── */}
-            {registro.pagos && registro.pagos.length > 0 && (
-              <div style={{ marginBottom: '0.75rem' }}>
+            {/* ── Payments ── */}
+            {pagos.length > 0 && (
+              <section className={styles.detailSection}>
                 <h4 className={styles.sectionSubtitle}>Pagos</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  {registro.pagos.map((p) => (
-                    <div key={p.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.25rem 0.5rem',
-                      background: 'var(--bg-elevated)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: '0.78rem',
-                    }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <span style={{ fontSize: '0.7rem' }}>💳</span>
-                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: 'var(--text-primary)' }}>
+                <div className={styles.detailPayList}>
+                  {pagos.map((p) => (
+                    <div key={p.id} className={styles.detailPayRow}>
+                      <span className={styles.detailPayMeta}>
+                        <span aria-hidden="true">💳</span>
+                        <span className={styles.detailPayMethod}>
                           {METODO_PAGO_LABELS[p.metodoPago] ?? p.metodoPago}
                         </span>
                         {p.referencia && (
-                          <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)' }}>
-                            · Ref: {p.referencia}
-                          </span>
+                          <span className={styles.detailPayRef}>· Ref: {p.referencia}</span>
                         )}
                       </span>
-                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, color: 'var(--success)', fontSize: '0.8125rem' }}>
-                        +{formatCurrency(p.monto)}
+                      <span className={styles.detailPayAmount}>+{formatCurrency(p.monto)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className={styles.detailPaySummary}>
+                  <span>
+                    Recibido: <strong>{formatCurrency(totalPagos)}</strong>
+                  </span>
+                  {cambio > 0 && (
+                    <span className={styles.detailCambio}>
+                      Cambio: <strong>{formatCurrency(cambio)}</strong>
+                    </span>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* ── Divisions / commission ── */}
+            {divisiones.length > 0 && (
+              <section className={styles.detailSection}>
+                <h4 className={styles.sectionSubtitle}>Divisiones y comisión</h4>
+                <div className={styles.detailDivList}>
+                  {divisiones.map((d) => (
+                    <div key={d.id} className={styles.detailDivRow}>
+                      <span className={styles.detailDivName}>{nombreDivision(d.usuarioId)}</span>
+                      <span className={styles.detailDivMeta}>{d.porcentajeParticipacion}%</span>
+                      <span className={styles.detailDivAmount}>
+                        {formatCurrency(d.comisionCorrespondiente)}
                       </span>
                     </div>
                   ))}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', padding: '0.2rem 0.5rem', borderTop: '1px solid var(--border)', marginTop: '0.15rem' }}>
-                    <div>
-                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)' }}>Recibido: </span>
-                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(totalPagos)}</span>
-                    </div>
-                    {cambio > 0 && (
-                      <div>
-                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.65rem', color: 'var(--text-dim)' }}>Cambio: </span>
-                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(cambio)}</span>
-                      </div>
-                    )}
-                  </div>
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* ── Divisions (inline text) ── */}
-            {registro.divisiones && registro.divisiones.length > 0 && (
-              <div style={{ marginBottom: '0.75rem' }}>
-                <h4 className={styles.sectionSubtitle}>Divisiones</h4>
-                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', padding: '0.3rem 0.6rem', lineHeight: 1.6 }}>
-                  {registro.divisiones.map((d, i) => (
-                    <span key={d.id}>
-                      {i > 0 && <span style={{ margin: '0 0.4rem', color: 'var(--text-dim)' }}>|</span>}
-                      Empleada #{d.usuarioId}: {d.porcentajeParticipacion}%
-                      {d.comisionCorrespondiente > 0 && <> · {formatCurrency(d.comisionCorrespondiente)}</>}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── General Notes ── */}
-            {registro.notas && !registro.precioAjustado && (
-              <div style={{ marginBottom: '0.5rem' }}>
+            {/* ── General notes ── */}
+            {registro.notas && (
+              <section className={styles.detailSection}>
                 <h4 className={styles.sectionSubtitle}>Notas</h4>
-                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', lineHeight: 1.6, fontStyle: 'italic' }}>
-                  {registro.notas}
-                </div>
-              </div>
+                <p className={styles.detailNote}>{registro.notas}</p>
+              </section>
             )}
           </div>
 
@@ -2274,6 +2298,10 @@ const GastosTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
 /*  DEVOLUCIONES TAB                                                 */
 /* ================================================================ */
 
+/** Most-recent ventas loaded into the "Nueva devolución" typeahead. The control
+ *  filters in-memory, so this caps the payload instead of listing every sale. */
+const DEVOLUCIONES_VENTAS_LIMIT = 200;
+
 const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [devoluciones, setDevoluciones] = useState<Devolucion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2295,6 +2323,17 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     return devoluciones.filter((d) => d.productoId == null);
   }, [devoluciones, devolucionFilter]);
 
+  /** Typeahead options for the "Venta" selector (label: "Venta #id — $monto"). */
+  const registroOptions = useMemo(
+    () =>
+      registros.map((reg) => ({
+        id: reg.id,
+        nombre: `Venta #${reg.id} — ${formatCurrency(reg.montoTotal)}`,
+        hint: formatDate(reg.fechaHora ?? reg.creadoEn),
+      })),
+    [registros],
+  );
+
   const fetchDevoluciones = useCallback(async () => {
     if (salonId == null) return;
     setLoading(true);
@@ -2302,7 +2341,9 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     try {
       const results = await Promise.allSettled([
         api.get(`/salones/${salonId}/devoluciones`, { params: { page: String(devolucionPage), limit: '12' } }),
-        api.get(`/salones/${salonId}/registros`),
+        api.get(`/salones/${salonId}/registros`, {
+          params: { estado: 'ACTIVOS', limit: String(DEVOLUCIONES_VENTAS_LIMIT) },
+        }),
         api.get(`/salones/${salonId}/productos?tipo=RETAIL`),
       ]);
       if (results[0].status === 'fulfilled') {
@@ -2505,18 +2546,17 @@ const DevolucionesTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               <div className={styles.modalBody}>
                 <div className={styles.formGroup}>
                   <label className={`${styles.formLabel} ${styles.formRequired}`}>Venta</label>
-                  <select
-                    className={styles.formSelect}
-                    value={form.registroServicioId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, registroServicioId: Number(e.target.value) }))}
-                  >
-                    <option value={0}>Seleccionar venta</option>
-                    {registros.map((reg) => (
-                      <option key={reg.id} value={reg.id}>
-                        Venta #{reg.id} — {formatCurrency(reg.montoTotal)}
-                      </option>
-                    ))}
-                  </select>
+                  <TypeaheadSelect
+                    inputId="devolucion-venta"
+                    ariaLabel="Venta"
+                    options={registroOptions}
+                    value={form.registroServicioId === 0 ? '' : form.registroServicioId}
+                    onChange={(id) =>
+                      setForm((prev) => ({ ...prev, registroServicioId: id === '' ? 0 : id }))
+                    }
+                    placeholder="Buscar venta…"
+                    emptyText="No se encontraron ventas"
+                  />
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Producto (opcional)</label>
@@ -2630,10 +2670,11 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
   // ── Sub-tab state ──
   const [nominaSubtab, setNominaSubtab] = useState<'pendientes' | 'historial'>('pendientes');
 
-  // ── Historial filters (client-side) ──
+  // ── Filters (client-side) ──
+  // The employee filter is shared by the Pendientes and Historial sub-tabs.
+  const [nominaEmpleadaId, setNominaEmpleadaId] = useState('');
   const [historialDesde, setHistorialDesde] = useState('');
   const [historialHasta, setHistorialHasta] = useState('');
-  const [historialEmpleadaId, setHistorialEmpleadaId] = useState('');
   const [historialSearch, setHistorialSearch] = useState('');
   const [historialPage, setHistorialPage] = useState(1);
   const HISTORIAL_PAGE_SIZE = 10;
@@ -2664,18 +2705,21 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
   const [loadingPrestamos, setLoadingPrestamos] = useState(false);
 
   // ── Derived values ──
+  // The shared employee filter (Pendientes + Historial) is applied client-side:
+  // no selection ("") means all employees. Summary totals follow the selection.
+  const pendientesFiltrados = useMemo(
+    () => pendientes.filter(
+      (p) => p.totalAPagar > 0 && (!nominaEmpleadaId || p.empleadaId === Number(nominaEmpleadaId)),
+    ),
+    [pendientes, nominaEmpleadaId],
+  );
   const totalComisiones = useMemo(
-    () => pendientes.reduce((sum, e) => sum + Number(e.totalComisionesPendientes ?? 0), 0),
-    [pendientes],
+    () => pendientesFiltrados.reduce((sum, e) => sum + Number(e.totalComisionesPendientes ?? 0), 0),
+    [pendientesFiltrados],
   );
   const totalProximoPago = useMemo(
-    () => pendientes.reduce((sum, e) => sum + Number(e.totalAPagar ?? 0), 0),
-    [pendientes],
-  );
-
-  const pendientesFiltrados = useMemo(
-    () => pendientes.filter((p) => p.totalAPagar > 0),
-    [pendientes],
+    () => pendientesFiltrados.reduce((sum, e) => sum + Number(e.totalAPagar ?? 0), 0),
+    [pendientesFiltrados],
   );
 
   // PR3 — insumo informativo: Σ del costo base de insumos de las filas pendientes
@@ -2700,12 +2744,11 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
     });
   }, [auditarAllRegistros, auditDesde, auditHasta]);
 
-  // Totales del modal: comisiones/propinas se recalculan del detalle filtrado;
+  // Totales del modal: comisiones se recalculan del detalle filtrado;
   // bono+sueldo se toman del row (el factor de frecuencia ya está aplicado) — D5.
   const auditarTotales = useMemo(
     () => ({
       comisiones: auditarRegistros.reduce((sum, r) => sum + Number(r.comisionCalculada ?? 0), 0),
-      propinas: auditarRegistros.reduce((sum, r) => sum + Number(r.propina ?? 0), 0),
     }),
     [auditarRegistros],
   );
@@ -2725,11 +2768,26 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
     );
   }, [historial, selectedEmpleada, auditDesde, auditHasta]);
 
+  // ── Employee options for the shared filter ──
+  // Union of the loaded employees map, the pending rows and the payroll history,
+  // so the filter stays usable even when one source is missing a name.
+  const empleadasParaFiltro = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const [id, nombre] of empleadasMap) map.set(id, nombre);
+    for (const p of pendientes) {
+      if (!map.has(p.empleadaId)) map.set(p.empleadaId, p.nombre);
+    }
+    for (const h of historial) {
+      if (!map.has(h.usuarioId)) map.set(h.usuarioId, `Empleada #${h.usuarioId}`);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'es'));
+  }, [empleadasMap, pendientes, historial]);
+
   // ── Filtered historial (client-side) ──
   const filteredHistorial = useMemo(() => {
     let result = [...historial];
-    if (historialEmpleadaId) {
-      result = result.filter((h) => h.usuarioId === Number(historialEmpleadaId));
+    if (nominaEmpleadaId) {
+      result = result.filter((h) => h.usuarioId === Number(nominaEmpleadaId));
     }
     if (historialDesde) {
       result = result.filter((h) => h.creadoEn >= historialDesde);
@@ -2745,7 +2803,7 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
       });
     }
     return result;
-  }, [historial, historialEmpleadaId, historialDesde, historialHasta, historialSearch, empleadasMap]);
+  }, [historial, nominaEmpleadaId, historialDesde, historialHasta, historialSearch, empleadasMap]);
 
   const historialTotalPages = Math.max(1, Math.ceil(filteredHistorial.length / HISTORIAL_PAGE_SIZE));
   const paginatedHistorial = useMemo(
@@ -2764,7 +2822,7 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
   // Reset historial page to 1 when any filter changes
   useEffect(() => {
     setHistorialPage(1);
-  }, [historialDesde, historialHasta, historialEmpleadaId, historialSearch]);
+  }, [historialDesde, historialHasta, nominaEmpleadaId, historialSearch]);
 
   const fetchData = useCallback(async () => {
     if (salonId == null) return;
@@ -2905,7 +2963,7 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
       setAuditarLoading(true);
       try {
         const { data: regData } = await api.get(`/salones/${salonId}/registros`, {
-          params: { usuarioId: emp.empleadaId, limit: 50 },
+          params: { usuarioId: emp.empleadaId, estado: 'ACTIVOS', limit: 50 },
         });
         const allRegs = Array.isArray(regData?.data) ? regData.data : Array.isArray(regData) ? regData : [];
         const noPagados = allRegs.filter((r: any) => r.estaPagadaEmpleada !== false ? false : true);
@@ -3020,6 +3078,36 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
         >
           Historial
         </button>
+      </div>
+
+      {/* ── Shared employee filter (applies to both sub-tabs) ── */}
+      <div style={{
+        display: 'flex',
+        gap: '0.75rem',
+        alignItems: 'flex-end',
+        flexWrap: 'wrap',
+        marginBottom: '1rem',
+      }}>
+        <label style={{
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: '0.75rem',
+          color: 'var(--text-secondary)',
+          fontWeight: 500,
+        }}>
+          Empleada:
+          <select
+            aria-label="Filtrar por empleada"
+            className={styles.filterInput}
+            style={{ display: 'block', marginTop: '0.2rem', minWidth: '160px' }}
+            value={nominaEmpleadaId}
+            onChange={(e) => setNominaEmpleadaId(e.target.value)}
+          >
+            <option value="">Todas</option>
+            {empleadasParaFiltro.map(([id, nombre]) => (
+              <option key={id} value={id}>{nombre}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {nominaSubtab === 'pendientes' ? (
@@ -3255,25 +3343,6 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
               fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
               color: 'var(--text-secondary)', fontWeight: 500,
             }}>
-              Empleada:
-              <select
-                className={styles.filterInput}
-                style={{ display: 'block', marginTop: '0.2rem', minWidth: '140px' }}
-                value={historialEmpleadaId}
-                onChange={(e) => setHistorialEmpleadaId(e.target.value)}
-              >
-                <option value="">Todas</option>
-                {Array.from(empleadasMap.entries())
-                  .filter(([id]) => historial.some((h) => h.usuarioId === id))
-                  .map(([id, name]) => (
-                    <option key={id} value={id}>{name}</option>
-                  ))}
-              </select>
-            </label>
-            <label style={{
-              fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
-              color: 'var(--text-secondary)', fontWeight: 500,
-            }}>
               Buscar:
               <input
                 type="text"
@@ -3408,6 +3477,9 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
           >
             <motion.div
               className={`${styles.modalContent} ${styles.modalContentXl} mobileBottomSheetContent`}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Auditoría pre-liquidación"
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -3569,12 +3641,12 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
                 </div>
 
                 {/* ════════════════════════════════════════ */}
-                {/*  SECTION 2 — Summary cards (4 cols)     */}
+                {/*  SECTION 2 — Summary cards (3 cols)     */}
                 {/* ════════════════════════════════════════ */}
                 <motion.div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: '0.625rem',
                     marginBottom: '1.25rem',
                   }}
@@ -3591,16 +3663,12 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
                       emoji: '💰', color: 'var(--accent)', borderColor: 'var(--accent)',
                     },
                     {
-                      label: 'Propinas', value: auditarTotales.propinas,
-                      emoji: '🎁', color: 'var(--success)', borderColor: 'var(--success)',
-                    },
-                    {
                       label: 'Bono + Sueldo', value: selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo,
                       emoji: '⏰', color: '#818cf8', borderColor: '#818cf8',
                     },
                     {
                       label: 'Total bruto',
-                      value: auditarTotales.comisiones + auditarTotales.propinas + selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo,
+                      value: auditarTotales.comisiones + selectedEmpleada.bonoHorario + selectedEmpleada.sueldoFijo,
                       emoji: '🧾', color: 'var(--accent)', borderColor: 'var(--accent)', isTotal: true,
                     },
                   ]).map((card) => (
@@ -4050,15 +4118,6 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
                     <span>Comisiones</span>
                     <span>{formatCurrency(selectedEmpleada.totalComisionesPendientes)}</span>
                   </div>
-                  {/* Propinas */}
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between',
-                    fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem',
-                    color: 'var(--text-secondary)', padding: '0.2rem 0',
-                  }}>
-                    <span>Propinas</span>
-                    <span>{formatCurrency(selectedEmpleada.totalPropinas)}</span>
-                  </div>
                   {/* Bono + Sueldo */}
                   <div style={{
                     display: 'flex', justifyContent: 'space-between',
@@ -4323,6 +4382,11 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
   const [reporteEmpleadaNombre, setReporteEmpleadaNombre] = useState('');
 
   const isPrivileged = isPrivilegedRole(user);
+
+  // Con filtro de empleada activo, la API devuelve su CONTRIBUCIÓN como
+  // utilidadNeta y expone gastos/devoluciones del salón aparte. Los roles
+  // restringidos siempre quedan filtrados a su propio usuario.
+  const esFiltroEmpleada = !isPrivileged || !!reporteUsuarioId;
 
   // Params compartidos P&L + export: desde + hasta + usuarioId role-scoped.
   // Los roles restringidos son forzados a su propio usuarioId.
@@ -4592,8 +4656,17 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
                 {pyl.fiadoPeriodo != null ? formatCurrency(pyl.fiadoPeriodo) : '$0'}
               </span>
             </div>
+          </div>
+
+          {/* SECCIÓN 1b — Cuentas por cobrar: acumulado a la fecha Hasta (NO es del período) */}
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', marginTop: '1rem' }}>
+            📌 Cuentas por cobrar
+          </div>
+          <div className={styles.summaryGrid}>
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(251,191,36,0.3)' }}>
-              <span className={styles.summaryLabel}>📌 Deudas por cobrar</span>
+              <span className={styles.summaryLabel}>
+                📌 Deudas por cobrar al {pyl.hasta} (acumulado)
+              </span>
               <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>
                 {pyl.deudasPorCobrar != null ? formatCurrency(pyl.deudasPorCobrar) : '$0'}
               </span>
@@ -4641,35 +4714,81 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem', marginTop: '1rem' }}>
             📉 Costos y resultado
           </div>
-          <div className={styles.summaryGrid}>
-            {/* PR2 — insumos del P&L: solo roles privilegiados */}
-            {isPrivileged && (
-              <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>📦 Insumos</span>
-                <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
+
+          {esFiltroEmpleada ? (
+            <>
+              {/* Empleada filtrada: su contribución = cobrado − insumos − comisiones.
+                  Los gastos/devoluciones del salón NO se le descuentan (ver grupo siguiente). */}
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.05em', marginBottom: '0.4rem', marginTop: '0.35rem' }}>
+                👤 De la empleada
               </div>
-            )}
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>👥 Comisiones</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
+              <div className={styles.summaryGrid}>
+                {/* PR2 — insumos del P&L: solo roles privilegiados */}
+                {isPrivileged && (
+                  <div className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>📦 Insumos</span>
+                    <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
+                  </div>
+                )}
+                <div className={styles.summaryCard}>
+                  <span className={styles.summaryLabel}>👥 Comisiones</span>
+                  <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
+                </div>
+                <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.contribucion ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
+                  <span className={styles.summaryLabel}>👤 Contribución (resultado de la empleada)</span>
+                  <span className={styles.summaryValue} style={{ color: (pyl.contribucion ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
+                    {formatCurrency(pyl.contribucion ?? 0)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Del salón: gastos y devoluciones del NEGOCIO. Informativos: no se
+                  descuentan de la contribución de la empleada. */}
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.05em', marginBottom: '0.4rem', marginTop: '1rem' }}>
+                🏠 Del salón (no se descuenta a la empleada)
+              </div>
+              <div className={styles.summaryGrid}>
+                <div className={styles.summaryCard} style={{ borderColor: 'rgba(148,163,184,0.35)' }}>
+                  <span className={styles.summaryLabel}>💸 Gastos del salón</span>
+                  <span className={styles.summaryValue}>{formatCurrency(pyl.gastosNegocio ?? 0)}</span>
+                </div>
+                <div className={styles.summaryCard} style={{ borderColor: 'rgba(148,163,184,0.35)' }}>
+                  <span className={styles.summaryLabel}>↩️ Devoluciones del salón</span>
+                  <span className={styles.summaryValue}>{formatCurrency(pyl.devolucionesNegocio ?? 0)}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className={styles.summaryGrid}>
+              {/* PR2 — insumos del P&L: solo roles privilegiados */}
+              {isPrivileged && (
+                <div className={styles.summaryCard}>
+                  <span className={styles.summaryLabel}>📦 Insumos</span>
+                  <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
+                </div>
+              )}
+              <div className={styles.summaryCard}>
+                <span className={styles.summaryLabel}>👥 Comisiones</span>
+                <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
+              </div>
+              <div className={styles.summaryCard}>
+                <span className={styles.summaryLabel}>💸 Gastos</span>
+                <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>
+                  {formatCurrency((pyl.gastosFijos ?? 0) + (pyl.gastosOperativos ?? 0))}
+                </span>
+              </div>
+              <div className={styles.summaryCard}>
+                <span className={styles.summaryLabel}>↩️ Devoluciones</span>
+                <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.devoluciones)}</span>
+              </div>
+              <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.utilidadNeta ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
+                <span className={styles.summaryLabel}>📊 Utilidad neta</span>
+                <span className={styles.summaryValue} style={{ color: (pyl.utilidadNeta ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
+                  {formatCurrency(pyl.utilidadNeta ?? 0)}
+                </span>
+              </div>
             </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💸 Gastos</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>
-                {formatCurrency((pyl.gastosFijos ?? 0) + (pyl.gastosOperativos ?? 0))}
-              </span>
-            </div>
-            <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>↩️ Devoluciones</span>
-              <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.devoluciones)}</span>
-            </div>
-            <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.utilidadNeta ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
-              <span className={styles.summaryLabel}>📊 Utilidad neta</span>
-              <span className={styles.summaryValue} style={{ color: (pyl.utilidadNeta ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
-                {formatCurrency(pyl.utilidadNeta ?? 0)}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -4973,10 +5092,14 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [cobrar, setCobrar] = useState<CuentaCobrar[]>([]);
   const [cobrarPage, setCobrarPage] = useState(1);
   const [cobrarMeta, setCobrarMeta] = useState(CUENTAS_META_VACIO);
+  const [cobrarSearch, setCobrarSearch] = useState('');
+  const [cobrarDebouncedSearch, setCobrarDebouncedSearch] = useState('');
 
   const [pagar, setPagar] = useState<CuentaPagar[]>([]);
   const [pagarPage, setPagarPage] = useState(1);
   const [pagarMeta, setPagarMeta] = useState(CUENTAS_META_VACIO);
+  const [pagarSearch, setPagarSearch] = useState('');
+  const [pagarDebouncedSearch, setPagarDebouncedSearch] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -4986,12 +5109,13 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
   const [abonoOk, setAbonoOk] = useState<string | null>(null);
 
   /* ── Fetchers (devuelven éxito para decidir el estado global de error) ── */
-  const loadCobrar = useCallback(async (page: number): Promise<boolean> => {
+  const loadCobrar = useCallback(async (page: number, nombre: string): Promise<boolean> => {
     if (salonId == null) return false;
     try {
-      const { data } = await api.get(`/salones/${salonId}/finanzas/cuentas/cobrar`, {
-        params: { page, limit: CUENTAS_PAGE_SIZE },
-      });
+      const params: Record<string, string | number> = { page, limit: CUENTAS_PAGE_SIZE };
+      const q = nombre.trim();
+      if (q) params.nombre = q;
+      const { data } = await api.get(`/salones/${salonId}/finanzas/cuentas/cobrar`, { params });
       const payload = data?.data;
       setCobrar(Array.isArray(payload?.data) ? payload.data : []);
       setCobrarMeta(payload?.meta ?? CUENTAS_META_VACIO);
@@ -5003,12 +5127,13 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     }
   }, [salonId]);
 
-  const loadPagar = useCallback(async (page: number): Promise<boolean> => {
+  const loadPagar = useCallback(async (page: number, nombre: string): Promise<boolean> => {
     if (salonId == null) return false;
     try {
-      const { data } = await api.get(`/salones/${salonId}/finanzas/cuentas/pagar`, {
-        params: { page, limit: CUENTAS_PAGE_SIZE },
-      });
+      const params: Record<string, string | number> = { page, limit: CUENTAS_PAGE_SIZE };
+      const q = nombre.trim();
+      if (q) params.nombre = q;
+      const { data } = await api.get(`/salones/${salonId}/finanzas/cuentas/pagar`, { params });
       const payload = data?.data;
       const rows = Array.isArray(payload?.data) ? payload.data : [];
       setPagar(rows);
@@ -5025,26 +5150,58 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
     if (salonId == null) return;
     setLoading(true);
     setError(null);
-    const [cobrarOk, pagarOk] = await Promise.all([loadCobrar(1), loadPagar(1)]);
+    const [cobrarOk, pagarOk] = await Promise.all([
+      loadCobrar(1, cobrarDebouncedSearch),
+      loadPagar(1, pagarDebouncedSearch),
+    ]);
     if (!cobrarOk && !pagarOk) {
       setError('Error al cargar las cuentas');
     }
     setLoading(false);
-  }, [salonId, loadCobrar, loadPagar]);
+  }, [salonId, loadCobrar, loadPagar, cobrarDebouncedSearch, pagarDebouncedSearch]);
 
+  // Carga inicial (y al cambiar de salón). Se excluyen los callbacks/búsquedas de las
+  // deps a propósito: el filtro se re-dispara solo con el debounce de abajo, sin
+  // re-ejecutar el skeleton global por cada tecla.
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salonId]);
+
+  /* ── Búsqueda debounced por sub-vista (400ms, patrón ClientesPage) ── */
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (cobrarSearch !== cobrarDebouncedSearch) {
+        setCobrarPage(1);
+        setCobrarDebouncedSearch(cobrarSearch);
+        loadCobrar(1, cobrarSearch);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobrarSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (pagarSearch !== pagarDebouncedSearch) {
+        setPagarPage(1);
+        setPagarDebouncedSearch(pagarSearch);
+        loadPagar(1, pagarSearch);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagarSearch]);
 
   /* ── Paginación por sub-vista (patrón cierres de CajaTab: sin flash global) ── */
   const goCobrarPage = (next: number) => {
     setCobrarPage(next);
-    loadCobrar(next);
+    loadCobrar(next, cobrarDebouncedSearch);
   };
 
   const goPagarPage = (next: number) => {
     setPagarPage(next);
-    loadPagar(next);
+    loadPagar(next, pagarDebouncedSearch);
   };
 
   /* ── Abono (PR4): POST /registros/:id/pagos → éxito cierra modal + refresca ──
@@ -5057,9 +5214,9 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
       await api.post(`/salones/${salonId}/registros/${registroId}/pagos`, { monto, metodoPago });
       setAbonarCliente(null);
       setAbonoOk('✅ Abono registrado');
-      await loadCobrar(cobrarPage);
+      await loadCobrar(cobrarPage, cobrarDebouncedSearch);
     },
-    [salonId, loadCobrar, cobrarPage],
+    [salonId, loadCobrar, cobrarPage, cobrarDebouncedSearch],
   );
 
   const openAbonar = (cliente: CuentaCobrar) => {
@@ -5144,6 +5301,18 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
               {abonoOk}
             </div>
           )}
+          {/* Filtro por nombre (server-side): se mantiene visible aunque la lista
+              quede vacía para poder limpiar la búsqueda. */}
+          <div style={{ marginBottom: '0.75rem', maxWidth: '340px' }}>
+            <input
+              type="text"
+              className={styles.formInput}
+              aria-label="Buscar deuda por cliente o préstamo"
+              placeholder="🔍 Buscar cliente o préstamo…"
+              value={cobrarSearch}
+              onChange={(e) => setCobrarSearch(e.target.value)}
+            />
+          </div>
           {cobrar.length === 0 ? (
             <div className={styles.emptyState}>
               <span className={styles.emptyIcon}>✅</span>
@@ -5221,6 +5390,17 @@ const CuentasTab: React.FC<{ salonId: number | null }> = ({ salonId }) => {
         /*  POR PAGAR — Pendientes vs Al día                */
         /* ════════════════════════════════════════════════ */
         <div>
+          {/* Filtro por nombre (server-side), visible aunque la lista quede vacía. */}
+          <div style={{ marginBottom: '0.75rem', maxWidth: '340px' }}>
+            <input
+              type="text"
+              className={styles.formInput}
+              aria-label="Buscar empleada por nombre"
+              placeholder="🔍 Buscar empleada…"
+              value={pagarSearch}
+              onChange={(e) => setPagarSearch(e.target.value)}
+            />
+          </div>
           {pagar.length === 0 ? (
             <div className={styles.emptyState}>
               <span className={styles.emptyIcon}>✅</span>

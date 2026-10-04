@@ -43,6 +43,7 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     sumCobrosDeudaAnterior: ReturnType<typeof vi.fn>;
   };
   let mockGastoRepo: { sumBySalonAndDateRange: ReturnType<typeof vi.fn> };
+  let mockDevolucionRepo: { sumBySalonAndDateRange: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRegistroRepo = {
@@ -53,8 +54,14 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
       sumCobrosDeudaAnterior: vi.fn(),
     };
     mockGastoRepo = { sumBySalonAndDateRange: vi.fn() };
-    useCase = new ResumenDiaUseCase(mockRegistroRepo as never, mockGastoRepo as never);
+    mockDevolucionRepo = { sumBySalonAndDateRange: vi.fn() };
+    useCase = new ResumenDiaUseCase(
+      mockRegistroRepo as never,
+      mockGastoRepo as never,
+      mockDevolucionRepo as never,
+    );
     mockGastoRepo.sumBySalonAndDateRange.mockResolvedValue(0);
+    mockDevolucionRepo.sumBySalonAndDateRange.mockResolvedValue(0);
     mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(0);
     mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
     mockRegistroRepo.sumCobrosDeudaAnterior.mockResolvedValue(0);
@@ -397,5 +404,55 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
     });
 
     expect(result.cobrosDeudaAnterior).toBe(0);
+  });
+
+  it('incluye devoluciones del período y las resta en balanceNeto (concuerda con el P&L)', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 100000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 100000,
+        comisionCalculada: 0,
+      }),
+    ]);
+    mockDevolucionRepo.sumBySalonAndDateRange.mockResolvedValue(20000);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.totalDevoluciones).toBe(20000);
+    // 100000 ingresos − 0 gastos − 0 comisiones − 0 insumos − 20000 devoluciones
+    expect(result.balanceNeto).toBe(80000);
+    // Misma base que PyLMensualUseCase: devoluciones por creadoEn en [inicio, fin)
+    expect(mockDevolucionRepo.sumBySalonAndDateRange).toHaveBeenCalledWith(
+      1,
+      expect.any(Date),
+      expect.any(Date),
+    );
+  });
+
+  it('sin devoluciones → totalDevoluciones 0 y el balance no cambia', async () => {
+    mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+      buildRegistro({
+        totalServicios: 100000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 100000,
+        comisionCalculada: 0,
+      }),
+    ]);
+
+    const result = await useCase.execute({
+      salonId: 1,
+      desde: '2026-05-01',
+      hasta: '2026-05-31',
+    });
+
+    expect(result.totalDevoluciones).toBe(0);
+    expect(result.balanceNeto).toBe(100000);
   });
 });

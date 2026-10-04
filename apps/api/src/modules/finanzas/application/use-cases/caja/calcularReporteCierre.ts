@@ -25,7 +25,11 @@ export interface MovimientoCajaInput {
   valorFinal: number;
 }
 
-/** Pago que pertenece a la caja (pago.cajaId = C o fallback legacy por registro.cajaId). */
+/**
+ * Dinero que ENTRA a la caja: pagos de venta/abonos (pago.cajaId = C o fallback
+ * legacy por registro.cajaId) y cobros de préstamo MANUAL (cuentas por cobrar).
+ * Todos son INFLOW y suman al arqueo.
+ */
 export interface PagoExtraCajaInput {
   monto: number;
   metodoPago: MetodoPagoCaja;
@@ -33,6 +37,19 @@ export interface PagoExtraCajaInput {
 
 /** Tipo estructural de gasto (compatible con GastoEntity). */
 export interface GastoCajaInput {
+  monto: number;
+  metodoPago?: MetodoPagoCaja;
+}
+
+/**
+ * Egreso adicional de caja que NO es un gasto: devoluciones (Rule B) y
+ * liquidaciones de nómina (Rule C). Tipo estructural compatible con
+ * DevolucionEntity/LiquidacionEntity.
+ *
+ * NO incluye los pagos de préstamo: un préstamo es una CUENTA POR COBRAR y su
+ * cobro es un INGRESO (va en `pagosExtra`), nunca un egreso.
+ */
+export interface EgresoCajaInput {
   monto: number;
   metodoPago?: MetodoPagoCaja;
 }
@@ -59,7 +76,14 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  *
  * Decisión owner: el arqueo es CASH-ONLY — el cajero cuenta el cajón COMPLETO
  * al cerrar, que incluye el fondo inicial. Por lo tanto:
- *   `montoEsperado = montoInicial + Σ pagos EFECTIVO − Σ gastos EFECTIVO`
+ *   `montoEsperado = montoInicial + Σ ingresos EFECTIVO
+ *                    − Σ gastos EFECTIVO − Σ egresos EFECTIVO`
+ * `pagosExtra` son los INGRESOS de caja: pagos de venta/abonos y cobros de
+ * préstamo MANUAL (Rule C: "Préstamos" son cuentas por COBRAR — el deudor
+ * devuelve y el dinero ENTRA al cajón). `egresos` son las salidas de caja que no
+ * son gasto: devoluciones (Rule B) y liquidaciones de nómina (Rule C). Solo las
+ * EFECTIVO mueven el cajón; transferencia/tarjeta se reportan como información
+ * pero no lo tocan.
  * El breakdown por método de pago se reporta completo como información.
  * Los registros ANULADOS se excluyen de todos los totales.
  *
@@ -78,6 +102,7 @@ export function calcularReporteCierre(
   montoRealEfectivo: number | null,
   montoInicial: number = 0,
   pagosExtra: PagoExtraCajaInput[] = [],
+  egresos: EgresoCajaInput[] = [],
 ): ReporteCierre {
   const activos = registros.filter((r) => r.estado !== EstadoRegistro.ANULADO);
 
@@ -109,8 +134,17 @@ export function calcularReporteCierre(
     .filter((g) => (g.metodoPago ?? 'EFECTIVO') === 'EFECTIVO')
     .reduce((sum, g) => sum + Number(g.monto), 0);
 
+  // Egresos extra (devoluciones + liquidaciones): solo los EFECTIVO salen del
+  // cajón y reducen el esperado. Mismo criterio que gastos. Los cobros de
+  // préstamo NO están aquí: son INGRESOS y vienen dentro de `pagosExtra`.
+  const egresosEfectivo = egresos
+    .filter((e) => (e.metodoPago ?? 'EFECTIVO') === 'EFECTIVO')
+    .reduce((sum, e) => sum + Number(e.monto), 0);
+
   // Arqueo cash-only: el cajero cuenta el cajón completo (fondo inicial + movimientos)
-  const montoEsperado = round2(montoInicial + porMetodoPago.EFECTIVO - gastosEfectivo);
+  const montoEsperado = round2(
+    montoInicial + porMetodoPago.EFECTIVO - gastosEfectivo - egresosEfectivo,
+  );
   const diferencia = montoRealEfectivo === null ? null : round2(montoRealEfectivo - montoEsperado);
 
   return {

@@ -7,9 +7,12 @@ import type { IRegistroServicioRepository } from '../../../domain/ports/IRegistr
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
 import type { IPrestamoRepository } from '../../../../prestamos/domain/ports/IPrestamoRepository';
 import type { IPagoPrestamoRepository } from '../../../../prestamos/domain/ports/IPagoPrestamoRepository';
+import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { LiquidacionEntity } from '../../../../../infrastructure/persistence/entities/LiquidacionEntity';
 import { PagoPrestamoEntity } from '../../../../../infrastructure/persistence/entities/PagoPrestamoEntity';
 import { PrestamoEntity } from '../../../../../infrastructure/persistence/entities/PrestamoEntity';
+import { MetodoPago } from '../../../../../infrastructure/persistence/entities/MetodoPago';
+import { getColombiaDateString } from '../../../../../shared/colombia-date';
 
 export interface DescuentoPrestamoInput {
   prestamoId: number;
@@ -24,6 +27,8 @@ export interface LiquidarEmpleadaInput {
   totalPagado?: number;
   /** Préstamos activos a descontar de esta liquidación */
   descuentosPrestamos?: DescuentoPrestamoInput[];
+  /** Cómo se paga la nómina. Solo EFECTIVO resta del arqueo del día (Rule C). */
+  metodoPago?: MetodoPago;
 }
 
 @injectable()
@@ -39,6 +44,8 @@ export class LiquidarEmpleadaUseCase {
     private readonly prestamoRepo: IPrestamoRepository,
     @inject('IPagoPrestamoRepository')
     private readonly pagoPrestamoRepo: IPagoPrestamoRepository,
+    @inject('ICajaRepository')
+    private readonly cajaRepo: ICajaRepository,
   ) {}
 
   async execute(input: LiquidarEmpleadaInput): Promise<LiquidacionEntity> {
@@ -86,15 +93,18 @@ export class LiquidarEmpleadaUseCase {
         (a, b) => new Date(b.creadoEn).getTime() - new Date(a.creadoEn).getTime(),
       )[0];
       const soloRegistrosViejos = pendingRegistros.every(
-        (r) => new Date(r.creadoEn) <= new Date(ultimaLiq.creadoEn),
+        (r) => new Date(r.fechaHora ?? r.creadoEn) <= new Date(ultimaLiq.creadoEn),
       );
       if (soloRegistrosViejos) {
         throw new UnprocessableEntityError(
           `La empleada ya fue liquidada en el período ${input.periodoInicio.toISOString().slice(0, 10)} - ${input.periodoFin.toISOString().slice(0, 10)} y no hay registros nuevos desde entonces`,
         );
       }
+      // Misma fecha de negocio (fechaHora ?? creadoEn) que el filtro de período del
+      // repo y que NominaPendienteUseCase: comparar solo creadoEn re-liquidaba
+      // backfills con fecha de negocio ya cubierta por la liquidación previa.
       const nuevosRegistros = pendingRegistros.filter(
-        (r) => new Date(r.creadoEn) > new Date(ultimaLiq.creadoEn),
+        (r) => new Date(r.fechaHora ?? r.creadoEn) > new Date(ultimaLiq.creadoEn),
       );
       pendingRegistros.splice(0, pendingRegistros.length, ...nuevosRegistros);
     }
@@ -160,6 +170,15 @@ export class LiquidarEmpleadaUseCase {
       throw new UnprocessableEntityError('No hay montos pendientes para liquidar');
     }
 
+    // Rule C: pagar la nómina en EFECTIVO saca dinero del cajón. Se liga a la
+    // caja ABIERTA de hoy para que el arqueo reste `totalPagado` (neto de
+    // descuentos por préstamo, que nunca salieron del cajón).
+    const metodoPago = input.metodoPago ?? MetodoPago.EFECTIVO;
+    const caja = await this.cajaRepo.findAbiertaBySalonYFecha(
+      input.salonId,
+      getColombiaDateString(),
+    );
+
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -177,6 +196,8 @@ export class LiquidarEmpleadaUseCase {
         sueldoFijo,
         totalPagado,
         estado: 'PAGADA',
+        metodoPago,
+        cajaId: caja?.id ?? null,
       }, queryRunner);
 
       // 6. Mark each pending registro as paid and link to liquidacion

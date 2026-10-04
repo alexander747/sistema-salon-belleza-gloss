@@ -1,4 +1,5 @@
 import type { DevolucionEntity } from '../../../../infrastructure/persistence/entities/DevolucionEntity';
+import type { MetodoPago } from '../../../../infrastructure/persistence/entities/MetodoPago';
 
 export interface DevolucionDTO {
   id: number;
@@ -9,6 +10,8 @@ export interface DevolucionDTO {
   montoDevolucion: number;
   regresaAlStock: boolean;
   procesada: boolean;
+  /** Cómo se reintegró el dinero: solo EFECTIVO reduce el arqueo. */
+  metodoPago: MetodoPago;
   salonId: number;
   creadoEn: Date;
 }
@@ -23,6 +26,7 @@ export function devolucionToDTO(entity: DevolucionEntity): DevolucionDTO {
     montoDevolucion: Number(entity.montoDevolucion),
     regresaAlStock: entity.regresaAlStock,
     procesada: entity.procesada,
+    metodoPago: entity.metodoPago,
     salonId: entity.salonId,
     creadoEn: entity.creadoEn,
   };

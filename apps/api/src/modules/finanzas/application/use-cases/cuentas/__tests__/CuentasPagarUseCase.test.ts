@@ -219,4 +219,36 @@ describe('CuentasPagarUseCase', () => {
     expect(result.meta).toEqual({ page: 1, limit: 10, total: 0, totalPages: 0 });
     expect(result.data).toEqual([]);
   });
+
+  it('filtra por nombre case-insensitive y ajusta el total', async () => {
+    mockNominaUseCase.execute.mockResolvedValue([]);
+    mockHistorialUseCase.execute.mockResolvedValue([
+      makeLiquidacion({ usuarioId: 1, totalPagado: 100000 }),
+      makeLiquidacion({ usuarioId: 2, totalPagado: 200000 }),
+    ]);
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeUsuario({ id: 1, nombre: 'María Torres' }),
+      makeUsuario({ id: 2, nombre: 'Sofía Ruiz' }),
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, page: 1, limit: 0, nombre: 'maría' });
+
+    expect(result.meta).toEqual({ page: 1, limit: 0, total: 1, totalPages: 1 });
+    expect(result.data.map((f) => f.nombre)).toEqual(['María Torres']);
+  });
+
+  it('aplica el filtro por nombre ANTES de paginar', async () => {
+    mockNominaUseCase.execute.mockResolvedValue([
+      makeNominaEntry({ empleadaId: 5, nombre: 'Ana', totalAPagar: 100000 }),
+      makeNominaEntry({ empleadaId: 6, nombre: 'Anabel', totalAPagar: 200000 }),
+      makeNominaEntry({ empleadaId: 7, nombre: 'Gina', totalAPagar: 300000 }),
+    ]);
+    mockHistorialUseCase.execute.mockResolvedValue([]);
+    mockUsuarioRepo.findBySalon.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1, page: 2, limit: 1, nombre: 'ana' });
+
+    expect(result.meta).toEqual({ page: 2, limit: 1, total: 2, totalPages: 2 });
+    expect(result.data.map((f) => f.nombre)).toEqual(['Anabel']);
+  });
 });

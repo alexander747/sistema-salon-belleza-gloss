@@ -8,6 +8,8 @@ import { HistorialLiquidacionesUseCase } from '../liquidacion/HistorialLiquidaci
 
 export interface CuentasPagarInput extends PaginationParams {
   salonId: number;
+  /** Filtro opcional: coincidencia case-insensitive por nombre de empleada. */
+  nombre?: string;
 }
 
 /**
@@ -80,8 +82,17 @@ export class CuentasPagarUseCase {
 
     filas.sort((a, b) => a.empleadaId - b.empleadaId);
 
-    const total = filas.length;
-    const data = input.limit > 0 ? filas.slice((input.page - 1) * input.limit, input.page * input.limit) : filas;
+    // Filtro por nombre sobre las filas ya compuestas. La lista surge de la unión
+    // de nómina + historial + usuarios en memoria, así que empujar el filtro a SQL
+    // no es limpio: el tradeoff es cargar todas las filas y filtrar antes de paginar
+    // (el `total` refleja el conjunto filtrado).
+    const filtro = input.nombre?.trim().toLowerCase();
+    const filasFiltradas = filtro
+      ? filas.filter((fila) => fila.nombre.toLowerCase().includes(filtro))
+      : filas;
+
+    const total = filasFiltradas.length;
+    const data = input.limit > 0 ? filasFiltradas.slice((input.page - 1) * input.limit, input.page * input.limit) : filasFiltradas;
     return paginate(data, total, { page: input.page, limit: input.limit });
   }
 }

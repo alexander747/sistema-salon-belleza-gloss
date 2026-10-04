@@ -22,6 +22,7 @@ export type CrearPrestamoInput = z.infer<typeof crearPrestamoSchema>;
 export const registrarPagoSchema = z.object({
   monto: z.number().positive('El monto del pago debe ser positivo'),
   observacion: z.string().max(300).optional(),
+  metodoPago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA']).optional(),
 });
 
 export type RegistrarPagoInput = z.infer<typeof registrarPagoSchema>;

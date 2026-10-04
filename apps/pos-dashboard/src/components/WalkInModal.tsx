@@ -6,15 +6,23 @@ import api from '../services/api.js';
 import { dispatchCajaRefresh } from './caja/CajaBanner.js';
 import { isCajaCerradaError, isCajaNoAbiertaEnFechaError } from './caja/cajaError.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
+import { buildFechaHora } from '../utils/fechaHora.js';
 import { formatCurrency } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
-import { calcularPendiente } from '../utils/fiado.js';
-import { calcularDesgloseReparto, costoUnitarioLinea, alcanceLabel, type DescuentoAlcance } from '../utils/reparto.js';
+import { calcularDesgloseReparto, costoUnitarioLinea } from '../utils/reparto.js';
 import { buildRecibo, fechaDeRegistro, numeroDeRegistro } from '../utils/recibo.js';
 import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
+import {
+  useCarrito,
+  type PaymentMethod,
+  type LineaServicio,
+  type LineaProducto,
+} from '../hooks/useCarrito.js';
 import MoneyInput from './MoneyInput.js';
 import ReciboModal from './ReciboModal.js';
+import CarritoVenta from './CarritoVenta.js';
 import DesgloseReparto from './DesgloseReparto.js';
+import TypeaheadSelect from './TypeaheadSelect.js';
 import styles from './WalkInModal.module.css';
 
 /* ── Types ── */
@@ -33,22 +41,6 @@ interface Servicio {
   precioPorGramo?: number | null;
 }
 
-interface CartItem {
-  servicioId: number;
-  nombre: string;
-  precio: number;
-  duracionMinutos: number;
-  costoBaseInsumos?: number;
-  /** Units sold; N units expand into N per-unit item rows server-side. */
-  cantidad: number;
-  tipoCostoInsumo?: 'FIJO' | 'POR_GRAMO';
-  precioPorGramo?: number | null;
-  /** Grams used per unit — only for `POR_GRAMO` services. */
-  gramosUsados?: number;
-  /** Costo de insumos editado por el usuario (descuento). Si es undefined, se deriva de gramos × $/g. */
-  costoInsumosOverride?: number;
-}
-
 interface Producto {
   id: number;
   nombre: string;
@@ -57,13 +49,6 @@ interface Producto {
   cantidadStock: number;
   categoriaId: number;
   codigoBarras?: string | null;
-}
-
-interface ProductCartItem {
-  productoId: number;
-  nombre: string;
-  precioVenta: number;
-  cantidad: number;
 }
 
 interface Cliente {
@@ -78,8 +63,6 @@ interface Empleada {
   /** % de comisión de la empleada (lo usa el desglose del reparto). */
   porcentajeComisionServicio?: number | null;
 }
-
-type PaymentMethod = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
 
 type TypeFilter = 'TODO' | 'SERVICIOS' | 'PRODUCTOS';
 
@@ -134,25 +117,6 @@ const searchInputStyle: React.CSSProperties = {
   transition: 'border-color 0.2s, box-shadow 0.2s',
 };
 
-const selectStyle: React.CSSProperties = {
-  width: '100%',
-  height: '38px',
-  padding: '0 0.7rem',
-  borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border)',
-  background: 'var(--bg-base)',
-  color: 'var(--text-primary)',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.8125rem',
-  outline: 'none',
-  appearance: 'none',
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%238c8894' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`,
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 10px center',
-  paddingRight: '28px',
-  cursor: 'pointer',
-};
-
 const formLabelStyle: React.CSSProperties = {
   display: 'block',
   fontFamily: "'DM Sans', sans-serif",
@@ -166,22 +130,6 @@ const formLabelStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   ...searchInputStyle,
   maxWidth: '100%',
-};
-
-/** Compact inline editor for a cart line's unit price. */
-const priceInputStyle: React.CSSProperties = {
-  width: '88px',
-  height: '32px',
-  padding: '0 0.4rem',
-  borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border)',
-  background: 'var(--bg-base)',
-  color: 'var(--text-primary)',
-  fontFamily: "'DM Sans', sans-serif",
-  fontSize: '0.8125rem',
-  fontWeight: 600,
-  textAlign: 'right',
-  outline: 'none',
 };
 
 /* ── Animation variants ── */
@@ -209,6 +157,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
         (window.matchMedia?.('(max-width: 768px)')?.matches ?? false)),
   );
 
+  /** Mobile (bottom-sheet) usa el wizard de 3 pasos; desktop conserva las dos columnas. */
+  const esWizard = esPantallaTactil;
+
   /* ── Catalog data ── */
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -222,31 +173,51 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   /* ── UI state ── */
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('TODO');
+  /** Paso activo del wizard móvil: 1 Servicios · 2 Productos · 3 Detalle. */
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  /** Modal del desglose del reparto (se abre desde el botón "Ver reparto"). */
+  const [desgloseOpen, setDesgloseOpen] = useState(false);
 
-  /* ── Cart state ── */
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [productCart, setProductCart] = useState<ProductCartItem[]>([]);
+  /* ── Cart state (shared hook: single source for both sale screens) ── */
+  const carrito = useCarrito();
+  const {
+    servicios: cart,
+    productos: productCart,
+    addServicio: addToCart,
+    addProducto: addProductToCart,
+    vaciar: vaciarCarrito,
+    reset: resetCarrito,
+    totalServicios,
+    totalProductos,
+    subtotal,
+    finalTotal,
+    propina,
+    descuento,
+    descuentoAlcance,
+    notas,
+    paymentMethod,
+    setPaymentMethod,
+    montoRecibido,
+    setMontoRecibido,
+    esFiado,
+    setEsFiado,
+    referencia,
+    setReferencia,
+    cambio,
+    pendiente,
+    hasAdjustment,
+    ajusteNoteRequired,
+    carritoVacio,
+    faltanGramos,
+    pagoSuficiente,
+    buildNotas,
+    buildPago,
+  } = carrito;
+
   const [clienteId, setClienteId] = useState<number | ''>('');
   const [empleadaId, setEmpleadaId] = useState<number | ''>('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFECTIVO');
-  const [montoRecibido, setMontoRecibido] = useState<number>(0);
-  /** Fiado: la clienta paga después (pago parcial o diferido permitido). */
-  const [esFiado, setEsFiado] = useState(false);
-  const [referencia, setReferencia] = useState('');
-  const [propina, setPropina] = useState<number>(0);
-  const [notas, setNotas] = useState('');
   /** Fecha de negocio (backfill): default hoy, fechas pasadas permitidas. */
   const [fecha, setFecha] = useState(() => toISODate(new Date()));
-
-  /* ── Discount & Override state ── */
-  const [descuento, setDescuento] = useState<number>(0);
-  /** Alcance del % : servicios, productos o ambos (default AMBOS). */
-  const [descuentoAlcance, setDescuentoAlcance] = useState<DescuentoAlcance>('AMBOS');
-  // Secciones opcionales (switch): ocultas por defecto para no agrandar el modal.
-  const [propinaActiva, setPropinaActiva] = useState(false);
-  const [descuentoActivo, setDescuentoActivo] = useState(false);
-  const [notasActivo, setNotasActivo] = useState(false);
-  const [notaAjuste, setNotaAjuste] = useState('');
 
   /* ── Submission state ── */
   const [processing, setProcessing] = useState(false);
@@ -263,11 +234,12 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   const checkoutTopRef = useRef<HTMLDivElement>(null);
 
   const scrollToCatalog = useCallback(() => {
-    catalogTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // `scrollIntoView` no existe en jsdom (tests); optional call para no romper.
+    catalogTopRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, []);
 
   const scrollToCheckout = useCallback(() => {
-    checkoutTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    checkoutTopRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, []);
 
   /* ── Derived ── */
@@ -316,42 +288,27 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     return list;
   }, [unifiedItems, typeFilter, search]);
 
-  const totalServicios = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
-  }, [cart]);
+  /**
+   * Items visibles en el wizard móvil: paso 1 = servicios, paso 2 = productos
+   * (mismo buscador). En desktop se usa `filteredItems` (con su filtro de tipo).
+   */
+  const wizardItems = useMemo(() => {
+    if (!esWizard) return filteredItems;
+    const base = unifiedItems.filter((i) =>
+      step === 1 ? i.type === 'SERVICIO' : i.type === 'PRODUCTO',
+    );
+    const q = search.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(
+      (i) =>
+        i.nombre.toLowerCase().includes(q) ||
+        (i.descripcion != null && i.descripcion.toLowerCase().includes(q)) ||
+        (i.type === 'PRODUCTO' && i.marca != null && i.marca.toLowerCase().includes(q)),
+    );
+  }, [esWizard, filteredItems, unifiedItems, step, search]);
 
-  const totalProductos = useMemo(() => {
-    return productCart.reduce((sum, p) => sum + p.precioVenta * p.cantidad, 0);
-  }, [productCart]);
-
-  const subtotal = useMemo(() => totalServicios + totalProductos, [totalServicios, totalProductos]);
-
-  // El % se aplica SOLO al alcance elegido; el descuento se calcula por lado.
-  const pctServ = descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS' ? descuento : 0;
-  const pctProd = descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS' ? descuento : 0;
-
-  const descuentoMonto = useMemo(() => {
-    const descServicios = totalServicios - Math.round(totalServicios * (1 - pctServ / 100));
-    const descProductos = totalProductos - Math.round(totalProductos * (1 - pctProd / 100));
-    return descServicios + descProductos;
-  }, [totalServicios, totalProductos, pctServ, pctProd]);
-
-  const calculatedTotal = useMemo(() => {
-    return subtotal + propina - descuentoMonto;
-  }, [subtotal, propina, descuentoMonto]);
-
-  const finalTotal = calculatedTotal;
-
-  const cambio = useMemo(() => {
-    if (paymentMethod !== 'EFECTIVO') return 0;
-    return Math.max(0, montoRecibido - finalTotal);
-  }, [paymentMethod, montoRecibido, finalTotal]);
-
-  /** Deuda restante: la propina nunca se fía (decisión owner D8). */
-  const pendiente = useMemo(
-    () => calcularPendiente(finalTotal, propina, montoRecibido),
-    [finalTotal, propina, montoRecibido],
-  );
+  /** Lo que renderiza el grid: wizard (por paso) o catálogo unificado (desktop). */
+  const displayedItems = esWizard ? wizardItems : filteredItems;
 
   const descripcionServicio = useMemo(() => {
     const names = cart.map((item) =>
@@ -361,25 +318,17 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     return names.join(', ');
   }, [cart, productCart]);
 
-  const hasAdjustment = descuento > 0;
-  const ajusteNoteRequired = hasAdjustment && notaAjuste.trim().length === 0;
-
   const canSubmit = useMemo(() => {
-    if (cart.length === 0 && productCart.length === 0) return false;
+    if (carritoVacio) return false;
     if (!clienteId) return false;
     if (!empleadaId) return false;
     // A POR_GRAMO line needs its grams before the server can derive its real cost.
-    const faltaGramos = cart.some(
-      (item) =>
-        item.tipoCostoInsumo === 'POR_GRAMO' &&
-        !(item.gramosUsados != null && item.gramosUsados > 0),
-    );
-    if (faltaGramos) return false;
+    if (faltanGramos) return false;
     // Con fiado se acepta cualquier monto >= 0 (0 = fiado total); sin fiado, pago completo.
-    if (!esFiado && paymentMethod === 'EFECTIVO' && montoRecibido < finalTotal) return false;
-    if (hasAdjustment && notaAjuste.trim().length === 0) return false;
+    if (!pagoSuficiente) return false;
+    if (ajusteNoteRequired) return false;
     return true;
-  }, [cart, productCart, clienteId, empleadaId, paymentMethod, montoRecibido, finalTotal, hasAdjustment, notaAjuste, esFiado]);
+  }, [carritoVacio, clienteId, empleadaId, faltanGramos, pagoSuficiente, ajusteNoteRequired]);
 
   /* ── PR5: desglose visible del reparto (espejo de la fórmula del server) ──
    * El dueño quiere ver que el costo de insumos se descuenta del total cobrado
@@ -476,23 +425,13 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
 
   useEffect(() => {
     if (!isOpen) {
-      setCart([]);
+      resetCarrito();
       setClienteId('');
       setEmpleadaId('');
-      setMontoRecibido(0);
-      setEsFiado(false);
-      setReferencia('');
-      setPropina(0);
-      setNotas('');
-      setPropinaActiva(false);
-      setNotasActivo(false);
-      setDescuentoActivo(false);
       setSearch('');
       setTypeFilter('TODO');
-      setProductCart([]);
-      setDescuento(0);
-      setDescuentoAlcance('AMBOS');
-      setNotaAjuste('');
+      setStep(1);
+      setDesgloseOpen(false);
       setFecha(toISODate(new Date()));
       setError(null);
       setErrorEsCajaCerrada(false);
@@ -502,128 +441,14 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setScanError(false);
       setRecibo(null);
     }
-  }, [isOpen]);
+  }, [isOpen, resetCarrito]);
 
-  /* ── Cart helpers ── */
+  /* Wizard móvil: al entrar al paso Detalle, aseguramos ver el inicio del checkout. */
+  useEffect(() => {
+    if (esWizard && step === 3) scrollToCheckout();
+  }, [esWizard, step, scrollToCheckout]);
 
-  const addToCart = (serv: Servicio) => {
-    setCart((prev) => {
-      // Re-click increments quantity instead of duplicating the line.
-      const existing = prev.find((item) => item.servicioId === serv.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.servicioId === serv.id ? { ...item, cantidad: item.cantidad + 1 } : item,
-        );
-      }
-      return [
-        ...prev,
-        {
-          servicioId: serv.id,
-          nombre: serv.nombre,
-          precio: serv.precioFinal,
-          duracionMinutos: serv.duracionMinutos,
-          costoBaseInsumos: serv.costoBaseInsumos ?? 0,
-          cantidad: 1,
-          tipoCostoInsumo: serv.tipoCostoInsumo,
-          precioPorGramo: serv.precioPorGramo ?? null,
-        },
-      ];
-    });
-  };
-
-  const updateServiceQty = (servicioId: number, delta: number) => {
-    setCart((prev) =>
-      prev
-        .map((item) =>
-          item.servicioId === servicioId
-            ? { ...item, cantidad: Math.max(0, item.cantidad + delta) }
-            : item,
-        )
-        .filter((item) => item.cantidad > 0),
-    );
-  };
-
-  const updateServiceGramos = (servicioId: number, gramos: number | undefined) => {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.servicioId === servicioId
-          ? { ...item, gramosUsados: gramos, costoInsumosOverride: undefined }
-          : item,
-      ),
-    );
-  };
-
-  /** Edita el costo de insumos de la línea (descuento). `undefined` vuelve al derivado. */
-  const updateCostoInsumos = (servicioId: number, costo: number | undefined) => {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.servicioId === servicioId ? { ...item, costoInsumosOverride: costo } : item,
-      ),
-    );
-  };
-
-  const removeFromCart = (servicioId: number) => {
-    setCart((prev) => prev.filter((item) => item.servicioId !== servicioId));
-  };
-
-  /** Edita el precio unitario de la línea (E1: precio editable por línea). */
-  const updateServicePrice = (servicioId: number, precio: number) => {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.servicioId === servicioId ? { ...item, precio: Math.max(0, precio) } : item,
-      ),
-    );
-  };
-
-  /* ── Product cart helpers ── */
-
-  const addProductToCart = (prod: Producto) => {
-    if (prod.cantidadStock <= 0) return;
-    setProductCart((prev) => {
-      const existing = prev.find((item) => item.productoId === prod.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.productoId === prod.id
-            ? { ...item, cantidad: Math.min(item.cantidad + 1, prod.cantidadStock) }
-            : item,
-        );
-      }
-      return [
-        ...prev,
-        {
-          productoId: prod.id,
-          nombre: prod.nombre,
-          precioVenta: prod.precioVenta,
-          cantidad: 1,
-        },
-      ];
-    });
-  };
-
-  const updateProductQty = (productoId: number, delta: number) => {
-    setProductCart((prev) =>
-      prev
-        .map((item) =>
-          item.productoId === productoId
-            ? { ...item, cantidad: Math.max(0, item.cantidad + delta) }
-            : item,
-        )
-        .filter((item) => item.cantidad > 0),
-    );
-  };
-
-  const removeProductFromCart = (productoId: number) => {
-    setProductCart((prev) => prev.filter((item) => item.productoId !== productoId));
-  };
-
-  /** Edita el precio unitario de venta del producto (E1). */
-  const updateProductPrice = (productoId: number, precio: number) => {
-    setProductCart((prev) =>
-      prev.map((item) =>
-        item.productoId === productoId ? { ...item, precioVenta: Math.max(0, precio) } : item,
-      ),
-    );
-  };
+  /* Cart line helpers (add/qty/price/grams/remove) now live in useCarrito. */
 
   /* ── Scanner de código de barras (PR2) ──
    * Match exacto contra la lista RETAIL ya cargada: Enter agrega el producto
@@ -650,7 +475,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
 
   const unifiedCart = useMemo(() => {
     const items: Array<
-      { type: 'SERVICIO'; data: CartItem } | { type: 'PRODUCTO'; data: ProductCartItem }
+      { type: 'SERVICIO'; data: LineaServicio } | { type: 'PRODUCTO'; data: LineaProducto }
     > = [
       ...cart.map((item) => ({ type: 'SERVICIO' as const, data: item })),
       ...productCart.map((item) => ({ type: 'PRODUCTO' as const, data: item })),
@@ -666,39 +491,22 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     setProcessing(true);
     setError(null);
     try {
-      // Build notas with adjustment info
-      let finalNotas = notas.trim() || undefined;
-      if (hasAdjustment && notaAjuste.trim()) {
-        const ajusteParts: string[] = [];
-        if (descuento > 0) ajusteParts.push(`descuento ${descuento}% ${alcanceLabel(descuentoAlcance)}`);
-        const prefix = `[AJUSTE: ${ajusteParts.join(' | ')}] Razón: ${notaAjuste.trim()}`;
-        finalNotas = finalNotas ? `${prefix}\n${finalNotas}` : prefix;
-      }
+      // Build notas with adjustment info (shared helper)
+      const finalNotas = buildNotas(notas.trim() || undefined);
 
       const payload = {
         salonId,
         clienteId: Number(clienteId),
         usuarioId: Number(empleadaId),
-        // Fecha de negocio: mediodía local TZ-safe (AD7) — el backend liga la caja de esa fecha
-        fechaHora: new Date(`${fecha}T12:00:00`).toISOString(),
+        // Business date: today → real instant; any other date → local noon
+        // TZ-safe (the real time of a backfill entry is unknown).
+        fechaHora: buildFechaHora(fecha),
         totalServicios,
         totalProductos,
         propina,
         montoTotal: finalTotal,
         descripcionServicio: descripcionServicio || undefined,
-        pagos: [
-          {
-            // Fiado: se envía el monto cobrado (0 = fiado total, o parcial).
-            // Sin fiado: efectivo usa montoRecibido; tarjeta/transferencia pagan el total.
-            monto: esFiado
-              ? montoRecibido
-              : paymentMethod === 'EFECTIVO'
-                ? montoRecibido
-                : finalTotal,
-            metodoPago: paymentMethod,
-            referencia: referencia.trim() || undefined,
-          },
-        ],
+        pagos: [buildPago()],
         notas: finalNotas,
         productosVendidos: productCart.map((p) => ({
           productoId: p.productoId,
@@ -744,7 +552,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setRecibo(
         buildRecibo({
           numero: numeroDeRegistro(data),
-          fecha: fechaDeRegistro(data, new Date(`${fecha}T12:00:00`).toISOString()),
+          fecha: fechaDeRegistro(data, buildFechaHora(fecha)),
           clienteNombre,
           empleadaNombre,
           lineas,
@@ -821,6 +629,39 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           </button>
         </div>
 
+        {/* ── Stepper del wizard (solo móvil): 1 Servicios · 2 Productos · 3 Detalle ── */}
+        {esWizard && (
+          <div className={styles.wizardStepper} role="navigation" aria-label="Pasos">
+            {(
+              [
+                [1, 'Servicios'],
+                [2, 'Productos'],
+                [3, 'Detalle'],
+              ] as Array<[1 | 2 | 3, string]>
+            ).map(([n, label], idx) => {
+              const isActive = step === n;
+              const isDone = step > n;
+              return (
+                <React.Fragment key={n}>
+                  {idx > 0 && <span className={styles.wizardConnector} aria-hidden="true" />}
+                  <button
+                    type="button"
+                    className={`${styles.wizardStep} ${isActive ? styles.wizardStepActive : ''} ${isDone ? styles.wizardStepDone : ''}`}
+                    onClick={() => {
+                      if (n < step) setStep(n);
+                    }}
+                    aria-current={isActive ? 'step' : undefined}
+                    aria-label={`Paso ${n}: ${label}`}
+                  >
+                    <span className={styles.wizardStepNum}>{isDone ? '✓' : n}</span>
+                    <span className={styles.wizardStepLabel}>{label}</span>
+                  </button>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+
         {/* ── Error banner ── */}
         <AnimatePresence>
           {error && (
@@ -889,10 +730,12 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
               {/* ============================================================ */}
               {/*  LEFT PANEL — Unified Catalog                                */}
               {/* ============================================================ */}
+              {(!esWizard || step !== 3) && (
               <div className={styles.catalogPanel} ref={catalogTopRef}>
                 {/* Toolbar sticky: filtros + escáner + búsqueda siempre visibles al scrollear el catálogo */}
                 <div className={styles.catalogSticky}>
-                {/* ── Type filter buttons ── */}
+                {/* ── Type filter buttons (ocultos en el wizard: cada paso ya tiene su tipo) ── */}
+                {!esWizard && (
                 <div className={styles.typeFilterRow}>
                   {(['TODO', 'SERVICIOS', 'PRODUCTOS'] as TypeFilter[]).map((t) => {
                     const isActive = typeFilter === t;
@@ -912,8 +755,10 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     );
                   })}
                 </div>
+                )}
 
-                {/* ── Escáner de código de barras (PR2) ── */}
+                {/* ── Escáner de código de barras (PR2) — en el wizard solo en el paso Productos ── */}
+                {(!esWizard || step === 2) && (
                 <div style={{ marginBottom: '0.625rem' }}>
                   <input
                     type="text"
@@ -952,12 +797,19 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* ── Universal search ── */}
                 <div className={styles.catalogToolbar}>
                   <input
                     type="text"
-                    placeholder="Buscar servicios o productos…"
+                    placeholder={
+                      esWizard
+                        ? step === 1
+                          ? 'Buscar servicios…'
+                          : 'Buscar productos…'
+                        : 'Buscar servicios o productos…'
+                    }
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     style={searchInputStyle}
@@ -973,11 +825,11 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                 </div>
                 </div>{/* /catalogSticky */}
 
-                {/* ── Unified grid ── */}
-                {filteredItems.length === 0 ? (
+                {/* ── Unified grid (wizard: paso 1 servicios, paso 2 productos) ── */}
+                {displayedItems.length === 0 ? (
                   <div className={styles.emptyState}>
                     <span className={styles.emptyIcon}>
-                      {typeFilter === 'PRODUCTOS' ? '🧴' : '💇'}
+                      {(esWizard ? step === 2 : typeFilter === 'PRODUCTOS') ? '🧴' : '💇'}
                     </span>
                     <p
                       style={{
@@ -988,16 +840,20 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     >
                       {search
                         ? 'No hay resultados que coincidan con la búsqueda.'
-                        : typeFilter === 'SERVICIOS'
-                          ? 'No hay servicios disponibles.'
-                          : typeFilter === 'PRODUCTOS'
-                            ? 'No hay productos disponibles.'
-                            : 'No hay servicios ni productos disponibles.'}
+                        : esWizard
+                          ? step === 2
+                            ? 'No hay productos disponibles. Podés saltar este paso.'
+                            : 'No hay servicios disponibles.'
+                          : typeFilter === 'SERVICIOS'
+                            ? 'No hay servicios disponibles.'
+                            : typeFilter === 'PRODUCTOS'
+                              ? 'No hay productos disponibles.'
+                              : 'No hay servicios ni productos disponibles.'}
                     </p>
                   </div>
                 ) : (
                   <div className={styles.serviceGrid}>
-                    {filteredItems.map((item) => {
+                    {displayedItems.map((item) => {
                       const isService = item.type === 'SERVICIO';
                       const inServiceCart = isService
                         ? cart.some((c) => c.servicioId === item.id)
@@ -1124,421 +980,39 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   </div>
                 )}
               </div>
+              )}
 
               {/* ============================================================ */}
               {/*  RIGHT PANEL — Cart + Checkout                               */}
               {/* ============================================================ */}
-              <div
-                className={`${styles.checkoutPanel} ${esPantallaTactil && unifiedCart.length === 0 ? styles.checkoutHiddenMobile : ''}`}
-                ref={checkoutTopRef}
-              >
-                {/* ── Mobile: volver a elegir ── */}
-                <button className={styles.mobileBackBtn} onClick={scrollToCatalog}>
-                  ← Seguir eligiendo
-                </button>
+              {(!esWizard || step === 3) && (
+              <div className={styles.checkoutPanel} ref={checkoutTopRef}>
+                {/* ── Mobile (layout viejo): volver a elegir ── */}
+                {!esWizard && (
+                  <button className={styles.mobileBackBtn} onClick={scrollToCatalog}>
+                    ← Seguir eligiendo
+                  </button>
+                )}
                 {/* ── Unified cart ── */}
                 <div className={styles.checkoutSection}>
                   <div className={styles.checkoutHeader}>
                     <span className={styles.checkoutTitle}>Carrito</span>
                     {(cart.length > 0 || productCart.length > 0) && (
                       <button
-                        onClick={() => {
-                          setCart([]);
-                          setProductCart([]);
-                        }}
+                        onClick={vaciarCarrito}
                         className={styles.clearBtn}
                       >
                         Vaciar
                       </button>
                     )}
                   </div>
-                  {unifiedCart.length === 0 ? (
-                    <p
-                      style={{
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.8125rem',
-                        color: 'var(--text-dim)',
-                        textAlign: 'center',
-                        padding: '1rem 0',
-                        margin: 0,
-                      }}
-                    >
-                      Seleccioná servicios o productos de la lista para agregarlos.
-                    </p>
-                  ) : (
-                    <div className={styles.cartList}>
-                      {unifiedCart.map((entry) => {
-                        if (entry.type === 'SERVICIO') {
-                          const item = entry.data;
-                          const gramosLinea = item.gramosUsados ?? 0;
-                          const costoInsumoLinea = gramosLinea * (item.precioPorGramo ?? 0);
-                          const costoInsumosMostrado =
-                            item.costoInsumosOverride ?? costoInsumoLinea;
-                          return (
-                            <motion.div
-                              key={`svc-${item.servicioId}`}
-                              layout
-                              initial={{ opacity: 0, x: 20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: -20 }}
-                              className={styles.cartItem}
-                            >
-                              <div className={styles.cartItemInfo}>
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.35rem',
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontFamily: "'DM Sans', sans-serif",
-                                      fontSize: '0.55rem',
-                                      fontWeight: 600,
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.04em',
-                                      padding: '0.05rem 0.25rem',
-                                      borderRadius: '2px',
-                                      background: 'rgba(212,168,83,0.15)',
-                                      color: 'var(--accent)',
-                                      lineHeight: 1.3,
-                                    }}
-                                  >
-                                    S
-                                  </span>
-                                  <div className={styles.cartItemName}>{item.nombre}</div>
-                                </div>
-                                <div className={styles.cartItemDuration}>
-                                  {item.duracionMinutos} min
-                                </div>
-                              </div>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.35rem',
-                                }}
-                              >
-                                <button
-                                  aria-label={`Quitar ${item.nombre}`}
-                                  onClick={() => updateServiceQty(item.servicioId, -1)}
-                                  style={{
-                                    background: 'var(--bg-base)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 'var(--radius-sm)',
-                                    color: 'var(--text-primary)',
-                                    width: '26px',
-                                    height: '26px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    lineHeight: 1,
-                                    padding: 0,
-                                  }}
-                                >
-                                  −
-                                </button>
-                                <span
-                                  aria-label={`Cantidad ${item.nombre}`}
-                                  style={{
-                                    fontFamily: "'DM Sans', sans-serif",
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 600,
-                                    color: 'var(--text-primary)',
-                                    minWidth: '20px',
-                                    textAlign: 'center',
-                                  }}
-                                >
-                                  {item.cantidad}
-                                </span>
-                                <button
-                                  aria-label={`Agregar ${item.nombre}`}
-                                  onClick={() => updateServiceQty(item.servicioId, 1)}
-                                  style={{
-                                    background: 'var(--bg-base)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 'var(--radius-sm)',
-                                    color: 'var(--text-primary)',
-                                    width: '26px',
-                                    height: '26px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    lineHeight: 1,
-                                    padding: 0,
-                                  }}
-                                >
-                                  +
-                                </button>
-                              </div>
-                              <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                inputMode="decimal"
-                                aria-label={`Precio ${item.nombre}`}
-                                value={item.precio}
-                                onChange={(e) =>
-                                  updateServicePrice(item.servicioId, Number(e.target.value))
-                                }
-                                className={styles.noSpinner}
-                                style={priceInputStyle}
-                                title="Precio unitario"
-                              />
-                              <span
-                                style={{
-                                  fontFamily: "'DM Sans', sans-serif",
-                                  fontSize: '0.8125rem',
-                                  fontWeight: 600,
-                                  color: 'var(--accent)',
-                                  minWidth: '80px',
-                                  textAlign: 'right',
-                                }}
-                              >
-                                {formatCurrency(item.precio * item.cantidad)}
-                              </span>
-                              <button
-                                onClick={() => removeFromCart(item.servicioId)}
-                                className={styles.removeBtn}
-                              >
-                                ✕
-                              </button>
-                              {item.tipoCostoInsumo === 'POR_GRAMO' && (
-                                <div className={styles.gramsField}>
-                                  <label
-                                    className={styles.gramsLabel}
-                                    htmlFor={`gramos-svc-${item.servicioId}`}
-                                  >
-                                    Gramos usados
-                                  </label>
-                                  <div className={styles.gramsInputWrap}>
-                                    <input
-                                      id={`gramos-svc-${item.servicioId}`}
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      inputMode="decimal"
-                                      aria-label={`Gramos usados ${item.nombre}`}
-                                      placeholder="0"
-                                      value={item.gramosUsados ?? ''}
-                                      onChange={(e) =>
-                                        updateServiceGramos(
-                                          item.servicioId,
-                                          e.target.value === '' ? undefined : Number(e.target.value),
-                                        )
-                                      }
-                                      className={styles.gramsInput}
-                                    />
-                                    <span className={styles.gramsSuffix}>g</span>
-                                  </div>
-                                  <label
-                                    className={styles.gramsLabel}
-                                    htmlFor={`costo-svc-${item.servicioId}`}
-                                  >
-                                    Costo de insumos
-                                  </label>
-                                  <div className={styles.gramsInputWrap}>
-                                    <input
-                                      id={`costo-svc-${item.servicioId}`}
-                                      type="number"
-                                      min="0"
-                                      step="1"
-                                      inputMode="decimal"
-                                      aria-label={`Costo de insumos ${item.nombre}`}
-                                      placeholder="0"
-                                      value={costoInsumosMostrado > 0 ? costoInsumosMostrado : ''}
-                                      onChange={(e) =>
-                                        updateCostoInsumos(
-                                          item.servicioId,
-                                          e.target.value === ''
-                                            ? undefined
-                                            : Number(e.target.value),
-                                        )
-                                      }
-                                      className={styles.gramsInput}
-                                    />
-                                    <span className={styles.gramsSuffix}>$</span>
-                                  </div>
-                                  {item.costoInsumosOverride != null && costoInsumoLinea > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        updateCostoInsumos(item.servicioId, undefined)
-                                      }
-                                      className={styles.gramsCost}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        padding: 0,
-                                        cursor: 'pointer',
-                                        textAlign: 'left',
-                                        font: 'inherit',
-                                      }}
-                                    >
-                                      Calculado: {formatCurrency(costoInsumoLinea)} · volver
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </motion.div>
-                          );
-                        } else {
-                          const item = entry.data;
-                          return (
-                            <motion.div
-                              key={`prod-${item.productoId}`}
-                              layout
-                              initial={{ opacity: 0, x: 20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: -20 }}
-                              className={styles.cartItem}
-                            >
-                              <div className={styles.cartItemInfo}>
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.35rem',
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontFamily: "'DM Sans', sans-serif",
-                                      fontSize: '0.55rem',
-                                      fontWeight: 600,
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.04em',
-                                      padding: '0.05rem 0.25rem',
-                                      borderRadius: '2px',
-                                      background: 'rgba(92,186,123,0.15)',
-                                      color: 'var(--success)',
-                                      lineHeight: 1.3,
-                                    }}
-                                  >
-                                    P
-                                  </span>
-                                  <div className={styles.cartItemName}>{item.nombre}</div>
-                                </div>
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.3rem',
-                                    fontFamily: "'DM Sans', sans-serif",
-                                    fontSize: '0.6875rem',
-                                    color: 'var(--text-secondary)',
-                                  }}
-                                >
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    inputMode="decimal"
-                                    aria-label={`Precio ${item.nombre}`}
-                                    value={item.precioVenta}
-                                    onChange={(e) =>
-                                      updateProductPrice(item.productoId, Number(e.target.value))
-                                    }
-                                    className={styles.noSpinner}
-                                    style={priceInputStyle}
-                                    title="Precio unitario"
-                                  />
-                                  <span>× {item.cantidad}</span>
-                                </div>
-                              </div>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.35rem',
-                                }}
-                              >
-                                <button
-                                  onClick={() => updateProductQty(item.productoId, -1)}
-                                  style={{
-                                    background: 'var(--bg-base)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 'var(--radius-sm)',
-                                    color: 'var(--text-primary)',
-                                    width: '26px',
-                                    height: '26px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    lineHeight: 1,
-                                    padding: 0,
-                                  }}
-                                >
-                                  −
-                                </button>
-                                <span
-                                  style={{
-                                    fontFamily: "'DM Sans', sans-serif",
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 600,
-                                    color: 'var(--text-primary)',
-                                    minWidth: '20px',
-                                    textAlign: 'center',
-                                  }}
-                                >
-                                  {item.cantidad}
-                                </span>
-                                <button
-                                  onClick={() => updateProductQty(item.productoId, 1)}
-                                  style={{
-                                    background: 'var(--bg-base)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: 'var(--radius-sm)',
-                                    color: 'var(--text-primary)',
-                                    width: '26px',
-                                    height: '26px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    fontSize: '0.875rem',
-                                    lineHeight: 1,
-                                    padding: 0,
-                                  }}
-                                >
-                                  +
-                                </button>
-                              </div>
-                              <div
-                                style={{
-                                  fontFamily: "'DM Sans', sans-serif",
-                                  fontSize: '0.8125rem',
-                                  fontWeight: 600,
-                                  color: 'var(--accent)',
-                                  minWidth: '70px',
-                                  textAlign: 'right',
-                                }}
-                              >
-                                {formatCurrency(item.precioVenta * item.cantidad)}
-                              </div>
-                              <button
-                                onClick={() => removeProductFromCart(item.productoId)}
-                                className={styles.removeBtn}
-                              >
-                                ✕
-                              </button>
-                            </motion.div>
-                          );
-                        }
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Client + Employee ── */}
-                <div className={styles.checkoutSection}>
+                  <CarritoVenta
+                    carrito={carrito}
+                    emptyText="Seleccioná servicios o productos de la lista para agregarlos."
+                    mostrarSubtotalesLinea
+                    mostrarNotas
+                    afterItems={
+                      <div className={styles.checkoutSection}>
                   <div>
                     <label style={formLabelStyle}>Fecha de la venta</label>
                     <input
@@ -1557,243 +1031,41 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     />
                   </div>
                   <div style={{ marginTop: '0.625rem' }}>
-                    <label style={formLabelStyle}>Cliente *</label>
-                    <select
+                    <label style={formLabelStyle} htmlFor="walkin-cliente">
+                      Cliente *
+                    </label>
+                    <TypeaheadSelect
+                      inputId="walkin-cliente"
+                      ariaLabel="Cliente"
+                      options={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
                       value={clienteId}
-                      onChange={(e) =>
-                        setClienteId(e.target.value ? Number(e.target.value) : '')
-                      }
-                      style={selectStyle}
-                    >
-                      <option value="">Seleccionar cliente…</option>
-                      {clientes.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nombre}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setClienteId}
+                      placeholder="Buscar cliente…"
+                      emptyText="No se encontraron clientes"
+                    />
                   </div>
                   <div style={{ marginTop: '0.625rem' }}>
-                    <label style={formLabelStyle}>Empleada *</label>
-                    <select
+                    <label style={formLabelStyle} htmlFor="walkin-empleada">
+                      Empleada *
+                    </label>
+                    <TypeaheadSelect
+                      inputId="walkin-empleada"
+                      ariaLabel="Empleada"
+                      options={filterEmpleadasActivas(empleadas).map((emp) => ({
+                        id: emp.id,
+                        nombre: emp.nombre,
+                      }))}
                       value={empleadaId}
-                      onChange={(e) =>
-                        setEmpleadaId(e.target.value ? Number(e.target.value) : '')
-                      }
-                      style={selectStyle}
-                    >
-                      <option value="">Seleccionar empleada…</option>
-                      {filterEmpleadasActivas(empleadas).map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* ── Propina (switch) ── */}
-                <div className={styles.checkoutSection}>
-                  <label className={styles.switchLabel}>
-                    <input
-                      type="checkbox"
-                      checked={propinaActiva}
-                      onChange={(e) => {
-                        setPropinaActiva(e.target.checked);
-                        if (!e.target.checked) setPropina(0);
-                      }}
+                      onChange={setEmpleadaId}
+                      placeholder="Buscar empleada…"
+                      emptyText="No se encontraron empleadas"
                     />
-                    <span className={styles.switchSlider} />
-                    <span className={styles.switchLabelText}>Agregar propina</span>
-                  </label>
-                  {propinaActiva && (
-                    <div style={{ marginTop: '0.5rem' }}>
-                      <label style={formLabelStyle}>Propina</label>
-                      <MoneyInput
-                        value={propina}
-                        onChange={setPropina}
-                        placeholder="0"
-                        ariaLabel="Propina"
-                        style={inputStyle}
-                        className={styles.noSpinner}
-                        onFocus={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--accent)';
-                          e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--border)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Discount & Price Override ── */}
-                <div className={styles.checkoutSection}>
-                  <div
-                    style={{
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.7rem',
-                      fontWeight: 600,
-                      color: 'var(--text-dim)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      marginBottom: '0.5rem',
-                    }}
-                  >
-                    Ajustes de precio
-                  </div>
-
-                  {/* Descuento % (switch) */}
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <label className={styles.switchLabel}>
-                      <input
-                        type="checkbox"
-                        checked={descuentoActivo}
-                        onChange={(e) => {
-                          setDescuentoActivo(e.target.checked);
-                          if (!e.target.checked) setDescuento(0);
-                        }}
-                      />
-                      <span className={styles.switchSlider} />
-                      <span className={styles.switchLabelText}>Ajustar precio por %</span>
-                    </label>
-                    {descuentoActivo && (
-                      <div style={{ marginTop: '0.5rem' }}>
-                        <label style={formLabelStyle}>Descuento (%)</label>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                          }}
-                        >
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={descuento || ''}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              setDescuento(Math.min(100, Math.max(0, val)));
-                            }}
-                            placeholder="0"
-                            aria-label="Descuento (%)"
-                            className={styles.noSpinner}
-                            style={{ ...inputStyle, maxWidth: '100px' }}
-                            onFocus={(e) => {
-                              e.currentTarget.style.borderColor = 'var(--accent)';
-                              e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-glow)';
-                            }}
-                            onBlur={(e) => {
-                              e.currentTarget.style.borderColor = 'var(--border)';
-                              e.currentTarget.style.boxShadow = 'none';
-                            }}
-                          />
-                          <span
-                            style={{
-                              fontFamily: "'DM Sans', sans-serif",
-                              fontSize: '0.75rem',
-                              color: 'var(--text-secondary)',
-                            }}
-                          >
-                            %
-                          </span>
-                        </div>
-                        {/* Alcance del descuento: servicios / productos / ambos */}
-                        <label style={{ ...formLabelStyle, marginTop: '0.5rem' }}>
-                          Aplicar a
-                        </label>
-                        <div style={{ display: 'flex', gap: '0.3rem' }}>
-                          {(
-                            [
-                              ['SERVICIOS', 'Servicios'],
-                              ['PRODUCTOS', 'Productos'],
-                              ['AMBOS', 'Ambos'],
-                            ] as Array<[DescuentoAlcance, string]>
-                          ).map(([value, label]) => (
-                            <button
-                              key={value}
-                              type="button"
-                              aria-label={`Alcance ${label}`}
-                              onClick={() => setDescuentoAlcance(value)}
-                              className={`${styles.typeFilterBtn} ${descuentoAlcance === value ? styles.typeFilterBtnActive : ''}`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Note de ajuste (required if discount) */}
-                  {hasAdjustment && (
-                    <div>
-                      <label
-                        style={{
-                          ...formLabelStyle,
-                          color: ajusteNoteRequired ? 'var(--danger)' : undefined,
-                        }}
-                      >
-                        ¿Por qué se ajustó el precio? *
-                      </label>
-                      <textarea
-                        value={notaAjuste}
-                        onChange={(e) => setNotaAjuste(e.target.value)}
-                        placeholder="Indicá el motivo del ajuste..."
-                        className={styles.notesInput}
-                        style={{
-                          borderColor: ajusteNoteRequired ? 'var(--danger)' : undefined,
-                        }}
-                      />
-                      {ajusteNoteRequired && (
-                        <span
-                          style={{
-                            fontFamily: "'DM Sans', sans-serif",
-                            fontSize: '0.65rem',
-                            color: 'var(--danger)',
-                            marginTop: '0.2rem',
-                            display: 'block',
-                          }}
-                        >
-                          Este campo es obligatorio cuando hay descuento.
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Notas generales (switch) */}
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <label className={styles.switchLabel}>
-                      <input
-                        type="checkbox"
-                        checked={notasActivo}
-                        onChange={(e) => {
-                          setNotasActivo(e.target.checked);
-                          if (!e.target.checked) setNotas('');
-                        }}
-                      />
-                      <span className={styles.switchSlider} />
-                      <span className={styles.switchLabelText}>Agregar notas</span>
-                    </label>
-                    {notasActivo && (
-                      <div style={{ marginTop: '0.5rem' }}>
-                        <label style={formLabelStyle}>Notas (opcional)</label>
-                        <textarea
-                          value={notas}
-                          onChange={(e) => setNotas(e.target.value)}
-                          placeholder="Notas adicionales…"
-                          className={styles.notesInput}
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                {/* ── Payment ── */}
-                <div className={styles.checkoutSection}>
+                  }
+                  beforeTotals={
+                    <div className={styles.checkoutSection}>
                   <label style={formLabelStyle}>Método de pago</label>
                   <div className={styles.paymentTabs}>
                     {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as PaymentMethod[]).map(
@@ -1924,77 +1196,123 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   )}
                 </div>
 
-                {/* ── Totals ── */}
-                <div className={styles.totalsSection}>
-                  <div className={styles.totalRow}>
-                    <span>Subtotal servicios</span>
-                    <span>{formatCurrency(totalServicios)}</span>
-                  </div>
-                  <div className={styles.totalRow}>
-                    <span>Subtotal productos</span>
-                    <span>{formatCurrency(totalProductos)}</span>
-                  </div>
-                  {propina > 0 && (
-                    <div className={styles.totalRow}>
-                      <span>Propina</span>
-                      <span style={{ color: 'var(--success)' }}>
-                        +{formatCurrency(propina)}
-                      </span>
-                    </div>
-                  )}
-                  {descuentoMonto > 0 && (
-                    <div className={styles.totalRow}>
-                      <span>Descuento ({descuento}% {alcanceLabel(descuentoAlcance)})</span>
-                      <span style={{ color: 'var(--danger)' }}>
-                        -{formatCurrency(descuentoMonto)}
-                      </span>
-                    </div>
-                  )}
-                  <div className={styles.totalRowFinal}>
-                    <span>Total</span>
-                    <span>{formatCurrency(finalTotal)}</span>
-                  </div>
+                    }
+                  />
                 </div>
 
-                {/* ── PR5: ¿Cómo se reparte? (cobrado − insumos = a repartir) ── */}
+                {/* ── PR5: ¿Cómo se reparte? — botón que abre el desglose en un modal ── */}
                 {mostrarDesglose && (
-                  <DesgloseReparto
-                    desglose={desglose}
-                    porcentajeComision={porcentajeComisionEmpleada}
-                  />
+                  <button
+                    type="button"
+                    className={styles.verRepartoBtn}
+                    onClick={() => setDesgloseOpen(true)}
+                  >
+                    📊 Ver reparto
+                  </button>
                 )}
 
-                {/* ── Submit ── */}
-                <div className={styles.submitSection}>
-                  <motion.button
-                    whileHover={canSubmit && !processing ? { scale: 1.02 } : undefined}
-                    whileTap={canSubmit && !processing ? { scale: 0.98 } : undefined}
-                    onClick={handleSubmit}
-                    disabled={!canSubmit || processing}
-                    className={`${styles.submitBtn} ${canSubmit && !processing ? styles.submitBtnActive : ''}`}
+                {desgloseOpen && (
+                  <div
+                    className={styles.repartoOverlay}
+                    role="presentation"
+                    onClick={() => setDesgloseOpen(false)}
                   >
-                    {processing
-                      ? 'Procesando…'
-                      : `Registrar ${formatCurrency(finalTotal)}`}
-                  </motion.button>
-                </div>
+                    <div
+                      className={styles.repartoSheet}
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label="Reparto"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className={styles.repartoHeader}>
+                        <span className={styles.repartoTitle}>¿Cómo se reparte?</span>
+                        <button
+                          type="button"
+                          className={styles.repartoClose}
+                          aria-label="Cerrar reparto"
+                          onClick={() => setDesgloseOpen(false)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className={styles.repartoBody}>
+                        <DesgloseReparto
+                          desglose={desglose}
+                          porcentajeComision={porcentajeComisionEmpleada}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Submit (desktop; en el wizard móvil vive en la barra inferior) ── */}
+                {!esWizard && (
+                  <div className={styles.submitSection}>
+                    <motion.button
+                      whileHover={canSubmit && !processing ? { scale: 1.02 } : undefined}
+                      whileTap={canSubmit && !processing ? { scale: 0.98 } : undefined}
+                      onClick={handleSubmit}
+                      disabled={!canSubmit || processing}
+                      className={`${styles.submitBtn} ${canSubmit && !processing ? styles.submitBtnActive : ''}`}
+                    >
+                      {processing
+                        ? 'Procesando…'
+                        : `Registrar ${formatCurrency(finalTotal)}`}
+                    </motion.button>
+                  </div>
+                )}
               </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* ── Footer móvil: paso 1 → paso 2 (solo táctil + items en carrito) ── */}
-        {esPantallaTactil && unifiedCart.length > 0 && (
-          <div className={styles.mobileFooter}>
-            <div className={styles.mobileFooterInfo}>
-              <span className={styles.mobileFooterCount}>
+        {/* ── Barra inferior del wizard: Volver / Saltar / Siguiente / Registrar ── */}
+        {esWizard && (
+          <div className={styles.wizardNav}>
+            <button
+              type="button"
+              className={styles.wizardNavBack}
+              onClick={() => setStep(step === 3 ? 2 : 1)}
+              disabled={step === 1}
+            >
+              Volver
+            </button>
+            <div className={styles.wizardNavInfo}>
+              <span className={styles.wizardNavCount}>
                 {unifiedCart.length} {unifiedCart.length === 1 ? 'item' : 'items'}
               </span>
-              <span className={styles.mobileFooterTotal}>{formatCurrency(finalTotal)}</span>
+              <span className={styles.wizardNavTotal}>{formatCurrency(finalTotal)}</span>
             </div>
-            <button className={styles.mobileFooterBtn} onClick={scrollToCheckout}>
-              Ver carrito y cobrar →
-            </button>
+            {step < 3 ? (
+              <div className={styles.wizardNavNextGroup}>
+                {step === 2 && (
+                  <button
+                    type="button"
+                    className={styles.wizardNavSkip}
+                    onClick={() => setStep(3)}
+                  >
+                    Saltar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={styles.wizardNavNext}
+                  onClick={() => setStep(step === 1 ? 2 : 3)}
+                >
+                  Siguiente →
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`${styles.wizardNavSubmit} ${canSubmit && !processing ? styles.wizardNavSubmitActive : ''}`}
+                onClick={handleSubmit}
+                disabled={!canSubmit || processing}
+              >
+                {processing ? 'Procesando…' : `Registrar ${formatCurrency(finalTotal)}`}
+              </button>
+            )}
           </div>
         )}
       </motion.div>

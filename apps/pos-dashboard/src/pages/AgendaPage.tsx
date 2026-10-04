@@ -2547,6 +2547,29 @@ interface CompletarModalProps {
   onToggleServicio: (id: number) => void;
 }
 
+/** Visual del switch de descuento (mismo look que el toggle de fiado). */
+const switchTrackStyle = (active: boolean): React.CSSProperties => ({
+  position: 'relative',
+  width: '36px',
+  height: '20px',
+  background: active ? 'var(--accent)' : 'var(--border)',
+  borderRadius: '10px',
+  transition: 'background 0.2s',
+  flexShrink: 0,
+  display: 'inline-block',
+});
+
+const switchKnobStyle = (active: boolean): React.CSSProperties => ({
+  position: 'absolute',
+  top: '2px',
+  left: active ? '18px' : '2px',
+  width: '16px',
+  height: '16px',
+  background: 'var(--bg-root)',
+  borderRadius: '50%',
+  transition: 'left 0.2s',
+});
+
 const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   cita,
   servicios,
@@ -2564,6 +2587,8 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   /* Scanner de código de barras (PR2): match exacto contra la lista RETAIL. */
   const [scanCode, setScanCode] = useState('');
   const [scanError, setScanError] = useState(false);
+  /* Descuento plegado por defecto (misma regla que el carrito compartido). */
+  const [descuentoActivo, setDescuentoActivo] = useState(false);
 
   const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
@@ -2649,6 +2674,25 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
     () => servicios.filter(s => form.nuevosServiciosIds.includes(s.id)),
     [servicios, form.nuevosServiciosIds],
   );
+
+  /**
+   * Alcances que aplican al carrito actual (misma regla que `useCarrito`):
+   * un alcance sin ítems solo daría $0, así que no se ofrece.
+   */
+  const alcancesAplicables = useMemo<DescuentoAlcance[]>(() => {
+    const hasServicios = cita.servicios.length > 0 || addedServicios.length > 0;
+    const hasProductos = form.productosVendidos.length > 0;
+    if (hasServicios && hasProductos) return ['SERVICIOS', 'PRODUCTOS', 'AMBOS'];
+    if (hasServicios) return ['SERVICIOS'];
+    if (hasProductos) return ['PRODUCTOS'];
+    return [];
+  }, [cita.servicios.length, addedServicios.length, form.productosVendidos.length]);
+
+  useEffect(() => {
+    if (alcancesAplicables.length === 1 && form.descuentoAlcance !== alcancesAplicables[0]) {
+      onChangeForm({ descuentoAlcance: alcancesAplicables[0] });
+    }
+  }, [alcancesAplicables, form.descuentoAlcance, onChangeForm]);
 
   const availableExtraServicios = useMemo(
     () => servicios.filter(
@@ -2939,6 +2983,8 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                               Costo de insumos
                             </label>
                             <div className={styles.gramsInputWrap}>
+                              {/* Derivado del catálogo (gramos × $/g): no editable en venta
+                                  (anti-forgery: el server lo recalcula igual). */}
                               <input
                                 id={`costo-cita-${s.id}`}
                                 type="number"
@@ -2946,47 +2992,16 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                                 step="1"
                                 inputMode="decimal"
                                 aria-label={`Costo de insumos ${s.nombre}`}
+                                aria-readonly="true"
                                 placeholder="0"
                                 value={costoInsumosMostrado > 0 ? costoInsumosMostrado : ''}
-                                onChange={(e) =>
-                                  onChangeForm({
-                                    serviciosCostoInsumos: {
-                                      ...form.serviciosCostoInsumos,
-                                      [s.id]:
-                                        e.target.value === ''
-                                          ? undefined
-                                          : Number(e.target.value),
-                                    },
-                                  })
-                                }
+                                readOnly
+                                tabIndex={-1}
+                                title="Costo derivado del catálogo (no editable)"
                                 className={`${styles.noSpinner} ${styles.gramsInput}`}
                               />
                               <span className={styles.gramsSuffix}>$</span>
                             </div>
-                            {form.serviciosCostoInsumos[s.id] != null && costoInsumoLinea > 0 && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onChangeForm({
-                                    serviciosCostoInsumos: {
-                                      ...form.serviciosCostoInsumos,
-                                      [s.id]: undefined,
-                                    },
-                                  })
-                                }
-                                className={styles.gramsCost}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  padding: 0,
-                                  cursor: 'pointer',
-                                  textAlign: 'left',
-                                  font: 'inherit',
-                                }}
-                              >
-                                Calculado: {formatCurrency(costoInsumoLinea)} · volver
-                              </button>
-                            )}
                           </div>
                         )}
                       </div>
@@ -3212,62 +3227,98 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
                 </div>
                 <hr className={styles.receiptDivider} />
 
-                {/* Discount */}
-                <div className={styles.receiptRow}>
-                  <span className={styles.receiptLabel}>Descuento (%)</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      aria-label="Descuento (%)"
-                      value={form.descuento}
-                      onChange={(e) =>
-                        onChangeForm({
-                          descuento: Math.min(100, Math.max(0, Number(e.target.value))),
-                        })
-                      }
-                      className={`${styles.noSpinner} ${styles.propinaInput}`}
-                    />
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>%</span>
-                  </div>
-                </div>
+                {/* Descuento: switch plegado por defecto (misma regla que el carrito compartido) */}
+                <label
+                  className={styles.toggleLabel}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    margin: '0.4rem 0',
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label="Agregar descuento por %"
+                    checked={descuentoActivo}
+                    onChange={(e) => {
+                      setDescuentoActivo(e.target.checked);
+                      if (!e.target.checked) onChangeForm({ descuento: 0 });
+                    }}
+                    style={{ display: 'none' }}
+                  />
+                  <span style={switchTrackStyle(descuentoActivo)}>
+                    <span style={switchKnobStyle(descuentoActivo)} />
+                  </span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Agregar descuento por %</span>
+                </label>
 
-                {/* Alcance del descuento */}
-                <div className={styles.receiptRow}>
-                  <span className={styles.receiptLabel}>Aplicar a</span>
-                  <div style={{ display: 'flex', gap: '0.25rem' }}>
-                    {(['SERVICIOS', 'PRODUCTOS', 'AMBOS'] as DescuentoAlcance[]).map((value) => {
-                      const labels: Record<DescuentoAlcance, string> = {
-                        SERVICIOS: 'Servicios',
-                        PRODUCTOS: 'Productos',
-                        AMBOS: 'Ambos',
-                      };
-                      const active = form.descuentoAlcance === value;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          aria-label={`Alcance ${labels[value]}`}
-                          onClick={() => onChangeForm({ descuentoAlcance: value })}
-                          style={{
-                            padding: '0.2rem 0.45rem',
-                            borderRadius: 'var(--radius-sm)',
-                            border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                            background: active ? 'var(--accent-glow)' : 'transparent',
-                            color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                            fontFamily: "'DM Sans', sans-serif",
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {labels[value]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                {descuentoActivo && (
+                  <>
+                    {/* Discount */}
+                    <div className={styles.receiptRow}>
+                      <span className={styles.receiptLabel}>Descuento (%)</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          aria-label="Descuento (%)"
+                          value={form.descuento}
+                          onChange={(e) =>
+                            onChangeForm({
+                              descuento: Math.min(100, Math.max(0, Number(e.target.value))),
+                            })
+                          }
+                          className={`${styles.noSpinner} ${styles.propinaInput}`}
+                        />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>%</span>
+                      </div>
+                    </div>
+
+                    {/* Alcance del descuento: solo los alcances que aplican al carrito */}
+                    {alcancesAplicables.length > 0 && (
+                      <div className={styles.receiptRow}>
+                        <span className={styles.receiptLabel}>Aplicar a</span>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          {alcancesAplicables.map((value) => {
+                            const labels: Record<DescuentoAlcance, string> = {
+                              SERVICIOS: 'Servicios',
+                              PRODUCTOS: 'Productos',
+                              AMBOS: 'Ambos',
+                            };
+                            const active = form.descuentoAlcance === value;
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                aria-label={`Alcance ${labels[value]}`}
+                                onClick={() => onChangeForm({ descuentoAlcance: value })}
+                                style={{
+                                  padding: '0.2rem 0.45rem',
+                                  borderRadius: 'var(--radius-sm)',
+                                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                                  background: active ? 'var(--accent-glow)' : 'transparent',
+                                  color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                                  fontFamily: "'DM Sans', sans-serif",
+                                  fontSize: '0.7rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {labels[value]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
 
                 {descuentoMonto > 0 && (
                   <div className={styles.receiptRow}>

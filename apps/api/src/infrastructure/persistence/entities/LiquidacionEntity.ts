@@ -9,6 +9,8 @@ import { BaseEntity } from './BaseEntity';
 import { UsuarioEntity } from './UsuarioEntity';
 import { RegistroServicioEntity } from './RegistroServicioEntity';
 import { SalonEntity } from './SalonEntity';
+import { CajaEntity } from './CajaEntity';
+import { MetodoPago } from './MetodoPago';
 
 @Entity('liquidaciones')
 export class LiquidacionEntity extends BaseEntity {
@@ -56,4 +58,16 @@ export class LiquidacionEntity extends BaseEntity {
 
   @OneToMany(() => RegistroServicioEntity, (registro) => registro.liquidacion)
   registros: RegistroServicioEntity[];
+
+  // Egreso de caja (Rule C): pagar la nómina en EFECTIVO saca dinero del cajón
+  // y debe restar del arqueo del día. Columna aditiva nullable/default.
+  @Column({ type: 'enum', enum: MetodoPago, default: MetodoPago.EFECTIVO })
+  metodoPago: MetodoPago;
+
+  @ManyToOne(() => CajaEntity, { nullable: true })
+  @JoinColumn({ name: 'cajaId' })
+  caja: CajaEntity | null;
+
+  @Column({ type: 'int', nullable: true })
+  cajaId: number | null;
 }

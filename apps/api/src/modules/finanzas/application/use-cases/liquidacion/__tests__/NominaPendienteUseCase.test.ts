@@ -51,6 +51,11 @@ describe('NominaPendienteUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Freeze the clock at 15/08/2026 (07:00 COT). Fixtures live in August and the
+    // MENSUAL salary is prorated by days of month ([01/08 → today]), so without a
+    // frozen clock the expectations depended on the real execution date.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-15T12:00:00Z'));
     useCase = new NominaPendienteUseCase(
       mockUsuarioRepo as never,
       mockRegistroRepo as never,
@@ -58,6 +63,10 @@ describe('NominaPendienteUseCase', () => {
     );
     // Default: sin historial de liquidaciones → el sueldo fijo cuenta 1 período
     mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('busca todos los roles activos del salón (rol omitido en findBySalon)', async () => {
@@ -113,10 +122,11 @@ describe('NominaPendienteUseCase', () => {
         nombre: 'Luz',
         totalComisionesPendientes: 0,
         totalPropinas: 0,
-        bonoHorario: 50000,
-        sueldoFijo: 200000,
+        // Prorrateo MENSUAL por días: [01/08 → 15/08] = 15/31
+        bonoHorario: 24194, // 50.000 × 15/31
+        sueldoFijo: 96774, // 200.000 × 15/31
         sueldoFijoMensual: 200000,
-        totalAPagar: 250000,
+        totalAPagar: 120968, // 96.774 + 24.194
         cantidadRegistros: 0,
       }),
     );
@@ -147,8 +157,9 @@ describe('NominaPendienteUseCase', () => {
     const result = await useCase.execute({ salonId: 1 });
 
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual(expect.objectContaining({ nombre: 'Rosa', totalAPagar: 400000, sueldoFijoMensual: 400000 }));
-    expect(result[1]).toEqual(expect.objectContaining({ nombre: 'Gloria', totalAPagar: 800000, sueldoFijoMensual: 800000 }));
+    // Prorrateo MENSUAL por días: [01/08 → 15/08] = 15/31
+    expect(result[0]).toEqual(expect.objectContaining({ nombre: 'Rosa', totalAPagar: 193548, sueldoFijoMensual: 400000 })); // 400.000 × 15/31
+    expect(result[1]).toEqual(expect.objectContaining({ nombre: 'Gloria', totalAPagar: 387097, sueldoFijoMensual: 800000 })); // 800.000 × 15/31
   });
 
   it('incluye a la DUEÑA cuando tiene configuración de pago', async () => {
@@ -162,7 +173,13 @@ describe('NominaPendienteUseCase', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(
-      expect.objectContaining({ nombre: 'Mar', sueldoFijo: 2500000, sueldoFijoMensual: 2500000, totalAPagar: 2500000 }),
+      expect.objectContaining({
+        nombre: 'Mar',
+        // Prorrateo MENSUAL por días: [01/08 → 15/08] = 15/31 → 2.500.000 × 15/31
+        sueldoFijo: 1209677,
+        sueldoFijoMensual: 2500000,
+        totalAPagar: 1209677,
+      }),
     );
   });
 
@@ -228,6 +245,8 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
       mockRegistroRepo as never,
       mockLiquidacionRepo as never,
     );
+    // Aísla cada test: sin historial de liquidaciones salvo que el test lo defina.
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -346,29 +365,61 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
     );
   });
 
-  it('QUINCENAL con backfill: el guard anti-doble-pago SIGUE comparando contra creadoEn', async () => {
-    vi.setSystemTime(new Date('2026-08-10T12:00:00Z')); // 07:00 COT = 10/08 → quincena [1,15]
+  it('QUINCENAL con backfill ya cubierto: el guard anti-doble-pago usa la fecha de negocio (fechaHora), no creadoEn', async () => {
+    vi.setSystemTime(new Date('2026-08-25T12:00:00Z')); // 07:00 COT = 25/08
     mockUsuarioRepo.findBySalon.mockResolvedValue([
       makeEmpleada({
-        id: 31,
-        nombre: 'B2',
+        id: 33,
+        nombre: 'B3',
         frecuenciaPago: 'QUINCENAL',
         sueldoFijo: 0,
       }),
     ]);
-    // Registro con fechaHora 05/08 (en la quincena) creado el 22/08 (DESPUÉS de la última liquidación 10/08)
-    // → el guard lo MANTIENE porque creadoEn (22/08) > liquidación (10/08) — semántica de auditoría.
+    // Backfill: fecha de negocio 05/08 (dentro de la quincena [1,15] ya cubierta
+    // por la liquidación del 10/08), pero creadoEn 22/08 (posterior a la liquidación).
     mockRegistroRepo.findBySalon.mockResolvedValue([
       makeRegistro({
-        id: 32,
-        usuarioId: 31,
+        id: 34,
+        usuarioId: 33,
         comisionCalculada: 8000,
         fechaHora: new Date('2026-08-05T10:00:00'),
         creadoEn: new Date('2026-08-22T10:00:00'),
       }),
     ]);
-    mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([
+    // Liquidación sin fechaHasta → fin = creadoEn (10/08). El período [1,15] sigue
+    // en la lista (cursor 11/08), por lo que sin el fix el backfill se pagaría otra vez.
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([
       { id: 40, creadoEn: new Date('2026-08-10T10:00:00') },
+    ]);
+
+    const result = await useCase.execute({ salonId: 1 });
+
+    // El guard usa fechaHora (05/08 ≤ 10/08) → excluido: no queda nada liquidable
+    expect(result).toHaveLength(0);
+  });
+
+  it('QUINCENAL con backfill posterior a la liquidación: sí se liquida', async () => {
+    vi.setSystemTime(new Date('2026-08-25T12:00:00Z')); // 07:00 COT = 25/08
+    mockUsuarioRepo.findBySalon.mockResolvedValue([
+      makeEmpleada({
+        id: 34,
+        nombre: 'B4',
+        frecuenciaPago: 'QUINCENAL',
+        sueldoFijo: 0,
+      }),
+    ]);
+    // Fecha de negocio 20/08 (posterior a la liquidación del 10/08) → liquidable.
+    mockRegistroRepo.findBySalon.mockResolvedValue([
+      makeRegistro({
+        id: 35,
+        usuarioId: 34,
+        comisionCalculada: 9000,
+        fechaHora: new Date('2026-08-20T10:00:00'),
+        creadoEn: new Date('2026-08-24T10:00:00'),
+      }),
+    ]);
+    mockLiquidacionRepo.findBySalonAndEmpleada.mockResolvedValue([
+      { id: 41, creadoEn: new Date('2026-08-10T10:00:00') },
     ]);
 
     const result = await useCase.execute({ salonId: 1 });
@@ -376,8 +427,8 @@ describe('NominaPendienteUseCase — período por frecuenciaPago', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(
       expect.objectContaining({
-        nombre: 'B2',
-        totalComisionesPendientes: 8000,
+        nombre: 'B4',
+        totalComisionesPendientes: 9000,
         cantidadRegistros: 1,
       }),
     );

@@ -297,10 +297,12 @@ export class NominaPendienteUseCase {
         pendingRegistros.map((r) => r.fechaHora ?? r.creadoEn),
       );
 
-      // Filtra registros ya cubiertos por una liquidación posterior (guard anti-doble-pago)
+      // Filtra registros ya cubiertos por una liquidación posterior (guard anti-doble-pago).
+      // Usa la MISMA fecha de negocio (fechaHora ?? creadoEn) con la que se bucketea el
+      // período; comparar solo creadoEn re-incluía backfills ya liquidados (creadoEn posterior).
       if (finUltimaLiquidacion) {
         pendingRegistros = pendingRegistros.filter(
-          (r) => new Date(r.creadoEn) > new Date(finUltimaLiquidacion),
+          (r) => new Date(r.fechaHora ?? r.creadoEn) > new Date(finUltimaLiquidacion),
         );
       }
 

@@ -799,6 +799,446 @@
   margin-bottom: 0;
 }
 
+/* ── Registro Detail Modal (redesign) ── */
+.detailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.detailHeaderMeta {
+  min-width: 0;
+}
+
+.detailTitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.detailDate {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0.25rem 0 0;
+  line-height: 1.5;
+}
+
+.detailBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.badgeRetoque {
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+}
+
+.badgeDescuento {
+  background: rgba(212, 168, 83, 0.15);
+  color: var(--accent);
+}
+
+.badgePendiente {
+  background: rgba(224, 85, 106, 0.12);
+  color: var(--danger);
+}
+
+.badgeLiquidado {
+  background: rgba(92, 186, 123, 0.15);
+  color: var(--success);
+}
+
+.detailSection {
+  margin-bottom: 1rem;
+}
+
+.detailText {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.detailNote {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-style: italic;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Cliente / empleada */
+.detailPartyGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.detailPartyCard {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.partyIcon {
+  font-size: 1.05rem;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-hover);
+}
+
+.partyInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.partyRole {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.partyName {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Line items table (services + products) */
+.detailItemsScroll {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-surface);
+}
+
+.detailItemsTable {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.detailItemsTable th {
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.detailItemsTable td {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+
+.detailItemsTable tfoot td {
+  background: var(--bg-elevated);
+  font-weight: 700;
+}
+
+.detailItemsTable tfoot tr:last-child td {
+  border-bottom: none;
+}
+
+.detailItemsTotalRow .detailItemPrice {
+  color: var(--accent);
+}
+
+.detailItemsColNum,
+.detailItemsColPrice {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Numeric <th> must align with their right-aligned <td> values.
+   Without this, `.detailItemsTable th { text-align: left }` (specificity 0,1,1)
+   beats the column classes (0,1,0) and the header drifts away from its value. */
+.detailItemsTable th.detailItemsColNum,
+.detailItemsTable th.detailItemsColPrice,
+.detailItemsTable th.detailItemPrice {
+  text-align: right;
+}
+
+.detailItemsColNum {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.detailItemTags {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.1rem;
+}
+
+.detailTypeChip {
+  display: inline-block;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.detailTypeServicio {
+  background: rgba(212, 168, 83, 0.15);
+  color: var(--accent);
+}
+
+.detailTypeProducto {
+  background: rgba(92, 186, 123, 0.15);
+  color: var(--success);
+}
+
+.detailItemMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.detailItemName {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailItemMeta {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.detailItemPrice {
+  text-align: right;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* Totals */
+.detailTotals {
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.9rem;
+}
+
+.detailTotalsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(42, 42, 54, 0.5);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+}
+
+.detailTotalsRow:last-child {
+  border-bottom: none;
+}
+
+.detailTotalsLabel {
+  color: var(--text-secondary);
+}
+
+.detailTotalsValue {
+  color: var(--text-primary);
+  text-align: right;
+  font-weight: 600;
+}
+
+.detailOriginal {
+  text-decoration: line-through;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.detailDescuento {
+  color: var(--danger);
+}
+
+/* Secondary line inside the discount value: "X% · scope". */
+.detailDiscountScope {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.detailTotalsFinal {
+  border-top: 2px solid var(--border);
+  margin-top: 0.15rem;
+  padding-top: 0.5rem;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.detailTotalsFinal span:last-child {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+/* Payments */
+.detailPayList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.detailPayRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+}
+
+.detailPayMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.detailPayMethod {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detailPayRef {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailPayAmount {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.detailPaySummary {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 0.5rem 0.6rem 0.1rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.detailPaySummary strong {
+  color: var(--text-primary);
+}
+
+.detailCambio strong {
+  color: var(--success);
+}
+
+/* Divisions */
+.detailDivList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.detailDivRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+}
+
+.detailDivName {
+  color: var(--text-primary);
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailDivMeta {
+  color: var(--text-secondary);
+}
+
+.detailDivAmount {
+  color: var(--accent);
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .receiptBox {
   background: var(--bg-elevated);
   border: 1px dashed var(--border);
@@ -825,6 +1265,22 @@
 
   .formRow {
     grid-template-columns: 1fr;
+  }
+
+  /* Registro detail: stack the party cards on narrow viewports. */
+  .detailPartyGrid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Registro detail: items table keeps Concepto/Cant./Subtotal on phones;
+     the "Precio unit." column is redundant with Subtotal at this width. */
+  .detailItemsTable {
+    min-width: 0;
+  }
+
+  .detailItemsTable th:nth-child(3),
+  .detailItemsTable td:nth-child(3) {
+    display: none;
   }
 }
 

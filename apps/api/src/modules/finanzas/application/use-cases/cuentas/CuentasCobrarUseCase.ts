@@ -9,6 +9,8 @@ import { antiguedadDiasColombia, bucketAntiguedad } from './antiguedad';
 
 export interface CuentasCobrarInput extends PaginationParams {
   salonId: number;
+  /** Filtro opcional: coincidencia case-insensitive por nombre de cliente/préstamo. */
+  nombre?: string;
 }
 
 interface GrupoCliente {
@@ -124,8 +126,17 @@ export class CuentasCobrarUseCase {
 
     filas.sort((a, b) => b.deudaTotal - a.deudaTotal);
 
-    const total = filas.length;
-    const data = input.limit > 0 ? filas.slice((input.page - 1) * input.limit, input.page * input.limit) : filas;
+    // Filtro por nombre sobre las filas ya agregadas (clientes + préstamos).
+    // La agregación es en memoria, así que empujar el filtro a SQL no es limpio
+    // sin rediseñarla: el tradeoff es cargar todas las deudas y filtrar antes de
+    // paginar (el `total` refleja el conjunto filtrado, no el global).
+    const filtro = input.nombre?.trim().toLowerCase();
+    const filasFiltradas = filtro
+      ? filas.filter((fila) => fila.nombre.toLowerCase().includes(filtro))
+      : filas;
+
+    const total = filasFiltradas.length;
+    const data = input.limit > 0 ? filasFiltradas.slice((input.page - 1) * input.limit, input.page * input.limit) : filasFiltradas;
     return paginate(data, total, { page: input.page, limit: input.limit });
   }
 }

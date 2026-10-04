@@ -33,6 +33,13 @@ export class TypeORMDevolucionRepository implements IDevolucionRepository {
     });
   }
 
+  async findByCajaId(cajaId: number): Promise<DevolucionEntity[]> {
+    return this.getRepo().find({
+      where: { cajaId },
+      order: { creadoEn: 'DESC' },
+    });
+  }
+
   async search(params: {
     salonId: number;
     registroServicioId?: number;
