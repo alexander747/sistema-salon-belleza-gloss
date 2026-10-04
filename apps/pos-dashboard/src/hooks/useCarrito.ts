@@ -33,6 +33,18 @@ export interface LineaServicio {
    * cost is derived server-side (grams × $/g for `POR_GRAMO`).
    */
   costoInsumosOverride?: number;
+  /**
+   * True for lines added on top of a seeded set (e.g. extra services added
+   * while completing a cita). Optional: WalkInModal/VentasPage leave it unset.
+   */
+  esExtra?: boolean;
+  /** Price to restore after a line is marked "not performed". */
+  precioOriginal?: number;
+  /**
+   * False when the line was explicitly marked "not performed" (price forced to
+   * `0`). Optional/undefined means realized, so existing screens are unchanged.
+   */
+  realizado?: boolean;
 }
 
 /** Product line in the cart (shared by both screens). */
@@ -73,11 +85,21 @@ export interface UseCarritoReturn {
   /* Lines */
   servicios: LineaServicio[];
   productos: LineaProducto[];
-  addServicio: (serv: ServicioCatalogo) => void;
+  addServicio: (serv: ServicioCatalogo, opts?: { esExtra?: boolean }) => void;
   updateServicioQty: (servicioId: number, delta: number) => void;
   updateServicioPrecio: (servicioId: number, precio: number) => void;
   updateServicioGramos: (servicioId: number, gramos: number | undefined) => void;
   removeServicio: (servicioId: number) => void;
+  /**
+   * Replaces the whole services collection (used to pre-load a cita's original
+   * services when opening a screen). Additive: existing screens never call it.
+   */
+  seedServicios: (lineas: LineaServicio[]) => void;
+  /**
+   * Flips a service between realized and "not performed": the price is zeroed
+   * (and remembered in `precioOriginal`) or restored. Additive.
+   */
+  toggleServicioRealizado: (servicioId: number) => void;
   addProducto: (prod: ProductoCatalogo) => void;
   updateProductoQty: (productoId: number, delta: number) => void;
   updateProductoPrecio: (productoId: number, precio: number) => void;
@@ -140,8 +162,13 @@ export interface UseCarritoReturn {
   /* Payload builders */
   /** Prepends the `[AJUSTE: …]` block to `base` when a discount is present. */
   buildNotas: (base: string | undefined) => string | undefined;
-  /** The single `pagos[0]` entry, identical for both screens. */
-  buildPago: () => PagoCarrito;
+  /**
+   * The single `pagos[0]` entry, identical for both screens.
+   * `opts.chargeTotal` makes every non-fiado payment charge the final total
+   * (cash included) instead of the tendered amount — used by Agenda's
+   * completar flow to preserve its existing payload. Default: false.
+   */
+  buildPago: (opts?: { chargeTotal?: boolean }) => PagoCarrito;
 }
 
 export function useCarrito(): UseCarritoReturn {
@@ -161,7 +188,7 @@ export function useCarrito(): UseCarritoReturn {
 
   /* ── Line mutators: services ── */
 
-  const addServicio = useCallback((serv: ServicioCatalogo) => {
+  const addServicio = useCallback((serv: ServicioCatalogo, opts?: { esExtra?: boolean }) => {
     setServicios((prev) => {
       // Re-click increments quantity instead of duplicating the line.
       const existing = prev.find((item) => item.servicioId === serv.id);
@@ -181,6 +208,9 @@ export function useCarrito(): UseCarritoReturn {
           cantidad: 1,
           tipoCostoInsumo: serv.tipoCostoInsumo,
           precioPorGramo: serv.precioPorGramo ?? null,
+          esExtra: opts?.esExtra,
+          realizado: true,
+          precioOriginal: serv.precioFinal,
         },
       ];
     });
@@ -201,7 +231,9 @@ export function useCarrito(): UseCarritoReturn {
   const updateServicioPrecio = useCallback((servicioId: number, precio: number) => {
     setServicios((prev) =>
       prev.map((item) =>
-        item.servicioId === servicioId ? { ...item, precio: Math.max(0, precio) } : item,
+        item.servicioId === servicioId
+          ? { ...item, precio: Math.max(0, precio), realizado: precio > 0 ? true : item.realizado }
+          : item,
       ),
     );
   }, []);
@@ -218,6 +250,28 @@ export function useCarrito(): UseCarritoReturn {
 
   const removeServicio = useCallback((servicioId: number) => {
     setServicios((prev) => prev.filter((item) => item.servicioId !== servicioId));
+  }, []);
+
+  const seedServicios = useCallback((lineas: LineaServicio[]) => {
+    setServicios(lineas);
+  }, []);
+
+  const toggleServicioRealizado = useCallback((servicioId: number) => {
+    setServicios((prev) =>
+      prev.map((item) => {
+        if (item.servicioId !== servicioId) return item;
+        if (item.realizado === false) {
+          // Restore: bring back the remembered price and mark it realized again.
+          return { ...item, realizado: true, precio: item.precioOriginal ?? item.precio };
+        }
+        return {
+          ...item,
+          realizado: false,
+          precioOriginal: item.precioOriginal ?? item.precio,
+          precio: 0,
+        };
+      }),
+    );
   }, []);
 
   /* ── Line mutators: products ── */
@@ -363,6 +417,7 @@ export function useCarrito(): UseCarritoReturn {
     () =>
       servicios.some(
         (item) =>
+          item.realizado !== false &&
           item.tipoCostoInsumo === 'POR_GRAMO' &&
           !(item.gramosUsados != null && item.gramosUsados > 0),
       ),
@@ -388,10 +443,15 @@ export function useCarrito(): UseCarritoReturn {
   );
 
   const buildPago = useCallback(
-    (): PagoCarrito => ({
+    (opts?: { chargeTotal?: boolean }): PagoCarrito => ({
       // Fiado: the amount charged (0 = full fiado, or partial).
-      // Without fiado: cash uses montoRecibido; card/transfer pay the total.
-      monto: esFiado ? montoRecibido : paymentMethod === 'EFECTIVO' ? montoRecibido : finalTotal,
+      // Without fiado: `chargeTotal` (Agenda) or card/transfer always charge the
+      // final total; plain cash uses the tendered amount.
+      monto: esFiado
+        ? montoRecibido
+        : opts?.chargeTotal || paymentMethod !== 'EFECTIVO'
+          ? finalTotal
+          : montoRecibido,
       metodoPago: paymentMethod,
       referencia: referencia.trim() || undefined,
     }),
@@ -406,6 +466,8 @@ export function useCarrito(): UseCarritoReturn {
     updateServicioPrecio,
     updateServicioGramos,
     removeServicio,
+    seedServicios,
+    toggleServicioRealizado,
     addProducto,
     updateProductoQty,
     updateProductoPrecio,

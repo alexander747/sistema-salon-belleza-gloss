@@ -238,7 +238,16 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
   });
 
   it('Rule C (corregido): un cobro de préstamo MANUAL EFECTIVO SUMA al arqueo del cierre', async () => {
-    mockCajaRepo.findById.mockResolvedValue(cajaCerrada);
+    // Caja ABIERTA: el arqueo se recomputa en vivo y el cobro de préstamo entra.
+    mockCajaRepo.findById.mockResolvedValue({
+      ...cajaCerrada,
+      estado: 'ABIERTA',
+      montoEsperado: null,
+      montoRealEfectivo: null,
+      diferencia: null,
+      cierrePorId: null,
+      cierreEn: null,
+    });
     mockRegistroRepo.search.mockResolvedValue([]);
     mockGastoRepo.findByCajaId.mockResolvedValue([]);
     mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 1, monto: 100000, metodoPago: 'EFECTIVO' }]);
@@ -252,6 +261,24 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     // fondo 50000 + EFECTIVO 100000 + cobro préstamo 30000 = 180000
     expect(result.reporte.montoEsperado).toBe(180000);
     expect(result.reporte.porMetodoPago.EFECTIVO).toBe(130000);
+  });
+
+  it('caja CERRADA: devuelve el arqueo PERSISTIDO aunque los gastos se hayan borrado', async () => {
+    // Persistido al cerrar: esperado 135000 (= fondo 50000 + 100000 − 15000 gasto).
+    // Después se borra el gasto: el recálculo vivo daría 50000, pero el detalle de
+    // una caja cerrada debe seguir mostrando el cierre guardado.
+    mockCajaRepo.findById.mockResolvedValue(cajaCerrada);
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]); // gasto borrado
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1, cajaId: 5 });
+
+    expect(result.reporte.montoEsperado).toBe(135000);
+    expect(result.reporte.montoReal).toBe(160000);
+    expect(result.reporte.diferencia).toBe(25000);
+    // El detalle y la caja reportan el MISMO arqueo persistido
+    expect(result.caja.montoEsperado).toBe(135000);
   });
 
   it('should devolver caja ABIERTA sin arqueo falso: montoReal null y diferencia null (no fabricar 0)', async () => {

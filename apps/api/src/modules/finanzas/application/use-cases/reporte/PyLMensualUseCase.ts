@@ -223,11 +223,17 @@ export class PyLMensualUseCase {
     const devolucionesNegocio = round2(devoluciones);
 
     // Rule C (corregido): los cobros de préstamo son INGRESOS (+), no egresos.
-    // Nuance (follow-up): contablemente solo el interés de un préstamo es
-    // ingreso operativo y el capital es recuperación de una cuenta por cobrar;
-    // el modelo no separa ambos y el desembolso del préstamo ya entra como gasto
-    // (CrearPrestamoUseCase), por lo que este agregado puede sobre-contar el
-    // capital — deuda técnica anotada.
+    // NO hay doble conteo del capital: el desembolso entra UNA sola vez como
+    // gasto (CrearPrestamoUseCase, categoría 'Prestamo') y cada cobro entra UNA
+    // sola vez aquí; el principal desembolsado y el recuperado se cancelan a lo
+    // largo de la vida del préstamo.
+    //
+    // Follow-up (deuda técnica, NO inventar modelo de interés): el préstamo NO
+    // registra interés. PrestamoEntity y PagoPrestamoEntity solo guardan montos
+    // de capital, sin campo de interés. Contablemente solo el INTERÉS sería
+    // ingreso operativo y el capital una recuperación de cuenta por cobrar; al
+    // no modelarse, aquí no hay ingreso real. Si el negocio empieza a cobrar
+    // interés: agregar el campo y exponer capital/interés por separado.
     //
     // Filtro por empleada (decisión owner): los gastos y devoluciones son del
     // NEGOCIO, no de la empleada. Con filtro activo NO se le descuentan: su

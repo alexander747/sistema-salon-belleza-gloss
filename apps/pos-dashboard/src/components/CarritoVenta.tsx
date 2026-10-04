@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { formatCurrency } from '../utils/format.js';
 import { alcanceLabel, type DescuentoAlcance } from '../utils/reparto.js';
-import type { UseCarritoReturn } from '../hooks/useCarrito.js';
+import type { LineaProducto, LineaServicio, UseCarritoReturn } from '../hooks/useCarrito.js';
 import styles from './CarritoVenta.module.css';
 
 /* ── Shared cart presentation ──
@@ -78,6 +78,24 @@ export interface CarritoVentaProps {
   children?: React.ReactNode;
   /** Screen chrome rendered between the discount section and the totals (payment). */
   beforeTotals?: React.ReactNode;
+  /** Extra total rows rendered at the top of the totals (e.g. per-kind rows). */
+  beforeSubtotal?: React.ReactNode;
+  /** Screen chrome rendered right after the totals (e.g. the reparto breakdown). */
+  afterTotals?: React.ReactNode;
+  /** Heading rendered at the top of the items list (e.g. "En carrito (N)"). */
+  itemsHeader?: React.ReactNode;
+  /**
+   * Replaces the default rendering of a service line (Agenda needs the
+   * "not performed" toggle, the read-only supply cost and its own labels).
+   */
+  renderServicioItem?: (item: LineaServicio) => React.ReactNode;
+  /** Replaces the default rendering of a product line. */
+  renderProductoItem?: (item: LineaProducto) => React.ReactNode;
+  /**
+   * Screen chrome rendered right after the items list and before `afterItems`
+   * (e.g. the product catalog grid + barcode scanner on Agenda).
+   */
+  productPicker?: React.ReactNode;
   /** When true the component pads itself horizontally (Ventas side panel). */
   withPadding?: boolean;
 }
@@ -90,6 +108,12 @@ const CarritoVenta: React.FC<CarritoVentaProps> = ({
   afterItems,
   children,
   beforeTotals,
+  afterTotals,
+  beforeSubtotal,
+  itemsHeader,
+  renderServicioItem,
+  renderProductoItem,
+  productPicker,
   withPadding = false,
 }) => {
   /* Optional sections behind switches (hidden by default, matching both screens). */
@@ -134,11 +158,19 @@ const CarritoVenta: React.FC<CarritoVentaProps> = ({
     >
       {/* ── Items list ── */}
       <div className={styles.section}>
+        {itemsHeader}
         {vacio ? (
           <p className={styles.emptyText}>{emptyText}</p>
         ) : (
           <div className={styles.cartList}>
             {servicios.map((item) => {
+              if (renderServicioItem) {
+                return (
+                  <React.Fragment key={`svc-${item.servicioId}`}>
+                    {renderServicioItem(item)}
+                  </React.Fragment>
+                );
+              }
               const gramosLinea = item.gramosUsados ?? 0;
               const costoInsumoLinea = gramosLinea * (item.precioPorGramo ?? 0);
               return (
@@ -250,7 +282,15 @@ const CarritoVenta: React.FC<CarritoVentaProps> = ({
               );
             })}
 
-            {productos.map((item) => (
+            {productos.map((item) => {
+              if (renderProductoItem) {
+                return (
+                  <React.Fragment key={`prod-${item.productoId}`}>
+                    {renderProductoItem(item)}
+                  </React.Fragment>
+                );
+              }
+              return (
               <motion.div
                 key={`prod-${item.productoId}`}
                 layout
@@ -309,11 +349,13 @@ const CarritoVenta: React.FC<CarritoVentaProps> = ({
                   ✕
                 </button>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
+      {productPicker}
       {afterItems}
       {children}
 
@@ -456,6 +498,7 @@ const CarritoVenta: React.FC<CarritoVentaProps> = ({
 
       {/* ── Totals ── */}
       <div className={styles.totalsSection}>
+        {beforeSubtotal}
         {mostrarSubtotalesLinea ? (
           <>
             <div className={styles.totalRow}>
@@ -492,6 +535,8 @@ const CarritoVenta: React.FC<CarritoVentaProps> = ({
           <span>{formatCurrency(finalTotal)}</span>
         </div>
       </div>
+
+      {afterTotals}
     </div>
   );
 };

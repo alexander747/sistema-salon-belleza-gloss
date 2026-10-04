@@ -2682,8 +2682,9 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
   // ── Pre-liquidation audit modal ──
   const [auditarOpen, setAuditarOpen] = useState(false);
   const [selectedEmpleada, setSelectedEmpleada] = useState<NominaEmpleado | null>(null);
-  // Registros no pagados traídos del server (por usuarioId). El filtro por período es
-  // CLIENT-side: `auditarRegistros` deriva del rango editable (pago fuera de ciclo).
+  // Registros no pagados del período traídos del server (por usuarioId + rango
+  // desde/hasta, paginando todas las páginas). `auditarRegistros` re-filtra CLIENT-side
+  // sobre ese set completo para soportar la edición del rango (pago fuera de ciclo).
   const [auditarAllRegistros, setAuditarAllRegistros] = useState<Registro[]>([]);
   const [auditarLoading, setAuditarLoading] = useState(false);
   const [auditarError, setAuditarError] = useState<string | null>(null);
@@ -2959,13 +2960,34 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
         setLoadingPrestamos(false);
       }
 
-      // Fetch detailed registros for audit (por usuarioId; el filtro por período es client-side)
+      // Fetch detailed registros for the audited period. The business-date range
+      // (desde/hasta) is sent to the server so it returns exactly the period's rows,
+      // and we page through ALL pages: the previous hard `limit: 50` silently dropped
+      // older rows on long periods, under-reporting commissions. `estado=ACTIVOS` is
+      // preserved. The client-side range filter over the complete set still supports
+      // editing the period after the fetch (pago fuera de ciclo).
       setAuditarLoading(true);
       try {
-        const { data: regData } = await api.get(`/salones/${salonId}/registros`, {
-          params: { usuarioId: emp.empleadaId, estado: 'ACTIVOS', limit: 50 },
-        });
-        const allRegs = Array.isArray(regData?.data) ? regData.data : Array.isArray(regData) ? regData : [];
+        const AUDITORIA_PAGE_SIZE = 100;
+        const auditHastaDefault = `${primerDia.slice(0, 8)}${ultimoDiaMes}`;
+        let allRegs: Registro[] = [];
+        let page = 1;
+        for (;;) {
+          const { data: regData } = await api.get(`/salones/${salonId}/registros`, {
+            params: {
+              usuarioId: emp.empleadaId,
+              estado: 'ACTIVOS',
+              ...(primerDia ? { desde: primerDia, hasta: auditHastaDefault } : {}),
+              page,
+              limit: AUDITORIA_PAGE_SIZE,
+            },
+          });
+          const rows: Registro[] = Array.isArray(regData?.data) ? regData.data : Array.isArray(regData) ? regData : [];
+          allRegs = allRegs.concat(rows);
+          const total = Number(regData?.meta?.total ?? allRegs.length);
+          if (rows.length < AUDITORIA_PAGE_SIZE || allRegs.length >= total) break;
+          page += 1;
+        }
         const noPagados = allRegs.filter((r: any) => r.estaPagadaEmpleada !== false ? false : true);
         // Enrich with resolved client/employee names so the detail modal shows names, not IDs
         setAuditarAllRegistros(noPagados.map((r: any) => ({

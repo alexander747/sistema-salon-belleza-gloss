@@ -9,7 +9,6 @@ export interface DevolucionDTO {
   cantidad: number;
   montoDevolucion: number;
   regresaAlStock: boolean;
-  procesada: boolean;
   /** Cómo se reintegró el dinero: solo EFECTIVO reduce el arqueo. */
   metodoPago: MetodoPago;
   salonId: number;
@@ -25,7 +24,6 @@ export function devolucionToDTO(entity: DevolucionEntity): DevolucionDTO {
     cantidad: Number(entity.cantidad),
     montoDevolucion: Number(entity.montoDevolucion),
     regresaAlStock: entity.regresaAlStock,
-    procesada: entity.procesada,
     metodoPago: entity.metodoPago,
     salonId: entity.salonId,
     creadoEn: entity.creadoEn,

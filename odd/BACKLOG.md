@@ -16,7 +16,12 @@ Items acordados con el usuario. **Estado al 2026-10-04** (actualizado):
 | 10 | GASTOS-AUDITORIA | ✅ Hecho (gasto ahora exige caja abierta). |
 | 11 | DEVOLUCIONES-AUDITORIA | ✅ Hecho (rechaza ANULADAS, guarda método, baja arqueo si es efectivo, selector con typeahead + `estado=ACTIVOS`). |
 
-**Follow-ups pendientes:** (a) ✅ los 5 tests de fecha ARREGLADOS (reloj congelado); (b) `AgendaPage`: costo de insumo ya read-only + reglas de descuento (switch + alcance) aplicadas, pero **todavía NO adopta el carrito compartido** (`useCarrito` + `CarritoVenta`) — requiere extender el componente compartido; (c) revisar el doble conteo del capital del préstamo en el P&L (desembolso como GastoEntity); (d) DEPLOY-VPS-SCHEMA: ✅ revisado, seguro (ver arriba) — sólo falta hacer el backup y deployar cuando lo pidas.
+**Follow-ups pendientes** (nada crítico; el deploy ya se hizo y el backup de prod está en el Desktop):
+- (b) `AgendaPage`: costo de insumo ya read-only + reglas de descuento (switch + alcance) aplicadas, pero **todavía NO adopta el carrito compartido** (`useCarrito` + `CarritoVenta`) — requiere extender el componente compartido (no realizado / servicios extra / escáner / gramos / reparto).
+- (c) P&L: revisar el doble conteo del capital del préstamo (el desembolso se guarda como GastoEntity 'Prestamo') y separar interés (gasto) vs capital (no operativo).
+- (e) Review nativo (RDD) sin correr sobre el candidato `98a5491`.
+- (f) Menores de la auditoría no abordados: el modal de auditoría de nómina sigue con tope de 50 registros; `devoluciones.procesada` es dead code y faltan topes de cantidad/monto; borrar/backfillear un gasto cambia el "esperado" de un cierre ya cerrado; `calcularCostoRealLinea` quedó sin uso.
+- (g) Menor: el orden visual del modal "Registrar servicio" cambió (ajustes/totales después del pago).
 
 **Nada commiteado todavía.**
 

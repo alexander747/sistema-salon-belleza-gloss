@@ -38,10 +38,12 @@ export class RegistrarPagoUseCase {
     // del día. Se liga a la caja ABIERTA de hoy (si no hay, cajaId NULL — igual
     // que un ingreso sin caja no entra al arqueo).
     //
-    // Nuance (follow-up): contablemente solo el INTERÉS de un préstamo es
-    // ingreso operativo; el capital es recuperación de una cuenta por cobrar.
-    // El modelo actual no separa ambos, así que se registra el flujo de caja
-    // completo y se deja la distinción capital/interés como deuda técnica.
+    // Follow-up (deuda técnica): el modelo NO modela interés. PrestamoEntity y
+    // PagoPrestamoEntity solo tienen montos de capital (sin campo de interés),
+    // así que cada pago es 100% recuperación de capital. Contablemente el
+    // capital no es ingreso operativo (solo el interés lo sería), pero el P&L
+    // cash-basis lo cuenta aquí porque el desembolso ya se registró como gasto
+    // (CrearPrestamoUseCase): ambos flujos se cancelan y no hay doble conteo.
     const metodoPago = input.metodoPago ?? MetodoPago.EFECTIVO;
     const caja = await this.cajaRepo.findAbiertaBySalonYFecha(
       prestamo.salonId,

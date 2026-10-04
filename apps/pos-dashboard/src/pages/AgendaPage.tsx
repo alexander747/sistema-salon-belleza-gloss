@@ -9,16 +9,14 @@ import { dispatchCajaRefresh } from '../components/caja/CajaBanner.js';
 import { isCajaCerradaError } from '../components/caja/cajaError.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import MoneyInput from '../components/MoneyInput.js';
+import CarritoVenta from '../components/CarritoVenta.js';
+import { useCarrito } from '../hooks/useCarrito.js';
+import type { UseCarritoReturn, LineaServicio } from '../hooks/useCarrito.js';
 import { formatCurrency, formatTimeAMPM } from '../utils/format.js';
 import { filterEmpleadasActivas } from '../utils/empleadas.js';
-import { calcularPendiente } from '../utils/fiado.js';
 import {
   calcularDesgloseReparto,
   costoUnitarioLinea,
-  lineasServicioCita,
-  totalServiciosCita,
-  alcanceLabel,
-  type DescuentoAlcance,
 } from '../utils/reparto.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { getCitaActions, type CitaAccion } from '../utils/citaActions.js';
@@ -99,13 +97,6 @@ interface ProductoSimple {
 
 /** /auth/me devuelve el salón anidado (runtime) aunque IUser no lo declare. */
 type UserConSalon = IUser & { salon?: ReciboSalon | null };
-
-interface ProductCartItem {
-  productoId: number;
-  nombre: string;
-  precioVenta: number;
-  cantidad: number;
-}
 
 /* ── Constants ── */
 
@@ -289,25 +280,9 @@ const AgendaPage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  /* ── Completar modal state ── */
+  /* ── Completar modal state (cart lives in the shared `useCarrito` hook) ── */
   const [showCompletar, setShowCompletar] = useState(false);
-  const [completarForm, setCompletarForm] = useState({
-    serviciosPrecios: {} as Record<number, number>,
-    /** Gramos usados por servicio POR_GRAMO (costo derivado en el servidor). */
-    serviciosGramos: {} as Record<number, number>,
-    /** Costo de insumos editado por el usuario (descuento); ausente = derivado. */
-    serviciosCostoInsumos: {} as Record<number, number | undefined>,
-    nuevosServiciosIds: [] as number[],
-    productosVendidos: [] as ProductCartItem[],
-    propina: 0,
-    metodoPago: 'EFECTIVO' as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA',
-    descuento: 0,  // percentage 0–100
-    /** Alcance del % : servicios, productos o ambos (default AMBOS). */
-    descuentoAlcance: 'AMBOS' as DescuentoAlcance,
-    notaAjuste: '',
-    montoRecibido: 0,
-    esFiado: false,
-  });
+  const carrito = useCarrito();
   const [completando, setCompletando] = useState(false);
   const [completarError, setCompletarError] = useState<string | null>(null);
 
@@ -604,26 +579,30 @@ const AgendaPage: React.FC = () => {
     }
   };
 
-  /* ── Completar (abrir modal) ── */
+  /* ── Completar (abrir modal) ──
+   * Seeds the shared cart with the cita's original services (price, quantity and
+   * catalog supply-cost metadata) and resets discount/payment state. */
   const handleAbrirCompletar = async () => {
     if (!selectedCita) return;
     setCompletarError(null);
-    const precios: Record<number, number> = {};
-    selectedCita.servicios.forEach(s => { precios[s.id] = s.precio; });
-    setCompletarForm({
-      serviciosPrecios: precios,
-      serviciosGramos: {},
-      serviciosCostoInsumos: {},
-      nuevosServiciosIds: [],
-      productosVendidos: [],
-      propina: 0,
-      metodoPago: 'EFECTIVO',
-      descuento: 0,
-      descuentoAlcance: 'AMBOS',
-      notaAjuste: '',
-      montoRecibido: 0,
-      esFiado: false,
+    const lineas: LineaServicio[] = selectedCita.servicios.map((s) => {
+      const catalogo = servicios.find((x) => x.id === s.id);
+      return {
+        servicioId: s.id,
+        nombre: s.nombre,
+        precio: s.precio,
+        duracionMinutos: s.duracionMinutos,
+        costoBaseInsumos: s.costoBaseInsumos ?? 0,
+        cantidad: s.cantidad ?? 1,
+        tipoCostoInsumo: catalogo?.tipoCostoInsumo,
+        precioPorGramo: catalogo?.precioPorGramo ?? null,
+        esExtra: false,
+        realizado: true,
+        precioOriginal: s.precio,
+      };
     });
+    carrito.reset({ paymentMethod: 'EFECTIVO' });
+    carrito.seedServicios(lineas);
     setShowCompletar(true);
   };
 
@@ -632,115 +611,66 @@ const AgendaPage: React.FC = () => {
     if (!salonId || !selectedCita) return;
     setCompletando(true);
     try {
-      const serviciosConPrecios = lineasServicioCita(
-        selectedCita.servicios,
-        completarForm.serviciosPrecios,
-      );
-      const totalServicios = totalServiciosCita(serviciosConPrecios);
+      const totalServiciosFinal = carrito.totalServicios;
+      const totalProductos = carrito.totalProductos;
+      const finalTotal = carrito.finalTotal;
 
-      // Extra services added in completar
-      const extraServicios = servicios.filter(s => completarForm.nuevosServiciosIds.includes(s.id));
-      const precioExtra = (s: ServicioSimple) =>
-        completarForm.serviciosPrecios[s.id] ?? s.precioBase ?? 0;
-      const totalExtraServicios = extraServicios.reduce((sum, s) => sum + precioExtra(s), 0);
-
-      const totalServiciosFinal = totalServicios + totalExtraServicios;
-      const totalProductos = completarForm.productosVendidos.reduce(
-        (sum, p) => sum + p.precioVenta * p.cantidad,
-        0,
-      );
-
-      // Descuento % con alcance: se aplica solo al alcance elegido.
-      const descuentoPct = completarForm.descuento || 0;
-      const descuentoAlcance = completarForm.descuentoAlcance;
-      const pctServ =
-        descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
-      const pctProd =
-        descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
-      const servNeto = Math.round(totalServiciosFinal * (1 - pctServ / 100));
-      const prodNeto = Math.round(totalProductos * (1 - pctProd / 100));
-      const finalTotal = servNeto + prodNeto + completarForm.propina;
-      const hasAdjustment = descuentoPct > 0;
-
-      // Build notas with adjustment info
-      let notas = `Cita completada: ${selectedCita.servicios.map(s => s.nombre).join(', ')}`;
-      if (hasAdjustment && completarForm.notaAjuste.trim()) {
-        const ajusteParts: string[] = [];
-        if (descuentoPct > 0) ajusteParts.push(`descuento ${descuentoPct}% ${alcanceLabel(descuentoAlcance)}`);
-        const prefix = `[AJUSTE: ${ajusteParts.join(' | ')}] Razón: ${completarForm.notaAjuste.trim()}`;
-        notas = `${prefix}\n${notas}`;
-      }
+      // Notas con el bloque de ajuste (mismo texto que armaba el modal bespoke).
+      const notas = carrito.buildNotas(
+        `Cita completada: ${selectedCita.servicios.map((s) => s.nombre).join(', ')}`,
+      ) as string;
 
       // 1. Crear registro financiero Y completar la cita en UNA sola llamada
       //    atómica (el backend persiste ambos en una transacción; si falla,
       //    no queda nada a medias y el reintento no duplica registros).
-      const { data } = await api.post(`/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`, {
-        registro: {
-          salonId,
-          clienteId: selectedCita.cliente.id,
-          usuarioId: selectedCita.empleada.id,
-          totalServicios: totalServiciosFinal,
-          totalProductos,
-          propina: completarForm.propina,
-          montoTotal: finalTotal,
-          // Fiado: se envía el monto cobrado (0 = fiado total, o parcial); sin fiado paga el total.
-          pagos: [
-            {
-              monto: completarForm.esFiado ? completarForm.montoRecibido : finalTotal,
-              metodoPago: completarForm.metodoPago,
-            },
-          ],
-          serviciosItems: [
-            ...serviciosConPrecios
-              .map((s) => {
-                const original = selectedCita.servicios.find((x) => x.id === s.id);
-                const catalogo = servicios.find((x) => x.id === s.id);
-                if (catalogo?.tipoCostoInsumo === 'POR_GRAMO' && s.precio <= 0) {
-                  // Marcado "no realizado": se omite para no exigir gramos.
+      const { data } = await api.post(
+        `/salones/${salonId}/agenda/citas/${selectedCita.id}/completar`,
+        {
+          registro: {
+            salonId,
+            clienteId: selectedCita.cliente.id,
+            usuarioId: selectedCita.empleada.id,
+            totalServicios: totalServiciosFinal,
+            totalProductos,
+            propina: carrito.propina,
+            montoTotal: finalTotal,
+            // Fiado: se envía el monto cobrado (0 = fiado total, o parcial); sin
+            // fiado (Agenda) se cobra siempre el total final.
+            pagos: [carrito.buildPago({ chargeTotal: true })],
+            serviciosItems: carrito.servicios
+              .map((item) => {
+                // Un POR_GRAMO original "no realizado" (precio 0) se omite para
+                // no exigir gramos (los extras siempre viajaron).
+                if (!item.esExtra && item.tipoCostoInsumo === 'POR_GRAMO' && item.precio <= 0)
                   return null;
-                }
-                const item: Record<string, unknown> = {
-                  servicioId: s.id,
-                  nombreServicio: original?.nombre ?? '',
-                  precioServicio: s.precio,
-                  cantidad: s.cantidad,
-                  costoBaseInsumos: original?.costoBaseInsumos ?? 0,
+                const out: Record<string, unknown> = {
+                  servicioId: item.servicioId,
+                  nombreServicio: item.nombre,
+                  precioServicio: item.precio,
+                  cantidad: item.cantidad,
+                  costoBaseInsumos: item.costoBaseInsumos ?? 0,
                 };
-                if (catalogo?.tipoCostoInsumo === 'POR_GRAMO') {
-                  item.gramosUsados = completarForm.serviciosGramos[s.id] ?? 0;
-                  item.costoInsumosOverride = completarForm.serviciosCostoInsumos[s.id];
+                if (item.tipoCostoInsumo === 'POR_GRAMO') {
+                  out.gramosUsados = item.gramosUsados ?? 0;
+                  out.costoInsumosOverride = item.costoInsumosOverride;
                 }
-                return item;
+                return out;
               })
               .filter((item): item is Record<string, unknown> => item !== null),
-            ...extraServicios.map((s) => {
-              const item: Record<string, unknown> = {
-                servicioId: s.id,
-                nombreServicio: s.nombre,
-                precioServicio: precioExtra(s),
-                cantidad: 1,
-                costoBaseInsumos: s.costoBaseInsumos ?? 0,
-              };
-              if (s.tipoCostoInsumo === 'POR_GRAMO') {
-                item.gramosUsados = completarForm.serviciosGramos[s.id] ?? 0;
-                item.costoInsumosOverride = completarForm.serviciosCostoInsumos[s.id];
-              }
-              return item;
-            }),
-          ],
-          notas,
-          registradoPorId: user?.id,
-          productosVendidos: completarForm.productosVendidos.map(p => ({
-            productoId: p.productoId,
-            cantidad: p.cantidad,
-            // E1: precio editado por el usuario (el server cae al del catálogo si falta).
-            precioVenta: p.precioVenta,
-          })),
-          // Descuento % con alcance (el server deriva precioAjustado/valorFinal)
-          porcentajeDescuento: descuentoPct,
-          descuentoAlcance,
+            notas,
+            registradoPorId: user?.id,
+            productosVendidos: carrito.productos.map((p) => ({
+              productoId: p.productoId,
+              cantidad: p.cantidad,
+              // E1: precio editado por el usuario (el server cae al del catálogo si falta).
+              precioVenta: p.precioVenta,
+            })),
+            // Descuento % con alcance (el server deriva precioAjustado/valorFinal)
+            porcentajeDescuento: carrito.descuento || 0,
+            descuentoAlcance: carrito.descuentoAlcance,
+          },
         },
-      });
+      );
 
       // PR2: recibo de venta construido desde el estado del modal (lo que el
       // usuario vio); Nº/fecha se toman del registro que devuelve el backend.
@@ -748,9 +678,6 @@ const AgendaPage: React.FC = () => {
         data && typeof data === 'object' && 'registro' in data
           ? (data as { registro: unknown }).registro
           : data;
-      const servicioPrecio = (s: { id: number; precio: number }) =>
-        completarForm.serviciosPrecios[s.id] ?? s.precio;
-      const pendiente = calcularPendiente(finalTotal, completarForm.propina, completarForm.montoRecibido);
       setRecibo(
         buildRecibo({
           numero: numeroDeRegistro(registroResp),
@@ -758,39 +685,31 @@ const AgendaPage: React.FC = () => {
           clienteNombre: selectedCita.cliente.nombre,
           empleadaNombre: selectedCita.empleada.nombre,
           lineas: [
-            // Servicios originales realizados (precio > 0; 0 = marcado "no realizado")
-            ...selectedCita.servicios
-              .filter((s) => servicioPrecio(s) > 0)
-              .map((s) => ({
+            // Servicios realizados (precio > 0; 0 = marcado "no realizado").
+            // El carrito conserva el orden original (originales y luego extras).
+            ...carrito.servicios
+              .filter((item) => item.precio > 0)
+              .map((item) => ({
                 tipo: 'SERVICIO' as const,
-                nombre: s.nombre,
-                cantidad: s.cantidad ?? 1,
-                precio: servicioPrecio(s),
-              })),
-            // Servicios extra agregados en el modal
-            ...servicios
-              .filter((s) => completarForm.nuevosServiciosIds.includes(s.id))
-              .map((s) => ({
-                tipo: 'SERVICIO' as const,
-                nombre: s.nombre,
-                cantidad: 1,
-                precio: completarForm.serviciosPrecios[s.id] ?? s.precioBase ?? 0,
+                nombre: item.nombre,
+                cantidad: item.cantidad,
+                precio: item.precio,
               })),
             // Productos vendidos
-            ...completarForm.productosVendidos.map((p) => ({
+            ...carrito.productos.map((p) => ({
               tipo: 'PRODUCTO' as const,
               nombre: p.nombre,
               cantidad: p.cantidad,
               precio: p.precioVenta,
             })),
           ],
-          metodoPago: completarForm.metodoPago,
+          metodoPago: carrito.paymentMethod,
           total: finalTotal,
-          propina: completarForm.propina,
+          propina: carrito.propina,
           // Descuento EFECTIVO = subtotal + propina − total (cubre el % y el ajuste de total).
-          descuento: Math.max(0, totalServiciosFinal + totalProductos + completarForm.propina - finalTotal),
-          descuentoPorcentaje: descuentoPct || undefined,
-          montoPendiente: pendiente,
+          descuento: carrito.descuentoMonto,
+          descuentoPorcentaje: carrito.descuento || undefined,
+          montoPendiente: carrito.pendiente,
         }),
       );
 
@@ -811,32 +730,6 @@ const AgendaPage: React.FC = () => {
       }
     } finally {
       setCompletando(false);
-    }
-  };
-
-  /* ── Completar form helpers ── */
-  const handleCompletarFormChange = (patch: Partial<typeof completarForm>) => {
-    setCompletarForm(prev => ({ ...prev, ...patch }));
-  };
-
-  const handleToggleServicioCompletar = (servicioId: number) => {
-    if (!selectedCita) return;
-    const isOriginal = selectedCita.servicios.some(s => s.id === servicioId);
-    if (isOriginal) {
-      const originalPrecio = selectedCita.servicios.find(s => s.id === servicioId)?.precio ?? 0;
-      const currentPrice = completarForm.serviciosPrecios[servicioId] ?? originalPrecio;
-      setCompletarForm(prev => ({
-        ...prev,
-        serviciosPrecios: {
-          ...prev.serviciosPrecios,
-          [servicioId]: currentPrice > 0 ? 0 : originalPrecio,
-        },
-      }));
-    } else {
-      setCompletarForm(prev => ({
-        ...prev,
-        nuevosServiciosIds: prev.nuevosServiciosIds.filter(id => id !== servicioId),
-      }));
     }
   };
 
@@ -1181,16 +1074,14 @@ const AgendaPage: React.FC = () => {
             servicios={servicios}
             productos={productos}
             empleada={empleadas.find((e) => e.id === selectedCita.empleada.id) ?? null}
+            carrito={carrito}
             completando={completando}
             completarError={completarError}
-            form={completarForm}
-            onChangeForm={handleCompletarFormChange}
             onClose={() => {
               setShowCompletar(false);
               setCompletarError(null);
             }}
             onConfirmar={handleConfirmarCompletar}
-            onToggleServicio={handleToggleServicioCompletar}
           />
         )}
       </AnimatePresence>
@@ -2524,27 +2415,12 @@ interface CompletarModalProps {
   productos: ProductoSimple[];
   /** Empleada de la cita (con su % de comisión) para el desglose del reparto. */
   empleada: EmpleadaSimple | null;
+  /** Shared cart hook instance owned by the page. */
+  carrito: UseCarritoReturn;
   completando: boolean;
   completarError: string | null;
-  form: {
-    serviciosPrecios: Record<number, number>;
-    serviciosGramos: Record<number, number>;
-    serviciosCostoInsumos: Record<number, number | undefined>;
-    nuevosServiciosIds: number[];
-    productosVendidos: ProductCartItem[];
-    propina: number;
-    metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
-    descuento: number;  // percentage 0–100
-    /** Alcance del % : servicios, productos o ambos. */
-    descuentoAlcance: DescuentoAlcance;
-    notaAjuste: string;
-    montoRecibido: number;
-    esFiado: boolean;
-  };
-  onChangeForm: (patch: Partial<CompletarModalProps['form']>) => void;
   onClose: () => void;
   onConfirmar: () => Promise<void>;
-  onToggleServicio: (id: number) => void;
 }
 
 /** Visual del switch de descuento (mismo look que el toggle de fiado). */
@@ -2575,20 +2451,44 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   servicios,
   productos,
   empleada,
+  carrito,
   completando,
   completarError,
-  form,
-  onChangeForm,
   onClose,
   onConfirmar,
-  onToggleServicio,
 }) => {
   const [productSearch, setProductSearch] = useState('');
   /* Scanner de código de barras (PR2): match exacto contra la lista RETAIL. */
   const [scanCode, setScanCode] = useState('');
   const [scanError, setScanError] = useState(false);
-  /* Descuento plegado por defecto (misma regla que el carrito compartido). */
-  const [descuentoActivo, setDescuentoActivo] = useState(false);
+
+  /* ── Shared cart (single source of truth for the completar flow) ── */
+  const {
+    servicios: lineas,
+    productos: productosCarrito,
+    addServicio,
+    addProducto,
+    updateServicioPrecio,
+    updateServicioGramos,
+    removeServicio,
+    toggleServicioRealizado,
+    totalServicios,
+    totalProductos,
+    propina,
+    setPropina,
+    descuento,
+    descuentoAlcance,
+    finalTotal,
+    paymentMethod,
+    setPaymentMethod,
+    montoRecibido,
+    setMontoRecibido,
+    esFiado,
+    setEsFiado,
+    pendiente,
+    hasAdjustment,
+    ajusteNoteRequired,
+  } = carrito;
 
   const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
@@ -2599,7 +2499,7 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
       (p) => p.codigoBarras != null && p.codigoBarras.trim().toLowerCase() === code.toLowerCase(),
     );
     if (found) {
-      addProductToCart(found);
+      addProducto(found);
       setScanCode('');
       setScanError(false);
     } else {
@@ -2608,135 +2508,49 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
   };
 
   const filteredProductos = useMemo(() => {
-    let list = productos;
-    if (productSearch.trim()) {
-      const q = productSearch.toLowerCase();
-      list = list.filter((p) => p.nombre.toLowerCase().includes(q));
-    }
-    return list;
+    if (!productSearch.trim()) return productos;
+    const q = productSearch.toLowerCase();
+    return productos.filter((p) => p.nombre.toLowerCase().includes(q));
   }, [productos, productSearch]);
 
-  const addProductToCart = (prod: ProductoSimple) => {
-    if (prod.cantidadStock <= 0) return;
-    const prev = form.productosVendidos;
-    const existing = prev.find((item) => item.productoId === prod.id);
-    if (existing) {
-      onChangeForm({
-        productosVendidos: prev.map((item) =>
-          item.productoId === prod.id
-            ? { ...item, cantidad: Math.min(item.cantidad + 1, prod.cantidadStock) }
-            : item,
-        ),
-      });
-    } else {
-      onChangeForm({
-        productosVendidos: [
-          ...prev,
-          { productoId: prod.id, nombre: prod.nombre, precioVenta: prod.precioVenta, cantidad: 1 },
-        ],
-      });
-    }
-  };
-
-  const updateProductQty = (productoId: number, delta: number) => {
-    onChangeForm({
-      productosVendidos: form.productosVendidos
-        .map((item) =>
-          item.productoId === productoId
-            ? { ...item, cantidad: Math.max(0, item.cantidad + delta) }
-            : item,
-        )
-        .filter((item) => item.cantidad > 0),
-    });
-  };
-
-  const removeProductFromCart = (productoId: number) => {
-    onChangeForm({
-      productosVendidos: form.productosVendidos.filter((item) => item.productoId !== productoId),
-    });
-  };
-
-  /** Edita el precio unitario de venta del producto (E1). */
-  const updateProductPrice = (productoId: number, precio: number) => {
-    onChangeForm({
-      productosVendidos: form.productosVendidos.map((item) =>
-        item.productoId === productoId ? { ...item, precioVenta: Math.max(0, precio) } : item,
+  /* ── Extra services available to add (not on the cita nor already in cart) ── */
+  const availableExtraServicios = useMemo(
+    () =>
+      servicios.filter(
+        (s) =>
+          s.activo !== false &&
+          !cita.servicios.some((cs) => cs.id === s.id) &&
+          !lineas.some((l) => l.servicioId === s.id),
       ),
-    });
+    [servicios, cita.servicios, lineas],
+  );
+
+  const handleAddExtraServicio = (id: number) => {
+    const s = servicios.find((x) => x.id === id);
+    if (!s) return;
+    addServicio(
+      {
+        id: s.id,
+        nombre: s.nombre,
+        precioFinal: s.precioBase ?? 0,
+        duracionMinutos: s.duracionMinutos,
+        costoBaseInsumos: s.costoBaseInsumos,
+        tipoCostoInsumo: s.tipoCostoInsumo,
+        precioPorGramo: s.precioPorGramo,
+      },
+      { esExtra: true },
+    );
   };
-
-  const totalProductosCalc = useMemo(
-    () => form.productosVendidos.reduce((sum, p) => sum + p.precioVenta * p.cantidad, 0),
-    [form.productosVendidos],
-  );
-
-  const addedServicios = useMemo(
-    () => servicios.filter(s => form.nuevosServiciosIds.includes(s.id)),
-    [servicios, form.nuevosServiciosIds],
-  );
 
   /**
-   * Alcances que aplican al carrito actual (misma regla que `useCarrito`):
-   * un alcance sin ítems solo daría $0, así que no se ofrece.
+   * Submit gating: only ORIGINAL POR_GRAMO realized lines require grams. Extra
+   * POR_GRAMO lines never block (preserves the previous Agenda behavior).
    */
-  const alcancesAplicables = useMemo<DescuentoAlcance[]>(() => {
-    const hasServicios = cita.servicios.length > 0 || addedServicios.length > 0;
-    const hasProductos = form.productosVendidos.length > 0;
-    if (hasServicios && hasProductos) return ['SERVICIOS', 'PRODUCTOS', 'AMBOS'];
-    if (hasServicios) return ['SERVICIOS'];
-    if (hasProductos) return ['PRODUCTOS'];
-    return [];
-  }, [cita.servicios.length, addedServicios.length, form.productosVendidos.length]);
-
-  useEffect(() => {
-    if (alcancesAplicables.length === 1 && form.descuentoAlcance !== alcancesAplicables[0]) {
-      onChangeForm({ descuentoAlcance: alcancesAplicables[0] });
-    }
-  }, [alcancesAplicables, form.descuentoAlcance, onChangeForm]);
-
-  const availableExtraServicios = useMemo(
-    () => servicios.filter(
-      s => s.activo !== false
-        && !cita.servicios.some(cs => cs.id === s.id)
-        && !form.nuevosServiciosIds.includes(s.id),
-    ),
-    [servicios, cita.servicios, form.nuevosServiciosIds],
-  );
-
-  const totalOriginalServicios = useMemo(
-    () => totalServiciosCita(lineasServicioCita(cita.servicios, form.serviciosPrecios)),
-    [cita.servicios, form.serviciosPrecios],
-  );
-
-  const totalExtraServicios = useMemo(
-    () => addedServicios.reduce((sum, s) => sum + (form.serviciosPrecios[s.id] ?? s.precioBase ?? 0), 0),
-    [addedServicios, form.serviciosPrecios],
-  );
-
-  const descuentoPct = form.descuento || 0;
-  const descuentoAlcance = form.descuentoAlcance;
-  const pctServ =
-    descuentoAlcance === 'SERVICIOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
-  const pctProd =
-    descuentoAlcance === 'PRODUCTOS' || descuentoAlcance === 'AMBOS' ? descuentoPct : 0;
-  const totalServiciosBruto = totalOriginalServicios + totalExtraServicios;
-  const subtotalBeforeDiscount = totalServiciosBruto + totalProductosCalc;
-  const servNeto = Math.round(totalServiciosBruto * (1 - pctServ / 100));
-  const prodNeto = Math.round(totalProductosCalc * (1 - pctProd / 100));
-  const descuentoMonto = totalServiciosBruto - servNeto + (totalProductosCalc - prodNeto);
-  const calculatedTotal = servNeto + prodNeto + form.propina;
-  const totalFinal = calculatedTotal;
-  /** Deuda restante: la propina nunca se fía (decisión owner D8). */
-  const pendiente = calcularPendiente(totalFinal, form.propina, form.montoRecibido);
-  const hasAdjustment = descuentoPct > 0;
-  const ajusteNoteRequired = hasAdjustment && form.notaAjuste.trim().length === 0;
-
-  /** Servicios POR_GRAMO realizados (precio > 0) que aún no tienen gramos > 0. */
-  const gramosFaltantes = cita.servicios.some((s) => {
-    const precio = form.serviciosPrecios[s.id] ?? s.precio;
-    if (precio <= 0) return false;
-    const catalogo = servicios.find((x) => x.id === s.id);
-    return catalogo?.tipoCostoInsumo === 'POR_GRAMO' && !((form.serviciosGramos[s.id] ?? 0) > 0);
+  const gramosFaltantes = lineas.some((l) => {
+    if (l.esExtra) return false;
+    if (l.tipoCostoInsumo !== 'POR_GRAMO') return false;
+    if (l.precio <= 0) return false;
+    return !(l.gramosUsados != null && l.gramosUsados > 0);
   });
   const registrarDisabled = ajusteNoteRequired || gramosFaltantes;
 
@@ -2745,52 +2559,32 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
    * completo y el resto se reparte por el % de la empleada. */
   const porcentajeComisionEmpleada = empleada?.porcentajeComisionServicio ?? null;
 
-  const totalCostoInsumos = useMemo(() => {
-    const deOriginales = cita.servicios.reduce((sum, s) => {
-      const precio = form.serviciosPrecios[s.id] ?? s.precio;
-      const catalogo = servicios.find((x) => x.id === s.id);
-      const esPorGramo = catalogo?.tipoCostoInsumo === 'POR_GRAMO';
-      // Igual que el submit: un POR_GRAMO "no realizado" se omite (sin costo).
-      if (esPorGramo && precio <= 0) return sum;
-      const unitario = costoUnitarioLinea({
-        tipoCostoInsumo: catalogo?.tipoCostoInsumo,
-        gramosUsados: form.serviciosGramos[s.id] ?? 0,
-        precioPorGramo: catalogo?.precioPorGramo,
-        costoBaseInsumos: catalogo?.costoBaseInsumos ?? s.costoBaseInsumos,
-        costoInsumosOverride: form.serviciosCostoInsumos[s.id],
-      });
-      return sum + unitario * (s.cantidad ?? 1);
-    }, 0);
-
-    const deExtras = addedServicios.reduce(
-      (sum, s) =>
-        sum +
-        costoUnitarioLinea({
-          tipoCostoInsumo: s.tipoCostoInsumo,
-          gramosUsados: form.serviciosGramos[s.id] ?? 0,
-          precioPorGramo: s.precioPorGramo,
-          costoBaseInsumos: s.costoBaseInsumos,
-          costoInsumosOverride: form.serviciosCostoInsumos[s.id],
-        }),
-      0,
-    );
-
-    return deOriginales + deExtras;
-  }, [cita.servicios, form.serviciosPrecios, form.serviciosGramos, form.serviciosCostoInsumos, servicios, addedServicios]);
+  const totalCostoInsumos = useMemo(
+    () =>
+      lineas.reduce((sum, item) => {
+        // Un POR_GRAMO "no realizado" se omite del costo (igual que el submit).
+        if (item.tipoCostoInsumo === 'POR_GRAMO' && item.precio <= 0) return sum;
+        const unitario = costoUnitarioLinea({
+          tipoCostoInsumo: item.tipoCostoInsumo,
+          gramosUsados: item.gramosUsados ?? 0,
+          precioPorGramo: item.precioPorGramo,
+          costoBaseInsumos: item.costoBaseInsumos,
+          costoInsumosOverride: item.costoInsumosOverride,
+        });
+        return sum + unitario * item.cantidad;
+      }, 0),
+    [lineas],
+  );
 
   const desglose = calcularDesgloseReparto({
-    totalServicios: totalOriginalServicios + totalExtraServicios,
+    totalServicios,
     totalCostoInsumos,
-    porcentajeDescuento: descuentoPct,
+    porcentajeDescuento: descuento,
     descuentoAlcance,
     porcentajeComision: porcentajeComisionEmpleada ?? 0,
   });
 
-  const hayServicioPorGramo =
-    cita.servicios.some(
-      (s) => servicios.find((x) => x.id === s.id)?.tipoCostoInsumo === 'POR_GRAMO',
-    ) || addedServicios.some((s) => s.tipoCostoInsumo === 'POR_GRAMO');
-
+  const hayServicioPorGramo = lineas.some((l) => l.tipoCostoInsumo === 'POR_GRAMO');
   const mostrarDesglose = hasAdjustment || hayServicioPorGramo;
 
   const fechaStr = new Date(cita.fecha + 'T' + cita.horaInicio).toLocaleDateString('es-CL', {
@@ -2798,6 +2592,372 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
     month: 'short',
     year: 'numeric',
   });
+
+  /* ── Bespoke Agenda line: injected into the shared cart items list ── */
+  const renderServicioItem = (item: LineaServicio) => {
+    if (item.esExtra) {
+      return (
+        <div className={`${styles.serviceCard} ${styles.serviceCardAdded}`}>
+          <span className={`${styles.serviceName} ${styles.serviceNameAdded}`}>+ {item.nombre}</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            inputMode="decimal"
+            aria-label={`Precio ${item.nombre}`}
+            value={item.precio}
+            onChange={(e) => updateServicioPrecio(item.servicioId, Number(e.target.value))}
+            className={`${styles.noSpinner} ${styles.servicePriceInput}`}
+            title="Precio unitario"
+          />
+          <button
+            type="button"
+            onClick={() => removeServicio(item.servicioId)}
+            className={styles.serviceRemoveBtn}
+            aria-label="Quitar servicio extra"
+          >
+            ✕
+          </button>
+        </div>
+      );
+    }
+
+    const isRemoved = item.realizado === false;
+    const cantidad = item.cantidad;
+    const esPorGramo = item.tipoCostoInsumo === 'POR_GRAMO';
+    const gramosLinea = item.gramosUsados ?? 0;
+    const costoInsumoLinea = gramosLinea * (item.precioPorGramo ?? 0);
+    const costoInsumosMostrado = item.costoInsumosOverride ?? costoInsumoLinea;
+    return (
+      <div
+        className={styles.serviceCard}
+        style={{
+          opacity: isRemoved ? 0.5 : 1,
+          textDecoration: isRemoved ? 'line-through' : 'none',
+        }}
+      >
+        <div className={styles.serviceCardMain}>
+          <span className={styles.serviceName}>
+            {item.nombre}
+            {cantidad > 1 && (
+              <span style={{ color: 'var(--accent)', marginLeft: '0.25rem' }}>×{cantidad}</span>
+            )}
+          </span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            inputMode="decimal"
+            aria-label={`Precio ${item.nombre}`}
+            value={item.precio}
+            onChange={(e) => updateServicioPrecio(item.servicioId, Number(e.target.value))}
+            className={`${styles.noSpinner} ${styles.servicePriceInput}`}
+            title="Precio unitario"
+          />
+          <span
+            style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              color: isRemoved ? 'var(--text-dim)' : 'var(--text-primary)',
+              minWidth: '80px',
+              textAlign: 'right',
+            }}
+          >
+            {formatCurrency(item.precio * cantidad)}
+          </span>
+          <button
+            type="button"
+            onClick={() => toggleServicioRealizado(item.servicioId)}
+            className={styles.serviceRemoveBtn}
+            aria-label={isRemoved ? 'Restaurar servicio' : 'No realizar servicio'}
+            title={isRemoved ? 'Restaurar servicio' : 'Marcar como no realizado'}
+          >
+            {isRemoved ? '↩' : '✕'}
+          </button>
+        </div>
+        {esPorGramo && !isRemoved && (
+          <div className={styles.gramsField}>
+            <label className={styles.gramsLabel} htmlFor={`gramos-cita-${item.servicioId}`}>
+              Gramos usados
+            </label>
+            <div className={styles.gramsInputWrap}>
+              <input
+                id={`gramos-cita-${item.servicioId}`}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                aria-label={`Gramos ${item.nombre}`}
+                placeholder="0"
+                value={item.gramosUsados ?? ''}
+                onChange={(e) =>
+                  updateServicioGramos(
+                    item.servicioId,
+                    e.target.value === '' ? undefined : Number(e.target.value),
+                  )
+                }
+                className={`${styles.noSpinner} ${styles.gramsInput}`}
+              />
+              <span className={styles.gramsSuffix}>g</span>
+            </div>
+            <label className={styles.gramsLabel} htmlFor={`costo-cita-${item.servicioId}`}>
+              Costo de insumos
+            </label>
+            <div className={styles.gramsInputWrap}>
+              {/* Derivado del catálogo (gramos × $/g): no editable en venta
+                  (anti-forgery: el server lo recalcula igual). */}
+              <input
+                id={`costo-cita-${item.servicioId}`}
+                type="number"
+                min="0"
+                step="1"
+                inputMode="decimal"
+                aria-label={`Costo de insumos ${item.nombre}`}
+                aria-readonly="true"
+                placeholder="0"
+                value={costoInsumosMostrado > 0 ? costoInsumosMostrado : ''}
+                readOnly
+                tabIndex={-1}
+                title="Costo derivado del catálogo (no editable)"
+                className={`${styles.noSpinner} ${styles.gramsInput}`}
+              />
+              <span className={styles.gramsSuffix}>$</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /* ── Product catalog + scanner, injected into the shared cart ── */
+  const productPicker = (
+    <div style={{ marginBottom: '1rem' }}>
+      {/* Add service dropdown */}
+      {availableExtraServicios.length > 0 ? (
+        <select
+          value=""
+          onChange={(e) => {
+            const id = Number(e.target.value);
+            if (id > 0) handleAddExtraServicio(id);
+          }}
+          className={styles.addServiceSelect}
+        >
+          <option value="">+ Agregar servicio</option>
+          {availableExtraServicios.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nombre} — {formatCurrency(s.precioBase ?? 0)}
+            </option>
+          ))}
+        </select>
+      ) : cita.servicios.length > 0 ? (
+        <div
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.75rem',
+            color: 'var(--text-dim)',
+            padding: '0.25rem 0',
+          }}
+        >
+          No hay más servicios disponibles
+        </div>
+      ) : null}
+
+      {/* ── Productos ── */}
+      <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>
+        Productos
+      </div>
+      {/* Escáner de código de barras (PR2) */}
+      <input
+        type="text"
+        aria-label="Escanear código"
+        autoFocus
+        placeholder="📷 Escanear código…"
+        value={scanCode}
+        onChange={(e) => {
+          setScanCode(e.target.value);
+          setScanError(false);
+        }}
+        onKeyDown={handleScanKeyDown}
+        className={styles.productSearchInput}
+      />
+      {scanError && (
+        <div
+          role="alert"
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.7rem',
+            color: 'var(--danger)',
+            marginBottom: '0.4rem',
+          }}
+        >
+          ⚠️ Producto no encontrado
+        </div>
+      )}
+      <input
+        type="text"
+        placeholder="Buscar producto…"
+        value={productSearch}
+        onChange={(e) => setProductSearch(e.target.value)}
+        className={styles.productSearchInput}
+      />
+      {filteredProductos.length === 0 ? (
+        <div
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.75rem',
+            color: 'var(--text-dim)',
+            padding: '0.35rem 0',
+          }}
+        >
+          {productSearch ? 'No hay productos que coincidan' : 'No hay productos disponibles'}
+        </div>
+      ) : (
+        <div className={styles.productGrid}>
+          {filteredProductos.map((prod) => {
+            const outOfStock = prod.cantidadStock <= 0;
+            const inCart = productosCarrito.some((p) => p.productoId === prod.id);
+            return (
+              <div
+                key={prod.id}
+                onClick={() => !outOfStock && addProducto(prod)}
+                className={`${styles.productCard} ${outOfStock ? styles.productCardOutOfStock : ''} ${inCart ? styles.productCardInCart : ''}`}
+              >
+                <div className={styles.productCardName}>{prod.nombre}</div>
+                <div className={styles.productCardPrice}>{formatCurrency(prod.precioVenta)}</div>
+                <div className={`${styles.productCardStock} ${outOfStock ? styles.productCardStockOut : ''}`}>
+                  {outOfStock ? 'Sin stock' : `${prod.cantidadStock} en stock`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const itemsHeader =
+    productosCarrito.length > 0 ? (
+      <div className={styles.sectionTitle}>En carrito ({productosCarrito.length})</div>
+    ) : undefined;
+
+  /* ── Receipt rows by kind (Agenda shows Servicios/Productos + Subtotal) ── */
+  const beforeSubtotal = (
+    <>
+      <div className={styles.receiptRow}>
+        <span className={styles.receiptLabel}>Servicios</span>
+        <span className={styles.receiptValue}>{formatCurrency(totalServicios)}</span>
+      </div>
+      {productosCarrito.length > 0 && (
+        <div className={styles.receiptRow}>
+          <span className={styles.receiptLabel}>Productos</span>
+          <span className={styles.receiptValue}>{formatCurrency(totalProductos)}</span>
+        </div>
+      )}
+    </>
+  );
+
+  /* ── Propina + payment, injected between the discount and the totals ── */
+  const beforeTotals = (
+    <div className={styles.receiptSection}>
+      {/* Propina */}
+      <div className={styles.propinaRow}>
+        <span className={styles.receiptLabel}>Propina</span>
+        <MoneyInput
+          value={propina}
+          onChange={(n) => setPropina(n)}
+          className={`${styles.noSpinner} ${styles.propinaInput}`}
+        />
+      </div>
+
+      {/* Payment Method */}
+      <div className={styles.sectionTitle}>Método de pago</div>
+      <div className={styles.paymentBtnGroup}>
+        {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setPaymentMethod(m)}
+            className={`${styles.paymentBtn} ${paymentMethod === m ? styles.paymentBtnActive : ''}`}
+          >
+            {m === 'EFECTIVO' ? 'Efectivo' : m === 'TARJETA' ? 'Tarjeta' : 'Transferencia'}
+          </button>
+        ))}
+      </div>
+
+      {/* Fiado toggle: la clienta paga después */}
+      <label
+        className={styles.toggleLabel}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          cursor: 'pointer',
+          userSelect: 'none',
+          margin: '0.4rem 0',
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: '0.8125rem',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={esFiado}
+          onChange={(e) => setEsFiado(e.target.checked)}
+          style={{ display: 'none' }}
+        />
+        <span style={switchTrackStyle(esFiado)}>
+          <span style={switchKnobStyle(esFiado)} />
+        </span>
+        <span style={{ color: 'var(--text-secondary)' }}>Fiado — la clienta paga después</span>
+      </label>
+
+      {/* Fiado: monto a cobrar editable (0 o parcial) para todos los métodos */}
+      {esFiado && (
+        <>
+          <div className={styles.amountRow}>
+            <span className={styles.receiptLabel}>Monto a cobrar</span>
+            <MoneyInput
+              value={montoRecibido}
+              onChange={(n) => setMontoRecibido(n)}
+              placeholder="0"
+              ariaLabel="Monto a cobrar"
+              className={`${styles.noSpinner} ${styles.amountInput}`}
+            />
+          </div>
+          {pendiente > 0 && (
+            <div className={styles.pendienteDisplay}>
+              <span>Queda pendiente: {formatCurrency(pendiente)}</span>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Amount received (only for cash, no fiado) */}
+      {!esFiado && paymentMethod === 'EFECTIVO' && (
+        <>
+          <div className={styles.amountRow}>
+            <span className={styles.receiptLabel}>Monto recibido</span>
+            <MoneyInput
+              value={montoRecibido}
+              onChange={(n) => setMontoRecibido(n)}
+              placeholder={formatCurrency(finalTotal)}
+              className={`${styles.noSpinner} ${styles.amountInput}`}
+            />
+          </div>
+          {montoRecibido > finalTotal && (
+            <div className={styles.cambioDisplay}>
+              <span>Vuelto</span>
+              <span>{formatCurrency(montoRecibido - finalTotal)}</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  const afterTotals = mostrarDesglose ? (
+    <DesgloseReparto desglose={desglose} porcentajeComision={porcentajeComisionEmpleada} />
+  ) : undefined;
 
   return (
     <motion.div
@@ -2859,652 +3019,27 @@ const RenderCompletarModal: React.FC<CompletarModalProps> = ({
         )}
 
         <div className={styles.modalBody}>
-          <div className={styles.completarGrid}>
-            {/* ── LEFT COLUMN ── */}
-            <div>
-              {/* ── Header Card ── */}
-              <div className={styles.headerCard}>
-                <div className={styles.clientName}>{cita.cliente.nombre}</div>
-                <div className={styles.headerMeta}>
-                  <span>{cita.empleada.nombre}</span>
-                  <span>{fechaStr}</span>
-                  <span>#{cita.id}</span>
-                </div>
-              </div>
-
-              {/* ── Servicios ── */}
-              <div style={{ marginBottom: '1rem' }}>
-                <div className={styles.sectionTitle}>Servicios</div>
-                <div>
-                  {/* Original services — prices are read-only; use toggle to mark as "not performed" */}
-                  {cita.servicios.map(s => {
-                    const currentPrice = form.serviciosPrecios[s.id] ?? s.precio;
-                    const isRemoved = currentPrice === 0 && form.serviciosPrecios[s.id] === 0;
-                    const cantidad = s.cantidad ?? 1;
-                    const catalogoServicio = servicios.find((x) => x.id === s.id);
-                    const esPorGramo = catalogoServicio?.tipoCostoInsumo === 'POR_GRAMO';
-                    const gramosLinea = form.serviciosGramos[s.id] ?? 0;
-                    const costoInsumoLinea = gramosLinea * (catalogoServicio?.precioPorGramo ?? 0);
-                    const costoInsumosMostrado =
-                      form.serviciosCostoInsumos[s.id] ?? costoInsumoLinea;
-                    return (
-                      <div
-                        key={s.id}
-                        className={styles.serviceCard}
-                        style={{
-                          opacity: isRemoved ? 0.5 : 1,
-                          textDecoration: isRemoved ? 'line-through' : 'none',
-                        }}
-                      >
-                        <div className={styles.serviceCardMain}>
-                          <span className={styles.serviceName}>
-                            {s.nombre}
-                            {cantidad > 1 && (
-                              <span style={{ color: 'var(--accent)', marginLeft: '0.25rem' }}>
-                                ×{cantidad}
-                              </span>
-                            )}
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            inputMode="decimal"
-                            aria-label={`Precio ${s.nombre}`}
-                            value={currentPrice}
-                            onChange={(e) =>
-                              onChangeForm({
-                                serviciosPrecios: {
-                                  ...form.serviciosPrecios,
-                                  [s.id]: Math.max(0, Number(e.target.value)),
-                                },
-                              })
-                            }
-                            className={`${styles.noSpinner} ${styles.servicePriceInput}`}
-                            title="Precio unitario"
-                          />
-                          <span
-                            style={{
-                              fontFamily: "'DM Sans', sans-serif",
-                              fontSize: '0.8125rem',
-                              fontWeight: 600,
-                              color: isRemoved ? 'var(--text-dim)' : 'var(--text-primary)',
-                              minWidth: '80px',
-                              textAlign: 'right',
-                            }}
-                          >
-                            {formatCurrency(currentPrice * cantidad)}
-                          </span>
-                          <button
-                            onClick={() => onToggleServicio(s.id)}
-                            className={styles.serviceRemoveBtn}
-                            aria-label={isRemoved ? 'Restaurar servicio' : 'No realizar servicio'}
-                            title={isRemoved ? 'Restaurar servicio' : 'Marcar como no realizado'}
-                          >
-                            {isRemoved ? '↩' : '✕'}
-                          </button>
-                        </div>
-                        {esPorGramo && !isRemoved && (
-                          <div className={styles.gramsField}>
-                            <label
-                              className={styles.gramsLabel}
-                              htmlFor={`gramos-cita-${s.id}`}
-                            >
-                              Gramos usados
-                            </label>
-                            <div className={styles.gramsInputWrap}>
-                              <input
-                                id={`gramos-cita-${s.id}`}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                inputMode="decimal"
-                                aria-label={`Gramos ${s.nombre}`}
-                                placeholder="0"
-                                value={form.serviciosGramos[s.id] ?? ''}
-                                onChange={(e) =>
-                                  onChangeForm({
-                                    serviciosGramos: {
-                                      ...form.serviciosGramos,
-                                      [s.id]: Number(e.target.value),
-                                    },
-                                    // Recalcular el derivado: limpia el ajuste manual.
-                                    serviciosCostoInsumos: {
-                                      ...form.serviciosCostoInsumos,
-                                      [s.id]: undefined,
-                                    },
-                                  })
-                                }
-                                className={`${styles.noSpinner} ${styles.gramsInput}`}
-                              />
-                              <span className={styles.gramsSuffix}>g</span>
-                            </div>
-                            <label className={styles.gramsLabel} htmlFor={`costo-cita-${s.id}`}>
-                              Costo de insumos
-                            </label>
-                            <div className={styles.gramsInputWrap}>
-                              {/* Derivado del catálogo (gramos × $/g): no editable en venta
-                                  (anti-forgery: el server lo recalcula igual). */}
-                              <input
-                                id={`costo-cita-${s.id}`}
-                                type="number"
-                                min="0"
-                                step="1"
-                                inputMode="decimal"
-                                aria-label={`Costo de insumos ${s.nombre}`}
-                                aria-readonly="true"
-                                placeholder="0"
-                                value={costoInsumosMostrado > 0 ? costoInsumosMostrado : ''}
-                                readOnly
-                                tabIndex={-1}
-                                title="Costo derivado del catálogo (no editable)"
-                                className={`${styles.noSpinner} ${styles.gramsInput}`}
-                              />
-                              <span className={styles.gramsSuffix}>$</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {/* Added services */}
-                  {addedServicios.map(s => (
-                    <div key={s.id} className={`${styles.serviceCard} ${styles.serviceCardAdded}`}>
-                      <span className={`${styles.serviceName} ${styles.serviceNameAdded}`}>+ {s.nombre}</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputMode="decimal"
-                        aria-label={`Precio ${s.nombre}`}
-                        value={form.serviciosPrecios[s.id] ?? s.precioBase ?? 0}
-                        onChange={(e) =>
-                          onChangeForm({
-                            serviciosPrecios: {
-                              ...form.serviciosPrecios,
-                              [s.id]: Math.max(0, Number(e.target.value)),
-                            },
-                          })
-                        }
-                        className={`${styles.noSpinner} ${styles.servicePriceInput}`}
-                        title="Precio unitario"
-                      />
-                      <button
-                        onClick={() => onToggleServicio(s.id)}
-                        className={styles.serviceRemoveBtn}
-                        aria-label="Quitar servicio extra"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                  {/* Add service dropdown */}
-                  {availableExtraServicios.length > 0 ? (
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        const id = Number(e.target.value);
-                        if (id > 0) {
-                          onChangeForm({ nuevosServiciosIds: [...form.nuevosServiciosIds, id] });
-                        }
-                      }}
-                      className={styles.addServiceSelect}
-                    >
-                      <option value="">+ Agregar servicio</option>
-                      {availableExtraServicios.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.nombre} — {formatCurrency(s.precioBase ?? 0)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : cita.servicios.length > 0 ? (
-                    <div
-                      style={{
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.75rem',
-                        color: 'var(--text-dim)',
-                        padding: '0.25rem 0',
-                      }}
-                    >
-                      No hay más servicios disponibles
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* ── Productos ── */}
-              <div>
-                <div className={styles.sectionTitle}>Productos</div>
-                {/* Escáner de código de barras (PR2) */}
-                <input
-                  type="text"
-                  aria-label="Escanear código"
-                  autoFocus
-                  placeholder="📷 Escanear código…"
-                  value={scanCode}
-                  onChange={(e) => {
-                    setScanCode(e.target.value);
-                    setScanError(false);
-                  }}
-                  onKeyDown={handleScanKeyDown}
-                  className={styles.productSearchInput}
-                />
-                {scanError && (
-                  <div
-                    role="alert"
-                    style={{
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.7rem',
-                      color: 'var(--danger)',
-                      marginBottom: '0.4rem',
-                    }}
-                  >
-                    ⚠️ Producto no encontrado
-                  </div>
-                )}
-                <input
-                  type="text"
-                  placeholder="Buscar producto…"
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  className={styles.productSearchInput}
-                />
-                {filteredProductos.length === 0 ? (
-                  <div
-                    style={{
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: '0.75rem',
-                      color: 'var(--text-dim)',
-                      padding: '0.35rem 0',
-                    }}
-                  >
-                    {productSearch
-                      ? 'No hay productos que coincidan'
-                      : 'No hay productos disponibles'}
-                  </div>
-                ) : (
-                  <div className={styles.productGrid}>
-                    {filteredProductos.map((prod) => {
-                      const outOfStock = prod.cantidadStock <= 0;
-                      const inCart = form.productosVendidos.some((p) => p.productoId === prod.id);
-                      return (
-                        <div
-                          key={prod.id}
-                          onClick={() => !outOfStock && addProductToCart(prod)}
-                          className={`${styles.productCard} ${outOfStock ? styles.productCardOutOfStock : ''} ${inCart ? styles.productCardInCart : ''}`}
-                        >
-                          <div className={styles.productCardName}>{prod.nombre}</div>
-                          <div className={styles.productCardPrice}>{formatCurrency(prod.precioVenta)}</div>
-                          <div className={`${styles.productCardStock} ${outOfStock ? styles.productCardStockOut : ''}`}>
-                            {outOfStock ? 'Sin stock' : `${prod.cantidadStock} en stock`}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {/* Selected products in cart */}
-                {form.productosVendidos.length > 0 && (
-                  <div className={styles.selectedProductsSection}>
-                    <div className={styles.sectionTitle}>
-                      En carrito ({form.productosVendidos.length})
-                    </div>
-                    {form.productosVendidos.map((item) => (
-                      <div key={item.productoId} className={styles.selectedProductItem}>
-                        <span className={styles.selectedProductName}>{item.nombre}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                          <button
-                            onClick={() => updateProductQty(item.productoId, -1)}
-                            className={styles.qtyBtn}
-                          >
-                            −
-                          </button>
-                          <span className={styles.qtyValue}>{item.cantidad}</span>
-                          <button
-                            onClick={() => updateProductQty(item.productoId, 1)}
-                            className={styles.qtyBtn}
-                          >
-                            +
-                          </button>
-                        </div>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          inputMode="decimal"
-                          aria-label={`Precio ${item.nombre}`}
-                          value={item.precioVenta}
-                          onChange={(e) =>
-                            updateProductPrice(item.productoId, Number(e.target.value))
-                          }
-                          className={`${styles.noSpinner} ${styles.servicePriceInput}`}
-                          title="Precio unitario"
-                        />
-                        <span className={styles.selectedProductTotal}>
-                          {formatCurrency(item.precioVenta * item.cantidad)}
-                        </span>
-                        <button
-                          onClick={() => removeProductFromCart(item.productoId)}
-                          className={styles.serviceRemoveBtn}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    <div
-                      className={styles.receiptRow}
-                      style={{ padding: '0.25rem 0 0', fontWeight: 600 }}
-                    >
-                      <span className={styles.receiptLabel}>Total productos</span>
-                      <span className={styles.selectedProductTotal}>
-                        {formatCurrency(totalProductosCalc)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── RIGHT COLUMN ── */}
-            <div>
-              <div className={styles.receiptSection}>
-                {/* Totals */}
-                <div className={styles.receiptRow}>
-                  <span className={styles.receiptLabel}>Servicios</span>
-                  <span className={styles.receiptValue}>
-                    {formatCurrency(totalOriginalServicios + totalExtraServicios)}
-                  </span>
-                </div>
-                {form.productosVendidos.length > 0 && (
-                  <div className={styles.receiptRow}>
-                    <span className={styles.receiptLabel}>Productos</span>
-                    <span className={styles.receiptValue}>{formatCurrency(totalProductosCalc)}</span>
-                  </div>
-                )}
-                <div className={styles.receiptRow}>
-                  <span className={styles.receiptLabel}>Subtotal</span>
-                  <span className={styles.receiptValue}>{formatCurrency(subtotalBeforeDiscount)}</span>
-                </div>
-                <hr className={styles.receiptDivider} />
-
-                {/* Descuento: switch plegado por defecto (misma regla que el carrito compartido) */}
-                <label
-                  className={styles.toggleLabel}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    margin: '0.4rem 0',
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    aria-label="Agregar descuento por %"
-                    checked={descuentoActivo}
-                    onChange={(e) => {
-                      setDescuentoActivo(e.target.checked);
-                      if (!e.target.checked) onChangeForm({ descuento: 0 });
-                    }}
-                    style={{ display: 'none' }}
-                  />
-                  <span style={switchTrackStyle(descuentoActivo)}>
-                    <span style={switchKnobStyle(descuentoActivo)} />
-                  </span>
-                  <span style={{ color: 'var(--text-secondary)' }}>Agregar descuento por %</span>
-                </label>
-
-                {descuentoActivo && (
-                  <>
-                    {/* Discount */}
-                    <div className={styles.receiptRow}>
-                      <span className={styles.receiptLabel}>Descuento (%)</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          aria-label="Descuento (%)"
-                          value={form.descuento}
-                          onChange={(e) =>
-                            onChangeForm({
-                              descuento: Math.min(100, Math.max(0, Number(e.target.value))),
-                            })
-                          }
-                          className={`${styles.noSpinner} ${styles.propinaInput}`}
-                        />
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>%</span>
-                      </div>
-                    </div>
-
-                    {/* Alcance del descuento: solo los alcances que aplican al carrito */}
-                    {alcancesAplicables.length > 0 && (
-                      <div className={styles.receiptRow}>
-                        <span className={styles.receiptLabel}>Aplicar a</span>
-                        <div style={{ display: 'flex', gap: '0.25rem' }}>
-                          {alcancesAplicables.map((value) => {
-                            const labels: Record<DescuentoAlcance, string> = {
-                              SERVICIOS: 'Servicios',
-                              PRODUCTOS: 'Productos',
-                              AMBOS: 'Ambos',
-                            };
-                            const active = form.descuentoAlcance === value;
-                            return (
-                              <button
-                                key={value}
-                                type="button"
-                                aria-label={`Alcance ${labels[value]}`}
-                                onClick={() => onChangeForm({ descuentoAlcance: value })}
-                                style={{
-                                  padding: '0.2rem 0.45rem',
-                                  borderRadius: 'var(--radius-sm)',
-                                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                                  background: active ? 'var(--accent-glow)' : 'transparent',
-                                  color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                                  fontFamily: "'DM Sans', sans-serif",
-                                  fontSize: '0.7rem',
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {labels[value]}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {descuentoMonto > 0 && (
-                  <div className={styles.receiptRow}>
-                    <span
-                      style={{
-                        color: 'var(--success)',
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '0.8125rem',
-                      }}
-                    >
-                      Descuento
-                    </span>
-                    <span className={styles.receiptDiscountValue}>
-                      -{formatCurrency(descuentoMonto)}
-                    </span>
-                  </div>
-                )}
-
-                <hr className={styles.receiptDivider} />
-
-                {/* Final Total */}
-                <div className={styles.receiptRow}>
-                  <span className={styles.receiptTotalLabel}>Total</span>
-                  <span className={styles.receiptTotalValue}>
-                    {formatCurrency(totalFinal)}
-                  </span>
-                </div>
-
-                {/* Propina */}
-                <div className={styles.propinaRow}>
-                  <span className={styles.receiptLabel}>Propina</span>
-                  <MoneyInput
-                    value={form.propina}
-                    onChange={(n) => onChangeForm({ propina: n })}
-                    className={`${styles.noSpinner} ${styles.propinaInput}`}
-                  />
-                </div>
-
-                {/* ── PR5: ¿Cómo se reparte? (cobrado − insumos = a repartir) ── */}
-                {mostrarDesglose && (
-                  <DesgloseReparto
-                    desglose={desglose}
-                    porcentajeComision={porcentajeComisionEmpleada}
-                  />
-                )}
-
-                <hr className={styles.receiptDivider} />
-
-                {/* Required adjustment note */}
-                {hasAdjustment && (
-                  <div className={styles.adjustNoteSection}>
-                    <span
-                      className={`${styles.adjustNoteLabel} ${ajusteNoteRequired ? styles.adjustNoteLabelError : styles.adjustNoteLabelOk}`}
-                    >
-                      ¿Por qué se ajustó el precio? *
-                    </span>
-                    <textarea
-                      value={form.notaAjuste}
-                      onChange={(e) => onChangeForm({ notaAjuste: e.target.value })}
-                      placeholder="Indicá el motivo del ajuste..."
-                      rows={2}
-                      className={`${styles.adjustNoteTextarea} ${ajusteNoteRequired ? styles.adjustNoteTextareaError : styles.adjustNoteTextareaOk}`}
-                    />
-                    {ajusteNoteRequired && (
-                      <span className={styles.adjustNoteError}>
-                        Este campo es obligatorio cuando hay descuento o ajuste de total.
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Payment Method */}
-                <div className={styles.sectionTitle}>Método de pago</div>
-                <div className={styles.paymentBtnGroup}>
-                  {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => onChangeForm({ metodoPago: m })}
-                      className={`${styles.paymentBtn} ${form.metodoPago === m ? styles.paymentBtnActive : ''}`}
-                    >
-                      {m === 'EFECTIVO'
-                        ? 'Efectivo'
-                        : m === 'TARJETA'
-                          ? 'Tarjeta'
-                          : 'Transferencia'}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Fiado toggle: la clienta paga después */}
-                <label
-                  className={styles.toggleLabel}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    margin: '0.4rem 0',
-                    fontFamily: "'DM Sans', sans-serif",
-                    fontSize: '0.8125rem',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.esFiado}
-                    onChange={(e) => onChangeForm({ esFiado: e.target.checked })}
-                    style={{ display: 'none' }}
-                  />
-                  <span
-                    style={{
-                      position: 'relative',
-                      width: '36px',
-                      height: '20px',
-                      background: form.esFiado ? 'var(--accent)' : 'var(--border)',
-                      borderRadius: '10px',
-                      transition: 'background 0.2s',
-                      flexShrink: 0,
-                      display: 'inline-block',
-                    }}
-                  >
-                    <span
-                      style={{
-                        content: '""',
-                        position: 'absolute',
-                        top: '2px',
-                        left: form.esFiado ? '18px' : '2px',
-                        width: '16px',
-                        height: '16px',
-                        background: 'var(--bg-root)',
-                        borderRadius: '50%',
-                        transition: 'left 0.2s',
-                      }}
-                    />
-                  </span>
-                  <span style={{ color: 'var(--text-secondary)' }}>
-                    Fiado — la clienta paga después
-                  </span>
-                </label>
-
-                {/* Fiado: monto a cobrar editable (0 o parcial) para todos los métodos */}
-                {form.esFiado && (
-                  <>
-                    <div className={styles.amountRow}>
-                      <span className={styles.receiptLabel}>Monto a cobrar</span>
-                      <MoneyInput
-                        value={form.montoRecibido}
-                        onChange={(n) => onChangeForm({ montoRecibido: n })}
-                        placeholder="0"
-                        ariaLabel="Monto a cobrar"
-                        className={`${styles.noSpinner} ${styles.amountInput}`}
-                      />
-                    </div>
-                    {pendiente > 0 && (
-                      <div className={styles.pendienteDisplay}>
-                        <span>Queda pendiente: {formatCurrency(pendiente)}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Amount received (only for cash, no fiado) */}
-                {!form.esFiado && form.metodoPago === 'EFECTIVO' && (
-                  <>
-                    <div className={styles.amountRow}>
-                      <span className={styles.receiptLabel}>Monto recibido</span>
-                      <MoneyInput
-                        value={form.montoRecibido}
-                        onChange={(n) => onChangeForm({ montoRecibido: n })}
-                        placeholder={formatCurrency(totalFinal)}
-                        className={`${styles.noSpinner} ${styles.amountInput}`}
-                      />
-                    </div>
-                    {form.montoRecibido > totalFinal && (
-                      <div className={styles.cambioDisplay}>
-                        <span>Vuelto</span>
-                        <span>{formatCurrency(form.montoRecibido - totalFinal)}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Action Buttons */}
-              </div>
+          {/* ── Header Card ── */}
+          <div className={styles.headerCard}>
+            <div className={styles.clientName}>{cita.cliente.nombre}</div>
+            <div className={styles.headerMeta}>
+              <span>{cita.empleada.nombre}</span>
+              <span>{fechaStr}</span>
+              <span>#{cita.id}</span>
             </div>
           </div>
+
+          {/* ── Shared cart: items, discount/nota and totals ── */}
+          <CarritoVenta
+            carrito={carrito}
+            emptyText="No hay servicios ni productos en el carrito."
+            renderServicioItem={renderServicioItem}
+            itemsHeader={itemsHeader}
+            productPicker={productPicker}
+            beforeSubtotal={beforeSubtotal}
+            beforeTotals={beforeTotals}
+            afterTotals={afterTotals}
+          />
         </div>
         <div className={styles.modalFooter}>
           <button

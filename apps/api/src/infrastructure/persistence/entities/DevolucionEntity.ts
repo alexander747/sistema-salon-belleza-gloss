@@ -25,6 +25,11 @@ export class DevolucionEntity extends BaseEntity {
   @Column({ type: 'boolean', default: true })
   regresaAlStock: boolean;
 
+  // @deprecated Columna sin uso y sin ciclo de vida. Se conserva por
+  // compatibilidad: producción corre con DB_SYNCHRONIZE=true y borrarla sería
+  // destructivo. Ninguna capa la lee ni la escribe; el estado real de una
+  // devolución se deriva de sus efectos (deuda ajustada, stock repuesto, caja).
+  // No agregar lógica nueva sobre este campo.
   @Column({ type: 'boolean', default: false })
   procesada: boolean;
 

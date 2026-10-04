@@ -33,8 +33,14 @@ export interface ObtenerDetalleCierreCajaResult {
 }
 
 /**
- * Detalle read-only de un cierre de caja (historial): recomputa el arqueo
- * desde registros/gastos + montos persistidos y arma la lista de movimientos.
+ * Detalle read-only de un cierre de caja (historial): arma la lista de
+ * movimientos y el reporte informativo.
+ *
+ * Consistencia de cierres: si la caja está CERRADA, el arqueo (montoEsperado,
+ * montoReal, diferencia) se toma de los valores PERSISTIDOS del cierre, no de un
+ * recálculo vivo. Borrar/backfillear un gasto o devolución después de cerrar no
+ * debe mover el arqueo histórico ni hacer que el detalle discrepe del cierre
+ * guardado. Para una caja ABIERTA sí se recomputa en vivo (preview).
  */
 @injectable()
 export class ObtenerDetalleCierreCajaUseCase {
@@ -96,6 +102,15 @@ export class ObtenerDetalleCierreCajaUseCase {
       [...pagosDeLaCaja, ...cobrosPrestamo],
       egresos,
     );
+
+    // Caja CERRADA: el detalle debe reflejar los números PERSISTIDOS del cierre.
+    // El recálculo de arriba usa datos vivos (gastos/devoluciones/egresos) y
+    // divergiría si algo se borra/backfillea después de cerrar.
+    if (caja.estado === 'CERRADA') {
+      reporte.montoEsperado = Number(caja.montoEsperado ?? reporte.montoEsperado);
+      reporte.montoReal = montoRealEfectivo;
+      reporte.diferencia = caja.diferencia === null ? null : Number(caja.diferencia);
+    }
 
     // Movimientos: registros ACTIVOS como SERVICIO + gastos como GASTO.
     // Se excluyen ANULADOS para que movimientos.length === reporte.cantidadMovimientos.

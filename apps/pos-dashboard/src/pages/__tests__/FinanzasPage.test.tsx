@@ -1598,6 +1598,78 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     expect(within(dialog).getByText(fmt(112500))).toBeInTheDocument();
     expect(within(dialog).queryByText(fmt(117500))).not.toBeInTheDocument();
   });
+
+  it('pide el rango de fechas al server y totaliza TODOS los registros del período (sin cap de 50)', async () => {
+    // > límite viejo (50) y > página de fetch (100) → prueba cap + paginado.
+    const TOTAL = 120;
+    const registros = Array.from({ length: TOTAL }, (_, i) => ({
+      ...registroDentroSemana,
+      id: 1000 + i,
+      clienteId: i + 1,
+      comisionCalculada: 1000,
+      creadoEn: '2026-08-15T10:00:00.000Z',
+      actualizadoEn: '2026-08-15T10:00:00.000Z',
+    }));
+
+    mockGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: [] });
+      if (url.includes('/finanzas/nomina')) return Promise.resolve({ data: [pendienteSemanal] });
+      if (url.includes('/prestamos')) return Promise.resolve({ data: { data: [] } });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        // El server honra page/limit: con el cap viejo (50) devolvería 50, no 120.
+        const page = Number(config?.params?.page ?? 1);
+        const limit = Number(config?.params?.limit ?? 0);
+        const start = limit > 0 ? (page - 1) * limit : 0;
+        const slice = limit > 0 ? registros.slice(start, start + limit) : registros;
+        return Promise.resolve({
+          data: {
+            data: slice,
+            meta: {
+              page,
+              limit,
+              total: registros.length,
+              totalPages: Math.ceil(registros.length / (limit || registros.length)),
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    await openAuditModal();
+
+    // El fetch del modal lleva el rango del período (mes completo por defecto) y estado=ACTIVOS.
+    const auditCall = mockGet.mock.calls.find(
+      ([u, c]) => String(u).endsWith('/registros') && c?.params?.usuarioId === 1,
+    );
+    expect(auditCall).toBeTruthy();
+    expect(auditCall![1].params).toMatchObject({
+      usuarioId: 1,
+      estado: 'ACTIVOS',
+      desde: '2026-08-01',
+      hasta: '2026-08-31',
+    });
+
+    // Totales sobre el set COMPLETO (120 × 1000), no los 50 del cap viejo.
+    expect(await screen.findByText('120 registros')).toBeInTheDocument();
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      })
+        .format(n)
+        .replace(/\u00a0/g, ' ');
+    const dialog = screen.getByRole('dialog', { name: 'Auditoría pre-liquidación' });
+    // Los totales suman el set completo (120 × 1000), no el cap viejo de 50.
+    expect(within(dialog).getAllByText(fmt(120000)).length).toBeGreaterThan(0);
+    expect(within(dialog).queryAllByText(fmt(50000)).length).toBe(0);
+  });
 });
 
 describe('FinanzasPage — errores de mutación visibles en la UI', () => {

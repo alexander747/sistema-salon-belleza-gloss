@@ -74,6 +74,9 @@ const makeRegistro = (overrides: Record<string, unknown> = {}) => ({
   salonId: 1,
   clienteId: 3,
   montoPendiente: 100000,
+  montoTotal: 100000,
+  productosVendidos: [] as { productoId: number; cantidad: number; subtotal: number }[],
+  devoluciones: [] as { productoId: number | null; cantidad: number; montoDevolucion: number }[],
   ...overrides,
 });
 
@@ -209,7 +212,97 @@ describe('CreateDevolucionUseCase', () => {
     expect(mockRepoUpdate).toHaveBeenCalledWith(3, { deudaTotal: 0 });
   });
 
+  it('rechaza un montoDevolucion mayor al total de la venta sin persistir', async () => {
+    mockRegistroRepo.findById.mockResolvedValue(
+      makeRegistro({ montoTotal: 30000, montoPendiente: 30000 }),
+    );
+
+    await expect(
+      useCase.execute({
+        salonId: 1,
+        registroServicioId: 10,
+        motivo: 'Monto excesivo',
+        cantidad: 1,
+        montoDevolucion: 40000,
+        regresaAlStock: false,
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    expect(mockDevolucionRepo.create).not.toHaveBeenCalled();
+    expect(mockRegistroRepo.update).not.toHaveBeenCalled();
+    // La transacción abierta se revierte
+    expect(mockQrRefs[0]!.rollbackTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('descuenta las devoluciones previas del tope de la venta', async () => {
+    mockRegistroRepo.findById.mockResolvedValue(
+      makeRegistro({
+        montoTotal: 30000,
+        montoPendiente: 30000,
+        devoluciones: [{ productoId: null, cantidad: 1, montoDevolucion: 25000 }],
+      }),
+    );
+
+    await expect(
+      useCase.execute({
+        salonId: 1,
+        registroServicioId: 10,
+        motivo: 'Excede lo ya devuelto',
+        cantidad: 1,
+        montoDevolucion: 10000,
+        regresaAlStock: false,
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(mockDevolucionRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un producto que no pertenece a la venta', async () => {
+    mockRegistroRepo.findById.mockResolvedValue(
+      makeRegistro({ productosVendidos: [{ productoId: 8, cantidad: 1, subtotal: 5000 }] }),
+    );
+
+    await expect(
+      useCase.execute({
+        salonId: 1,
+        registroServicioId: 10,
+        motivo: 'Producto ajeno',
+        cantidad: 1,
+        montoDevolucion: 5000,
+        regresaAlStock: true,
+        productoId: 7,
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(mockDevolucionRepo.create).not.toHaveBeenCalled();
+    expect(mockProductoRepo.incrementStock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza cantidad mayor a la vendida en la línea de producto', async () => {
+    mockRegistroRepo.findById.mockResolvedValue(
+      makeRegistro({ productosVendidos: [{ productoId: 7, cantidad: 2, subtotal: 20000 }] }),
+    );
+
+    await expect(
+      useCase.execute({
+        salonId: 1,
+        registroServicioId: 10,
+        motivo: 'Cantidad excesiva',
+        cantidad: 3,
+        montoDevolucion: 20000,
+        regresaAlStock: true,
+        productoId: 7,
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(mockDevolucionRepo.create).not.toHaveBeenCalled();
+    expect(mockProductoRepo.incrementStock).not.toHaveBeenCalled();
+  });
+
   it('devuelve producto: incrementa stock y ajusta la deuda con el mismo criterio conservador', async () => {
+    mockRegistroRepo.findById.mockResolvedValue(
+      makeRegistro({
+        productosVendidos: [{ productoId: 7, cantidad: 2, subtotal: 15000 }],
+      }),
+    );
+
     await useCase.execute({
       salonId: 1,
       registroServicioId: 10,
