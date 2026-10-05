@@ -30,6 +30,8 @@ export interface ReporteCierre {
   descuentos: number;
   ingresosNetos: number;
   porMetodoPago: PorMetodoPagoTotals;
+  /** Σ(efectivo + tarjeta + transferencia). Opcional: fallback si falta (API vieja/mocks). */
+  totalRecaudado?: number;
   comisiones: number;
   totalGastos: number;
   montoEsperado: number;
@@ -74,6 +76,16 @@ function formatFechaCaja(fechaCaja?: string): string {
 /** Monto de arqueo: null (caja ABIERTA) → '—' (no fabricar $0 ni un arqueo falso). */
 function formatMonto(n: number | null | undefined): string {
   return n == null ? '—' : formatCurrency(n);
+}
+
+/**
+ * Total RECAUDADO del día (todos los métodos: efectivo + tarjeta + transferencia).
+ * El API ya lo envía; si por compatibilidad no viene, se suma el breakdown local.
+ */
+function totalRecaudadoDe(reporte: ReporteCierre): number {
+  if (typeof reporte.totalRecaudado === 'number') return reporte.totalRecaudado;
+  const p = reporte.porMetodoPago;
+  return (p?.EFECTIVO ?? 0) + (p?.TARJETA ?? 0) + (p?.TRANSFERENCIA ?? 0);
 }
 
 /** Badge de estado: ABIERTA verde, CERRADA ámbar (filas y modales). */
@@ -891,6 +903,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1rem', fontWeight: 800, color: 'var(--accent)' }}>{formatCurrency(esperado.montoEsperado)}</span>
                     </div>
 
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+                      Cobros por método
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
                       {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((met) => (
                         <div key={met} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
@@ -898,6 +913,10 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                           <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.porMetodoPago?.[met])}</span>
                         </div>
                       ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
+                        <span data-testid="arqueo-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(esperado))}</span>
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Gastos</span>
                         <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.totalGastos)}</span>
@@ -991,6 +1010,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                   ))}
                 </div>
 
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+                  Cobros por método
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
                   {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((met) => (
                     <div key={met} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
@@ -998,6 +1020,10 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(reporte.reporte.porMetodoPago?.[met])}</span>
                     </div>
                   ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
+                    <span data-testid="reporte-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(reporte.reporte))}</span>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px solid var(--border)', paddingTop: '0.9rem' }}>
@@ -1082,6 +1108,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       ))}
                     </div>
 
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+                      Cobros por método
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
                       {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((met) => (
                         <div key={met} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
@@ -1089,6 +1118,10 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                           <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(detalleReporte.porMetodoPago?.[met])}</span>
                         </div>
                       ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
+                        <span data-testid="detalle-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(detalleReporte))}</span>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px solid var(--border)', paddingTop: '0.9rem', marginBottom: '1rem' }}>

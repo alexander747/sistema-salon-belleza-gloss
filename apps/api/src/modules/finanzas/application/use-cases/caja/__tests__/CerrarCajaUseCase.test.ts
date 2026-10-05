@@ -120,11 +120,17 @@ describe('CerrarCajaUseCase', () => {
         montoRealEfectivo: 210000,
         diferencia: 0,
         cierrePorId: 3,
+        montoEfectivo: 180000,
+        montoTarjeta: 0,
+        montoTransferencia: 0,
+        montoRecaudado: 180000,
       }),
     );
     expect(result.reporte.montoEsperado).toBe(210000);
     expect(result.reporte.diferencia).toBe(0);
+    expect(result.reporte.totalRecaudado).toBe(180000);
     expect(result.caja.estado).toBe('CERRADA');
+    expect(result.caja.montoRecaudado).toBe(180000);
   });
 
   it('should reportar diferencia negativa cuando el real no cuadra', async () => {
@@ -198,7 +204,21 @@ describe('CerrarCajaUseCase', () => {
     // El cajón solo tiene el fondo (la transferencia no entra al efectivo)
     expect(result.reporte.montoEsperado).toBe(50000);
     expect(result.reporte.porMetodoPago.TRANSFERENCIA).toBe(30000);
+    expect(result.reporte.totalRecaudado).toBe(30000);
     expect(result.reporte.diferencia).toBe(0);
+    // El cierre PERSISTE la transferencia (aunque no mueva el cajón)
+    expect(mockCajaRepo.cerrar).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({
+        montoEsperado: 50000,
+        montoEfectivo: 0,
+        montoTarjeta: 0,
+        montoTransferencia: 30000,
+        montoRecaudado: 30000,
+      }),
+    );
+    expect(result.caja.montoTransferencia).toBe(30000);
+    expect(result.caja.montoRecaudado).toBe(30000);
   });
 
   it('should throw CajaNoAbiertaError cuando no existe caja para hoy', async () => {

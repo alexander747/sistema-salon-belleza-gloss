@@ -281,6 +281,34 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     expect(result.caja.montoEsperado).toBe(135000);
   });
 
+  it('caja CERRADA: usa el desglose por método PERSISTIDO (incluye transferencias) en vez del recálculo vivo', async () => {
+    mockCajaRepo.findById.mockResolvedValue({
+      ...cajaCerrada,
+      montoEfectivo: 80000,
+      montoTarjeta: 20000,
+      montoTransferencia: 60000,
+      montoRecaudado: 160000,
+    });
+    mockRegistroRepo.search.mockResolvedValue([]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    // El recálculo vivo solo vería 100000 en efectivo; el desglose persistido manda.
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([
+      { id: 1, monto: 100000, metodoPago: 'EFECTIVO' },
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, cajaId: 5 });
+
+    expect(result.reporte.porMetodoPago).toEqual({
+      EFECTIVO: 80000,
+      TARJETA: 20000,
+      TRANSFERENCIA: 60000,
+    });
+    expect(result.reporte.totalRecaudado).toBe(160000);
+    // El arqueo cash-only persistido no cambia
+    expect(result.reporte.montoEsperado).toBe(135000);
+    expect(result.caja.montoRecaudado).toBe(160000);
+  });
+
   it('should devolver caja ABIERTA sin arqueo falso: montoReal null y diferencia null (no fabricar 0)', async () => {
     mockCajaRepo.findById.mockResolvedValue({
       id: 9,

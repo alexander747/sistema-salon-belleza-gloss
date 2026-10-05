@@ -1157,8 +1157,8 @@ describe('WalkInModal — precios editables por línea (E1)', () => {
   });
 });
 
-describe('WalkInModal — wizard móvil de 3 pasos', () => {
-  const productoWizard = {
+describe('WalkInModal — single layout (no wizard)', () => {
+  const productoSingle = {
     id: 2,
     nombre: 'Shampoo Barra',
     marca: null,
@@ -1168,132 +1168,52 @@ describe('WalkInModal — wizard móvil de 3 pasos', () => {
     codigoBarras: '7701234567890',
   };
 
-  function apiMockWizard() {
+  function apiMockSingleLayout() {
     mockGet.mockImplementation((url: string) => {
       if (url.includes('/servicios')) {
         return Promise.resolve({
-          data: [
-            { id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 },
-            {
-              id: 7,
-              nombre: 'Tintura Global',
-              descripcion: null,
-              precioFinal: 450000,
-              duracionMinutos: 120,
-              categoriaId: 1,
-              tipoCostoInsumo: 'POR_GRAMO',
-              precioPorGramo: 1200,
-            },
-          ],
+          data: [{ id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 }],
         });
       }
-      if (url.includes('/clientes')) {
-        return Promise.resolve({
-          data: [
-            { id: 1, nombre: 'Ana' },
-            { id: 2, nombre: 'Beto' },
-          ],
-        });
-      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
       if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María' }] });
-      if (url.includes('/productos')) return Promise.resolve({ data: [productoWizard] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [productoSingle] });
       return Promise.resolve({ data: [] });
     });
   }
-
-  /** Renderiza el modal simulando viewport móvil (donde vive el wizard). */
-  function renderWizard() {
-    setMobileMedia(true);
-    return render(
-      <MemoryRouter>
-        <WalkInModal salonId={1} isOpen onClose={() => {}} onSuccess={() => {}} />
-      </MemoryRouter>,
-    );
-  }
-
-  const paso = (n: 1 | 2 | 3, label: string) =>
-    screen.getByRole('button', { name: `Paso ${n}: ${label}` });
 
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
     refreshSpy.mockClear();
-    apiMockWizard();
+    apiMockSingleLayout();
   });
 
   afterEach(() => {
     setMobileMedia(false);
   });
 
-  it('arranca en el paso 1 con el grid de SERVICIOS (sin productos ni escáner)', async () => {
-    renderWizard();
+  it('renders catalog and checkout together on a mobile viewport and has no stepper', async () => {
+    // A touch/narrow viewport no longer switches to a wizard: one layout always.
+    setMobileMedia(true);
+    renderModal();
 
-    expect(await screen.findByText('Corte')).toBeInTheDocument();
-    expect(screen.queryByText('Shampoo Barra')).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/escanear código/i)).not.toBeInTheDocument();
-    expect(paso(1, 'Servicios')).toHaveAttribute('aria-current', 'step');
-  });
-
-  it('"Siguiente" avanza al paso 2: solo PRODUCTOS, con escáner y botón "Saltar"', async () => {
-    renderWizard();
     await screen.findByText('Corte');
-
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-
-    expect(await screen.findByText('Shampoo Barra')).toBeInTheDocument();
-    expect(screen.queryByText('Corte')).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/escanear código/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Saltar' })).toBeInTheDocument();
-    expect(paso(2, 'Productos')).toHaveAttribute('aria-current', 'step');
-  });
-
-  it('"Saltar" avanza al paso Detalle sin elegir productos', async () => {
-    renderWizard();
-    fireEvent.click(await screen.findByText('Corte')); // 1 servicio en el carrito
-
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
-
-    // Paso Detalle: total + cliente/empleada + submit; el catálogo ya no está montado.
-    expect(
-      await screen.findByRole('button', { name: /^Registrar\s+\$\s*30\.000/ }),
-    ).toBeInTheDocument();
+    // Catalog (services + products) and checkout are mounted together.
+    expect(screen.getByText('Shampoo Barra')).toBeInTheDocument();
     expect(screen.getAllByRole('combobox')).toHaveLength(2);
-    expect(screen.queryByText('Shampoo Barra')).not.toBeInTheDocument();
-    expect(paso(3, 'Detalle')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
+    // No wizard stepper or step navigation.
+    expect(screen.queryByRole('navigation', { name: 'Pasos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Siguiente/ })).not.toBeInTheDocument();
   });
 
-  it('"Volver" y el stepper clickeable regresan a pasos anteriores', async () => {
-    renderWizard();
-    await screen.findByText('Corte');
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByRole('button', { name: /^Registrar/ });
-
-    // Volver → Productos
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
-    expect(await screen.findByText('Shampoo Barra')).toBeInTheDocument();
-
-    // Stepper clickeable → Paso 1 Servicios
-    fireEvent.click(paso(1, 'Servicios'));
-    expect(await screen.findByText('Corte')).toBeInTheDocument();
-    expect(screen.queryByText('Shampoo Barra')).not.toBeInTheDocument();
-  });
-
-  it('el submit del paso Detalle envía el mismo payload que el flujo de una pantalla', async () => {
+  it('submits the same payload from the single layout', async () => {
     mockPost.mockResolvedValue({ data: {} });
-    renderWizard();
+    setMobileMedia(true);
+    renderModal();
 
-    fireEvent.click(await screen.findByText('Corte'));
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
-
-    elegirClienteYEmpleada();
-    fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }));
-    fireEvent.click(screen.getByRole('button', { name: /^Registrar/ }));
+    await completarFormYEnviar();
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
@@ -1308,107 +1228,68 @@ describe('WalkInModal — wizard móvil de 3 pasos', () => {
       );
     });
   });
-
-  it('conserva carrito, gramos y precios al navegar entre pasos (persistencia)', async () => {
-    mockPost.mockResolvedValue({ data: {} });
-    renderWizard();
-
-    // Paso 1: agrego un servicio FIJO y uno POR_GRAMO.
-    fireEvent.click(await screen.findByText('Corte'));
-    fireEvent.click(screen.getByText('Tintura Global'));
-    // Paso 2: agrego un producto y avanzo.
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByText('Shampoo Barra'));
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-
-    // Paso 3: edito precio y gramos.
-    fireEvent.change(await screen.findByLabelText('Precio Corte'), { target: { value: '45000' } });
-    fireEvent.change(screen.getByLabelText('Gramos usados Tintura Global'), {
-      target: { value: '95' },
-    });
-
-    // Vuelvo al paso 1 y regreso al paso 3: todo debe persistir.
-    fireEvent.click(paso(1, 'Servicios'));
-    expect(await screen.findByText('Corte')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-
-    expect(await screen.findByLabelText('Precio Corte')).toHaveValue(45000);
-    expect(screen.getByLabelText('Gramos usados Tintura Global')).toHaveValue(95);
-    expect(screen.getByLabelText('Precio Shampoo Barra')).toHaveValue(15000);
-    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
-  });
-
-  it('el cliente se elige con un buscador type-ahead (no un <select>)', async () => {
-    renderWizard();
-    fireEvent.click(await screen.findByText('Corte'));
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
-
-    const clienteInput = screen.getByRole('combobox', { name: 'Cliente' });
-    expect(clienteInput.tagName).toBe('INPUT');
-
-    // Filtra por nombre y el resultado es clickeable.
-    fireEvent.focus(clienteInput);
-    fireEvent.change(clienteInput, { target: { value: 'Bet' } });
-    const opciones = screen.getAllByRole('option');
-    expect(opciones).toHaveLength(1);
-    expect(opciones[0]).toHaveTextContent('Beto');
-    fireEvent.click(opciones[0]);
-    expect(clienteInput).toHaveValue('Beto');
-  });
-
-  it('en el wizard el switch "Agregar propina" no aparece en el paso Detalle', async () => {
-    renderWizard();
-    fireEvent.click(await screen.findByText('Corte'));
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
-
-    expect(screen.queryByLabelText(/agregar propina/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Propina')).not.toBeInTheDocument();
-  });
-
-  it('el reparto se abre en modal desde el paso Detalle y al cerrarlo vuelve al detalle', async () => {
-    renderWizard();
-    // Tintura es POR_GRAMO → el botón "Ver reparto" siempre está disponible.
-    fireEvent.click(await screen.findByText('Tintura Global'));
-    fireEvent.click(screen.getByRole('button', { name: /^Siguiente/ }));
-    await screen.findByText('Shampoo Barra');
-    fireEvent.click(screen.getByRole('button', { name: 'Saltar' }));
-
-    expect(
-      screen.queryByRole('group', { name: 'Desglose del reparto' }),
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /ver reparto/i }));
-    expect(
-      screen.getByRole('group', { name: 'Desglose del reparto' }),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar reparto' }));
-    expect(
-      screen.queryByRole('group', { name: 'Desglose del reparto' }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
-    expect(paso(3, 'Detalle')).toHaveAttribute('aria-current', 'step');
-  });
 });
 
-describe('WalkInModal — wizard móvil (CSS)', () => {
-  const css = readFileSync(
-    join(process.cwd(), 'src/components/WalkInModal.module.css'),
-    'utf-8',
-  );
+describe('WalkInModal — mobile cart shortcut (post-wizard)', () => {
+  function apiMockShortcut() {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/servicios')) {
+        return Promise.resolve({
+          data: [{ id: 1, nombre: 'Corte', descripcion: null, precioFinal: 30000, duracionMinutos: 60, categoriaId: 1 }],
+        });
+      }
+      if (url.includes('/clientes')) return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }] });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [{ id: 1, nombre: 'María' }] });
+      if (url.includes('/productos')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: [] });
+    });
+  }
 
-  it('stepper y barra de navegación exponen touch targets ≥44px', () => {
-    expect(css).toMatch(/\.wizardStep\s*\{[^}]*min-height:\s*48px/s);
-    expect(css).toMatch(/\.wizardNavBack\s*\{[^}]*min-height:\s*44px/s);
-    expect(css).toMatch(/\.wizardNavNext\s*\{[^}]*min-height:\s*44px/s);
-    expect(css).toMatch(/\.wizardNavSubmit\s*\{[^}]*min-height:\s*44px/s);
-    expect(css).toMatch(/\.wizardNavSkip\s*\{[^}]*min-height:\s*44px/s);
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    refreshSpy.mockClear();
+    apiMockShortcut();
+    setMobileMedia(false);
+  });
+
+  afterEach(() => {
+    setMobileMedia(false);
+  });
+
+  it('on a mobile viewport the bottom shortcut appears with count/total and scrolls to the checkout', async () => {
+    setMobileMedia(true);
+    renderModal();
+
+    await screen.findByText('Corte');
+
+    // Hidden while the cart is empty.
+    expect(screen.queryByRole('button', { name: /ver carrito/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Corte'));
+
+    // The shortcut shows the item count and the total.
+    const shortcut = await screen.findByRole('button', { name: /ver carrito/i });
+    expect(shortcut).toHaveTextContent('1 ítem');
+    expect(shortcut).toHaveTextContent('30.000');
+
+    // Clicking it targets the checkout section (spy only lives on that node).
+    const checkout = screen.getByTestId('walkin-checkout');
+    const scrollSpy = vi.fn();
+    checkout.scrollIntoView = scrollSpy as unknown as HTMLElement['scrollIntoView'];
+    fireEvent.click(shortcut);
+    expect(scrollSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('on desktop the bottom shortcut is absent (desktop layout unchanged)', async () => {
+    setMobileMedia(false);
+    renderModal();
+
+    await screen.findByText('Corte');
+    fireEvent.click(screen.getByText('Corte'));
+
+    expect(screen.queryByRole('button', { name: /ver carrito/i })).not.toBeInTheDocument();
+    // Desktop keeps its own submit button in the checkout panel.
+    expect(screen.getByRole('button', { name: /^Registrar/ })).toBeInTheDocument();
   });
 });

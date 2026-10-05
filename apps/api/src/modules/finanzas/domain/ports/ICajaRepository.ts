@@ -5,6 +5,12 @@ export interface CerrarCajaData {
   montoRealEfectivo: number;
   diferencia: number;
   cierrePorId?: number | null;
+  /** Desglose informativo de lo recaudado por método (no afecta el arqueo). */
+  montoEfectivo?: number;
+  montoTarjeta?: number;
+  montoTransferencia?: number;
+  /** Σ(efectivo + tarjeta + transferencia) del día. */
+  montoRecaudado?: number;
 }
 
 export interface ICajaRepository {

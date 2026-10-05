@@ -729,6 +729,48 @@
   display: none;
 }
 
+/* ── Atajo móvil al carrito (barra al pie del modal) ──
+   Se renderiza solo con detección touch/narrow y carrito no vacío (ver TSX),
+   por eso no se esconde por media query. Al ser el último flex child de
+   .modalContent queda fijo al pie mientras .modalBody scrollea por encima. */
+.mobileCartBar {
+  display: flex;
+  flex-shrink: 0;
+  padding: 0.6rem 0.9rem calc(0.6rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.mobileCartBarBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 48px;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--bg-root);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(212, 168, 83, 0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobileCartBarBtnLabel {
+  font-weight: 700;
+}
+
+.mobileCartBarBtnMeta {
+  font-weight: 800;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
 /* ── Mobile: stack columns ── */
 @media (max-width: 768px) {
   .modalOverlay {
@@ -916,204 +958,6 @@
   }
 }
 
-/* ── Wizard de 3 pasos (solo móvil/tablet) ───────────────────────────── */
-
-.wizardStepper {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-shrink: 0;
-  padding: 0.6rem 0.9rem;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 6;
-}
-
-.wizardStep {
-  flex: 1;
-  min-width: 0;
-  min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2rem;
-  background: none;
-  border: none;
-  padding: 0.25rem;
-  cursor: pointer;
-  color: var(--text-dim);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.wizardStep:disabled {
-  cursor: default;
-}
-
-.wizardStepNum {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-base);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  line-height: 1;
-}
-
-.wizardStepLabel {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.wizardStepActive {
-  color: var(--accent);
-}
-
-.wizardStepActive .wizardStepNum {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg-root);
-}
-
-.wizardStepDone {
-  color: var(--accent);
-}
-
-.wizardStepDone .wizardStepNum {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.wizardConnector {
-  flex-shrink: 0;
-  width: 0.75rem;
-  height: 1px;
-  background: var(--border);
-}
-
-.wizardNav {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-  padding: 0.6rem 0.9rem calc(0.6rem + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--border);
-  background: var(--bg-surface);
-}
-
-.wizardNavBack {
-  min-height: 44px;
-  padding: 0 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.wizardNavBack:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.wizardNavInfo {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-  min-width: 0;
-  flex: 1;
-}
-
-.wizardNavCount {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.65rem;
-  color: var(--text-dim);
-}
-
-.wizardNavTotal {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--accent);
-}
-
-.wizardNavNextGroup {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.wizardNavSkip {
-  min-height: 44px;
-  padding: 0 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.wizardNavNext {
-  min-height: 44px;
-  padding: 0 1rem;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--bg-root);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.wizardNavSubmit {
-  flex: 1;
-  min-height: 44px;
-  padding: 0 1rem;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
-  color: var(--text-dim);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.875rem;
-  font-weight: 700;
-  cursor: default;
-  white-space: nowrap;
-}
-
-.wizardNavSubmitActive {
-  background: var(--accent);
-  color: var(--bg-root);
-  cursor: pointer;
-  box-shadow: 0 2px 16px rgba(212, 168, 83, 0.3);
-}
-
 /* ── "Ver reparto" + modal del desglose ─────────────────────────────── */
 
 .verRepartoBtn {
@@ -1134,7 +978,7 @@
 .repartoOverlay {
   position: fixed;
   inset: 0;
-  /* Por encima del modal del wizard (z-index 1300). */
+  /* Por encima del modal de venta (z-index 1300). */
   z-index: 1400;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);

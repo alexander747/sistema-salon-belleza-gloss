@@ -19,6 +19,11 @@ export interface CajaDTO {
   montoEsperado: number | null;
   montoRealEfectivo: number | null;
   diferencia: number | null;
+  /** Desglose recaudado por método persistido al cerrar (null/undefined si ABIERTA o legacy). */
+  montoEfectivo?: number | null;
+  montoTarjeta?: number | null;
+  montoTransferencia?: number | null;
+  montoRecaudado?: number | null;
   estado: 'ABIERTA' | 'CERRADA';
   aperturaPorId: number | null;
   aperturaEn: string;

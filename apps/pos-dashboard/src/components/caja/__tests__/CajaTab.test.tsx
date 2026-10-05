@@ -67,6 +67,7 @@ const reporteEsperado = {
   descuentos: 0,
   ingresosNetos: 170000,
   porMetodoPago: { EFECTIVO: 150000, TARJETA: 20000, TRANSFERENCIA: 0 },
+  totalRecaudado: 170000,
   comisiones: 30000,
   totalGastos: 10000,
   montoEsperado: 140000,
@@ -330,6 +331,75 @@ describe('CajaTab', () => {
     expect(within(reporteModal).getByText(/140\.000/)).toBeInTheDocument();
     expect(within(reporteModal).getByText(/135\.000/)).toBeInTheDocument();
     expect(within(reporteModal).getByText(/-\$\s*5\.000/)).toBeInTheDocument();
+  });
+
+  it('el cierre contempla TRANSFERENCIAS: muestra el desglose por método y el total recaudado', async () => {
+    let cerrada = false;
+    const reporteConTransferencia = {
+      ...reporteEsperado,
+      porMetodoPago: { EFECTIVO: 150000, TARJETA: 20000, TRANSFERENCIA: 50000 },
+      totalRecaudado: 220000,
+    };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual/esperado')) {
+        return Promise.resolve({ data: { ok: true, data: reporteConTransferencia } });
+      }
+      if (url.includes('/caja/actual')) {
+        return cerrada
+          ? Promise.reject(error404)
+          : Promise.resolve({ data: { ok: true, data: cajaAbierta } });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+    mockPost.mockImplementation((url: string) => {
+      if (url.includes('/caja/cerrar')) {
+        cerrada = true;
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: {
+              caja: {
+                ...cajaAbierta,
+                estado: 'CERRADA',
+                montoEsperado: 140000,
+                montoRealEfectivo: 140000,
+                diferencia: 0,
+                cierrePorId: 2,
+                cierreEn: '2026-08-16T22:00:00.000Z',
+              },
+              reporte: { ...reporteConTransferencia, montoReal: 140000, diferencia: 0 },
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: { ok: true, data: {} } });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cerrar' }));
+
+    // El modal de arqueo lista el desglose por método y el total recaudado
+    expect(await screen.findByText(/efectivo esperado/i)).toBeInTheDocument();
+    expect(screen.getByText('Transferencia')).toBeInTheDocument();
+    expect(await screen.findByTestId('arqueo-total-recaudado')).toHaveTextContent(/220\.000/);
+
+    fireEvent.change(screen.getByLabelText(/monto real/i), { target: { value: '140000' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirmar cierre/i }));
+
+    // Reporte de cierre: transferencias + total recaudado de todos los métodos
+    const reporteModal = await screen.findByTestId('reporte-cierre-modal');
+    expect(within(reporteModal).getByText('Transferencia')).toBeInTheDocument();
+    expect(within(reporteModal).getByTestId('reporte-total-recaudado')).toHaveTextContent(/220\.000/);
   });
 
   it('renderiza el historial de cierres paginado con fecha, montos y estado', async () => {

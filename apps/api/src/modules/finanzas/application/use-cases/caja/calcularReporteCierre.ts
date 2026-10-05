@@ -61,6 +61,12 @@ export interface ReporteCierre {
   descuentos: number;
   ingresosNetos: number;
   porMetodoPago: PorMetodoPagoTotals;
+  /**
+   * Total RECAUDADO del día = Σ(EFECTIVO + TARJETA + TRANSFERENCIA) del
+   * breakdown. Es la plata que entró por ventas/abonos/cobros, sin descontar
+   * gastos/egresos. NO interviene en el arqueo (que sigue cash-only).
+   */
+  totalRecaudado: number;
   comisiones: number;
   totalGastos: number;
   montoEsperado: number;
@@ -84,7 +90,8 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * son gasto: devoluciones (Rule B) y liquidaciones de nómina (Rule C). Solo las
  * EFECTIVO mueven el cajón; transferencia/tarjeta se reportan como información
  * pero no lo tocan.
- * El breakdown por método de pago se reporta completo como información.
+ * El breakdown por método de pago se reporta completo y `totalRecaudado` es su
+ * suma (información de la recolección total del día; NO toca el arqueo).
  * Los registros ANULADOS se excluyen de todos los totales.
  *
  * Contabilidad de CAJA con abonos (ventas-fiado-deudas): el dinero se cuenta en
@@ -126,6 +133,12 @@ export function calcularReporteCierre(
     porMetodoPago[p.metodoPago] = (porMetodoPago[p.metodoPago] ?? 0) + Number(p.monto);
   }
 
+  // Total recaudado por todos los métodos (incluye NO-efectivo). Es informativo:
+  // el arqueo físico sigue siendo cash-only (solo `porMetodoPago.EFECTIVO`).
+  const totalRecaudado = round2(
+    porMetodoPago.EFECTIVO + porMetodoPago.TARJETA + porMetodoPago.TRANSFERENCIA,
+  );
+
   const ingresosBrutos = totalServicios + totalProductos;
   const ingresosNetos = ingresosBrutos - descuentos;
 
@@ -158,6 +171,7 @@ export function calcularReporteCierre(
       TARJETA: round2(porMetodoPago.TARJETA),
       TRANSFERENCIA: round2(porMetodoPago.TRANSFERENCIA),
     },
+    totalRecaudado,
     comisiones: round2(comisiones),
     totalGastos: round2(totalGastos),
     montoEsperado,

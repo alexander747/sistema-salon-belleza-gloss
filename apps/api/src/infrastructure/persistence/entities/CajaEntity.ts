@@ -44,6 +44,23 @@ export class CajaEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   diferencia: number | null;
 
+  // Desglose de lo RECAUDADO por método al cerrar (informativo, NO arqueo: el
+  // arqueo cash-only vive en montoEsperado/montoRealEfectivo/diferencia).
+  // Columnas aditivas nullable (prod corre con DB_SYNCHRONIZE=true); null en
+  // cajas ABIERTAS, en cajas cerradas antes de esta mejora y tras reabrir.
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoEfectivo: number | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoTarjeta: number | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoTransferencia: number | null;
+
+  /** Σ(efectivo + tarjeta + transferencia) persistido al cerrar. */
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoRecaudado: number | null;
+
   @Column({
     type: 'enum',
     enum: ['ABIERTA', 'CERRADA'],

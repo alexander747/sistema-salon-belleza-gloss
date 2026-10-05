@@ -15,8 +15,6 @@ import type { ReciboData, ReciboSalon } from '../utils/recibo.js';
 import {
   useCarrito,
   type PaymentMethod,
-  type LineaServicio,
-  type LineaProducto,
 } from '../hooks/useCarrito.js';
 import MoneyInput from './MoneyInput.js';
 import ReciboModal from './ReciboModal.js';
@@ -148,17 +146,14 @@ const cardVariants = {
 const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onSuccess, salon, onNavigateToCaja }) => {
   const navigate = useNavigate();
 
-  /* Pantalla chica (celular/tablet): NO auto-focusear el escáner al abrir el modal,
-     porque el teclado virtual tapa el header y esconde la X de cerrar. */
+  /* Touch/narrow viewport detection — used ONLY for the mobile cart shortcut bar.
+     NOT a wizard: the layout stays the same, the bar is an extra affordance. */
   const [esPantallaTactil] = useState(
     () =>
       typeof window !== 'undefined' &&
       ((window.matchMedia?.('(pointer: coarse)')?.matches ?? false) ||
         (window.matchMedia?.('(max-width: 768px)')?.matches ?? false)),
   );
-
-  /** Mobile (bottom-sheet) usa el wizard de 3 pasos; desktop conserva las dos columnas. */
-  const esWizard = esPantallaTactil;
 
   /* ── Catalog data ── */
   const [servicios, setServicios] = useState<Servicio[]>([]);
@@ -173,8 +168,6 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   /* ── UI state ── */
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('TODO');
-  /** Paso activo del wizard móvil: 1 Servicios · 2 Productos · 3 Detalle. */
-  const [step, setStep] = useState<1 | 2 | 3>(1);
   /** Modal del desglose del reparto (se abre desde el botón "Ver reparto"). */
   const [desgloseOpen, setDesgloseOpen] = useState(false);
 
@@ -229,7 +222,8 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   const [scanError, setScanError] = useState(false);
   const [recibo, setRecibo] = useState<ReciboData | null>(null);
 
-  /* Scroll control móvil: anclas para el paso "elegir" (catálogo) y "cobrar" (checkout). */
+  /* Scroll control móvil: ancla al catálogo ("Seguir eligiendo") y al checkout
+     (barra inferior de atajo al carrito). */
   const catalogTopRef = useRef<HTMLDivElement>(null);
   const checkoutTopRef = useRef<HTMLDivElement>(null);
 
@@ -239,6 +233,7 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
   }, []);
 
   const scrollToCheckout = useCallback(() => {
+    // Scrollea dentro del contenedor scrolleable del modal (.modalBody).
     checkoutTopRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, []);
 
@@ -288,28 +283,6 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     return list;
   }, [unifiedItems, typeFilter, search]);
 
-  /**
-   * Items visibles en el wizard móvil: paso 1 = servicios, paso 2 = productos
-   * (mismo buscador). En desktop se usa `filteredItems` (con su filtro de tipo).
-   */
-  const wizardItems = useMemo(() => {
-    if (!esWizard) return filteredItems;
-    const base = unifiedItems.filter((i) =>
-      step === 1 ? i.type === 'SERVICIO' : i.type === 'PRODUCTO',
-    );
-    const q = search.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter(
-      (i) =>
-        i.nombre.toLowerCase().includes(q) ||
-        (i.descripcion != null && i.descripcion.toLowerCase().includes(q)) ||
-        (i.type === 'PRODUCTO' && i.marca != null && i.marca.toLowerCase().includes(q)),
-    );
-  }, [esWizard, filteredItems, unifiedItems, step, search]);
-
-  /** Lo que renderiza el grid: wizard (por paso) o catálogo unificado (desktop). */
-  const displayedItems = esWizard ? wizardItems : filteredItems;
-
   const descripcionServicio = useMemo(() => {
     const names = cart.map((item) =>
       item.cantidad > 1 ? `${item.nombre} x${item.cantidad}` : item.nombre,
@@ -317,6 +290,14 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
     names.push(...productCart.map((p) => `${p.nombre} x${p.cantidad}`));
     return names.join(', ');
   }, [cart, productCart]);
+
+  /** Total units in the cart (services + products) for the mobile shortcut bar. */
+  const totalItems = useMemo(
+    () =>
+      cart.reduce((sum, item) => sum + item.cantidad, 0) +
+      productCart.reduce((sum, item) => sum + item.cantidad, 0),
+    [cart, productCart],
+  );
 
   const canSubmit = useMemo(() => {
     if (carritoVacio) return false;
@@ -430,7 +411,6 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setEmpleadaId('');
       setSearch('');
       setTypeFilter('TODO');
-      setStep(1);
       setDesgloseOpen(false);
       setFecha(toISODate(new Date()));
       setError(null);
@@ -442,11 +422,6 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setRecibo(null);
     }
   }, [isOpen, resetCarrito]);
-
-  /* Wizard móvil: al entrar al paso Detalle, aseguramos ver el inicio del checkout. */
-  useEffect(() => {
-    if (esWizard && step === 3) scrollToCheckout();
-  }, [esWizard, step, scrollToCheckout]);
 
   /* Cart line helpers (add/qty/price/grams/remove) now live in useCarrito. */
 
@@ -470,18 +445,6 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
       setScanError(true);
     }
   };
-
-  /* ── Unified cart for display ── */
-
-  const unifiedCart = useMemo(() => {
-    const items: Array<
-      { type: 'SERVICIO'; data: LineaServicio } | { type: 'PRODUCTO'; data: LineaProducto }
-    > = [
-      ...cart.map((item) => ({ type: 'SERVICIO' as const, data: item })),
-      ...productCart.map((item) => ({ type: 'PRODUCTO' as const, data: item })),
-    ];
-    return items;
-  }, [cart, productCart]);
 
   /* ── Submit handler ── */
 
@@ -629,39 +592,6 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
           </button>
         </div>
 
-        {/* ── Stepper del wizard (solo móvil): 1 Servicios · 2 Productos · 3 Detalle ── */}
-        {esWizard && (
-          <div className={styles.wizardStepper} role="navigation" aria-label="Pasos">
-            {(
-              [
-                [1, 'Servicios'],
-                [2, 'Productos'],
-                [3, 'Detalle'],
-              ] as Array<[1 | 2 | 3, string]>
-            ).map(([n, label], idx) => {
-              const isActive = step === n;
-              const isDone = step > n;
-              return (
-                <React.Fragment key={n}>
-                  {idx > 0 && <span className={styles.wizardConnector} aria-hidden="true" />}
-                  <button
-                    type="button"
-                    className={`${styles.wizardStep} ${isActive ? styles.wizardStepActive : ''} ${isDone ? styles.wizardStepDone : ''}`}
-                    onClick={() => {
-                      if (n < step) setStep(n);
-                    }}
-                    aria-current={isActive ? 'step' : undefined}
-                    aria-label={`Paso ${n}: ${label}`}
-                  >
-                    <span className={styles.wizardStepNum}>{isDone ? '✓' : n}</span>
-                    <span className={styles.wizardStepLabel}>{label}</span>
-                  </button>
-                </React.Fragment>
-              );
-            })}
-          </div>
-        )}
-
         {/* ── Error banner ── */}
         <AnimatePresence>
           {error && (
@@ -730,12 +660,10 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
               {/* ============================================================ */}
               {/*  LEFT PANEL — Unified Catalog                                */}
               {/* ============================================================ */}
-              {(!esWizard || step !== 3) && (
               <div className={styles.catalogPanel} ref={catalogTopRef}>
                 {/* Toolbar sticky: filtros + escáner + búsqueda siempre visibles al scrollear el catálogo */}
                 <div className={styles.catalogSticky}>
-                {/* ── Type filter buttons (ocultos en el wizard: cada paso ya tiene su tipo) ── */}
-                {!esWizard && (
+                {/* ── Type filter buttons ── */}
                 <div className={styles.typeFilterRow}>
                   {(['TODO', 'SERVICIOS', 'PRODUCTOS'] as TypeFilter[]).map((t) => {
                     const isActive = typeFilter === t;
@@ -755,15 +683,13 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     );
                   })}
                 </div>
-                )}
 
-                {/* ── Escáner de código de barras (PR2) — en el wizard solo en el paso Productos ── */}
-                {(!esWizard || step === 2) && (
+                {/* ── Escáner de código de barras (PR2) ── */}
                 <div style={{ marginBottom: '0.625rem' }}>
                   <input
                     type="text"
                     aria-label="Escanear código"
-                    autoFocus={!esPantallaTactil}
+                    autoFocus
                     placeholder="📷 Escanear código…"
                     value={scanCode}
                     onChange={(e) => {
@@ -797,19 +723,12 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     </div>
                   )}
                 </div>
-                )}
 
                 {/* ── Universal search ── */}
                 <div className={styles.catalogToolbar}>
                   <input
                     type="text"
-                    placeholder={
-                      esWizard
-                        ? step === 1
-                          ? 'Buscar servicios…'
-                          : 'Buscar productos…'
-                        : 'Buscar servicios o productos…'
-                    }
+                    placeholder="Buscar servicios o productos…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     style={searchInputStyle}
@@ -825,11 +744,11 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                 </div>
                 </div>{/* /catalogSticky */}
 
-                {/* ── Unified grid (wizard: paso 1 servicios, paso 2 productos) ── */}
-                {displayedItems.length === 0 ? (
+                {/* ── Unified grid ── */}
+                {filteredItems.length === 0 ? (
                   <div className={styles.emptyState}>
                     <span className={styles.emptyIcon}>
-                      {(esWizard ? step === 2 : typeFilter === 'PRODUCTOS') ? '🧴' : '💇'}
+                      {typeFilter === 'PRODUCTOS' ? '🧴' : '💇'}
                     </span>
                     <p
                       style={{
@@ -840,20 +759,16 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                     >
                       {search
                         ? 'No hay resultados que coincidan con la búsqueda.'
-                        : esWizard
-                          ? step === 2
-                            ? 'No hay productos disponibles. Podés saltar este paso.'
-                            : 'No hay servicios disponibles.'
-                          : typeFilter === 'SERVICIOS'
-                            ? 'No hay servicios disponibles.'
-                            : typeFilter === 'PRODUCTOS'
-                              ? 'No hay productos disponibles.'
-                              : 'No hay servicios ni productos disponibles.'}
+                        : typeFilter === 'SERVICIOS'
+                          ? 'No hay servicios disponibles.'
+                          : typeFilter === 'PRODUCTOS'
+                            ? 'No hay productos disponibles.'
+                            : 'No hay servicios ni productos disponibles.'}
                     </p>
                   </div>
                 ) : (
                   <div className={styles.serviceGrid}>
-                    {displayedItems.map((item) => {
+                    {filteredItems.map((item) => {
                       const isService = item.type === 'SERVICIO';
                       const inServiceCart = isService
                         ? cart.some((c) => c.servicioId === item.id)
@@ -980,19 +895,15 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   </div>
                 )}
               </div>
-              )}
 
               {/* ============================================================ */}
               {/*  RIGHT PANEL — Cart + Checkout                               */}
               {/* ============================================================ */}
-              {(!esWizard || step === 3) && (
-              <div className={styles.checkoutPanel} ref={checkoutTopRef}>
+              <div className={styles.checkoutPanel} ref={checkoutTopRef} data-testid="walkin-checkout">
                 {/* ── Mobile (layout viejo): volver a elegir ── */}
-                {!esWizard && (
-                  <button className={styles.mobileBackBtn} onClick={scrollToCatalog}>
-                    ← Seguir eligiendo
-                  </button>
-                )}
+                <button className={styles.mobileBackBtn} onClick={scrollToCatalog}>
+                  ← Seguir eligiendo
+                </button>
                 {/* ── Unified cart ── */}
                 <div className={styles.checkoutSection}>
                   <div className={styles.checkoutHeader}>
@@ -1245,10 +1156,9 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                   </div>
                 )}
 
-                {/* ── Submit (desktop; en el wizard móvil vive en la barra inferior) ── */}
-                {!esWizard && (
-                  <div className={styles.submitSection}>
-                    <motion.button
+                {/* ── Submit ── */}
+                <div className={styles.submitSection}>
+                  <motion.button
                       whileHover={canSubmit && !processing ? { scale: 1.02 } : undefined}
                       whileTap={canSubmit && !processing ? { scale: 0.98 } : undefined}
                       onClick={handleSubmit}
@@ -1258,61 +1168,28 @@ const WalkInModal: React.FC<WalkInModalProps> = ({ salonId, isOpen, onClose, onS
                       {processing
                         ? 'Procesando…'
                         : `Registrar ${formatCurrency(finalTotal)}`}
-                    </motion.button>
-                  </div>
-                )}
+                  </motion.button>
+                </div>
               </div>
-              )}
             </div>
           )}
         </div>
 
-        {/* ── Barra inferior del wizard: Volver / Saltar / Siguiente / Registrar ── */}
-        {esWizard && (
-          <div className={styles.wizardNav}>
+        {/* ── Atajo móvil (post-wizard): barra fija al pie del modal que baja al checkout.
+               Solo en touch/narrow y con el carrito cargado; en desktop no se renderiza. ── */}
+        {esPantallaTactil && !carritoVacio && (
+          <div className={styles.mobileCartBar}>
             <button
               type="button"
-              className={styles.wizardNavBack}
-              onClick={() => setStep(step === 3 ? 2 : 1)}
-              disabled={step === 1}
+              className={styles.mobileCartBarBtn}
+              onClick={scrollToCheckout}
+              aria-label={`Ver carrito: ${totalItems} ${totalItems === 1 ? 'ítem' : 'ítems'}, ${formatCurrency(finalTotal)}`}
             >
-              Volver
-            </button>
-            <div className={styles.wizardNavInfo}>
-              <span className={styles.wizardNavCount}>
-                {unifiedCart.length} {unifiedCart.length === 1 ? 'item' : 'items'}
+              <span className={styles.mobileCartBarBtnLabel}>Ver carrito</span>
+              <span className={styles.mobileCartBarBtnMeta}>
+                {totalItems} {totalItems === 1 ? 'ítem' : 'ítems'} · {formatCurrency(finalTotal)}
               </span>
-              <span className={styles.wizardNavTotal}>{formatCurrency(finalTotal)}</span>
-            </div>
-            {step < 3 ? (
-              <div className={styles.wizardNavNextGroup}>
-                {step === 2 && (
-                  <button
-                    type="button"
-                    className={styles.wizardNavSkip}
-                    onClick={() => setStep(3)}
-                  >
-                    Saltar
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={styles.wizardNavNext}
-                  onClick={() => setStep(step === 1 ? 2 : 3)}
-                >
-                  Siguiente →
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={`${styles.wizardNavSubmit} ${canSubmit && !processing ? styles.wizardNavSubmitActive : ''}`}
-                onClick={handleSubmit}
-                disabled={!canSubmit || processing}
-              >
-                {processing ? 'Procesando…' : `Registrar ${formatCurrency(finalTotal)}`}
-              </button>
-            )}
+            </button>
           </div>
         )}
       </motion.div>

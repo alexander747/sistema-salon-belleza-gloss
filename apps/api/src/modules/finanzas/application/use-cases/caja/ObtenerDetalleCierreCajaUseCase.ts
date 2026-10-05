@@ -110,6 +110,18 @@ export class ObtenerDetalleCierreCajaUseCase {
       reporte.montoEsperado = Number(caja.montoEsperado ?? reporte.montoEsperado);
       reporte.montoReal = montoRealEfectivo;
       reporte.diferencia = caja.diferencia === null ? null : Number(caja.diferencia);
+
+      // Si el cierre persistió el desglose recaudado por método, usarlo para que
+      // el detalle histórico coincida con el cierre guardado. Filas legacy (sin
+      // desglose) conservan el recálculo vivo de arriba.
+      if (caja.montoRecaudado != null) {
+        reporte.porMetodoPago = {
+          EFECTIVO: Number(caja.montoEfectivo ?? 0),
+          TARJETA: Number(caja.montoTarjeta ?? 0),
+          TRANSFERENCIA: Number(caja.montoTransferencia ?? 0),
+        };
+        reporte.totalRecaudado = Number(caja.montoRecaudado);
+      }
     }
 
     // Movimientos: registros ACTIVOS como SERVICIO + gastos como GASTO.

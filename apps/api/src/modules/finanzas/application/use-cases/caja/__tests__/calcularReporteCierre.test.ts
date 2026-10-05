@@ -105,6 +105,7 @@ describe('calcularReporteCierre', () => {
     expect(reporte.descuentos).toBe(10000);
     expect(reporte.ingresosNetos).toBe(290000);
     expect(reporte.porMetodoPago).toEqual({ EFECTIVO: 200000, TARJETA: 90000, TRANSFERENCIA: 0 });
+    expect(reporte.totalRecaudado).toBe(290000);
     expect(reporte.comisiones).toBe(96000);
     expect(reporte.totalGastos).toBe(30000);
     // Arqueo cash-only: EFECTIVO 200000 − gastos EFECTIVO 20000 = 180000
@@ -193,6 +194,7 @@ describe('calcularReporteCierre', () => {
     expect(reporte.montoReal).toBe(245000);
     expect(reporte.porMetodoPago.EFECTIVO).toBe(195000);
     expect(reporte.porMetodoPago.TRANSFERENCIA).toBe(9999);
+    expect(reporte.totalRecaudado).toBe(204999);
   });
 
   it('Rule B/C: sin egresos el esperado no cambia (default [])', () => {
@@ -219,5 +221,20 @@ describe('calcularReporteCierre', () => {
     expect(reporte.montoEsperado).toBe(30000);
     // Líneas informativas devengadas siguen mostrando la venta completa
     expect(reporte.ingresosBrutos).toBe(100000);
+  });
+
+  it('no ignora las transferencias: totalRecaudado incluye efectivo+tarjeta+transferencia sin tocar el arqueo cash-only', () => {
+    const registros = [makeRegistro({ totalServicios: 300000 })];
+    const gastos: never[] = [];
+    // La venta se cobró mitad efectivo, mitad transferencia
+    const pagosExtra = [makePago(150000, 'EFECTIVO'), makePago(150000, 'TRANSFERENCIA')];
+
+    const reporte = calcularReporteCierre(registros, gastos, 200000, 50000, pagosExtra);
+
+    expect(reporte.porMetodoPago).toEqual({ EFECTIVO: 150000, TARJETA: 0, TRANSFERENCIA: 150000 });
+    // Total recaudado = 300000, pero el cajón solo espera 50000 + 150000 efectivo
+    expect(reporte.totalRecaudado).toBe(300000);
+    expect(reporte.montoEsperado).toBe(200000);
+    expect(reporte.diferencia).toBe(0);
   });
 });

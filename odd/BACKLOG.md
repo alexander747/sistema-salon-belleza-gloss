@@ -16,12 +16,13 @@ Items acordados con el usuario. **Estado al 2026-10-04** (actualizado):
 | 10 | GASTOS-AUDITORIA | ✅ Hecho (gasto ahora exige caja abierta). |
 | 11 | DEVOLUCIONES-AUDITORIA | ✅ Hecho (rechaza ANULADAS, guarda método, baja arqueo si es efectivo, selector con typeahead + `estado=ACTIVOS`). |
 
-**Follow-ups pendientes** (nada crítico; el deploy ya se hizo y el backup de prod está en el Desktop):
-- (b) `AgendaPage`: costo de insumo ya read-only + reglas de descuento (switch + alcance) aplicadas, pero **todavía NO adopta el carrito compartido** (`useCarrito` + `CarritoVenta`) — requiere extender el componente compartido (no realizado / servicios extra / escáner / gramos / reparto).
-- (c) P&L: revisar el doble conteo del capital del préstamo (el desembolso se guarda como GastoEntity 'Prestamo') y separar interés (gasto) vs capital (no operativo).
-- (e) Review nativo (RDD) sin correr sobre el candidato `98a5491`.
-- (f) Menores de la auditoría no abordados: el modal de auditoría de nómina sigue con tope de 50 registros; `devoluciones.procesada` es dead code y faltan topes de cantidad/monto; borrar/backfillear un gasto cambia el "esperado" de un cierre ya cerrado; `calcularCostoRealLinea` quedó sin uso.
-- (g) Menor: el orden visual del modal "Registrar servicio" cambió (ajustes/totales después del pago).
+**Follow-ups** (actualizado 2026-10-04, commit `04710ff`):
+- (b) ✅ `AgendaPage` AHORA usa el carrito compartido (`useCarrito` + `CarritoVenta`, slots aditivos); payloads idénticos.
+- (c) ✅ P&L de préstamos verificado SIN doble conteo; el modelo no tiene interés (documentado en código).
+- (f) ✅ topes de devolución (monto venta/línea + cantidad), `procesada` deprecada (columna conservada), y el detalle de un cierre CERRADO usa los números persistidos. Queda: `calcularCostoRealLinea` sin uso.
+- (e) ⏳ Review nativo (RDD) sin correr sobre `98a5491` / `04710ff`.
+- (g) ⏳ (opcional, cosmético) el orden visual del modal "Registrar servicio".
+- (h) ⏳ **Deploy pendiente**: `04710ff` está en `main` pero NO en `produccion` → falta autorizar el push a `produccion` (dispara GH Actions).
 
 **Nada commiteado todavía.**
 

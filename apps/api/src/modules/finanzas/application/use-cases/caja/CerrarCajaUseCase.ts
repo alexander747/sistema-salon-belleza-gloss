@@ -89,6 +89,12 @@ export class CerrarCajaUseCase {
       montoRealEfectivo: input.montoRealEfectivo,
       diferencia: reporte.diferencia ?? 0,
       cierrePorId: input.cierrePorId ?? null,
+      // Desglose RECAUDADO por método (informativo) + total. El arqueo sigue
+      // cash-only; esto deja constancia de las transferencias/tarjeta del día.
+      montoEfectivo: reporte.porMetodoPago.EFECTIVO,
+      montoTarjeta: reporte.porMetodoPago.TARJETA,
+      montoTransferencia: reporte.porMetodoPago.TRANSFERENCIA,
+      montoRecaudado: reporte.totalRecaudado,
     });
 
     if (!cerrado) {
@@ -102,6 +108,10 @@ export class CerrarCajaUseCase {
       montoEsperado: reporte.montoEsperado,
       montoRealEfectivo: input.montoRealEfectivo,
       diferencia: reporte.diferencia ?? 0,
+      montoEfectivo: reporte.porMetodoPago.EFECTIVO,
+      montoTarjeta: reporte.porMetodoPago.TARJETA,
+      montoTransferencia: reporte.porMetodoPago.TRANSFERENCIA,
+      montoRecaudado: reporte.totalRecaudado,
       cierrePorId: input.cierrePorId ?? null,
       cierreEn: new Date(),
     };
