@@ -121,6 +121,27 @@ describe('CajaController', () => {
       });
     });
 
+    it('should exponer montoInicial y el desglose por tipo en el reporte de cierre', async () => {
+      mockCerrar.execute.mockResolvedValue({
+        caja: { id: 5, estado: 'CERRADA', montoServicios: 120000, montoProductos: 50000 },
+        reporte: { montoInicial: 50000, ingresosServicios: 120000, ingresosProductos: 50000 },
+      });
+
+      const req = { salonId: 3, user: { id: 9 }, body: { montoRealEfectivo: 160000 } } as unknown as Request;
+      const res = makeRes();
+
+      await controller.cerrar(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        ok: true,
+        data: {
+          caja: { id: 5, estado: 'CERRADA', montoServicios: 120000, montoProductos: 50000 },
+          reporte: { montoInicial: 50000, ingresosServicios: 120000, ingresosProductos: 50000 },
+        },
+      });
+    });
+
     it('should pasar cierrePorId null en n8n', async () => {
       mockCerrar.execute.mockResolvedValue({ caja: { id: 5 }, reporte: {} });
 
@@ -314,6 +335,29 @@ describe('CajaController', () => {
           caja: { id: 5, estado: 'CERRADA' },
           reporte: { montoEsperado: 135000 },
           movimientos: [{ id: 1, tipo: 'SERVICIO' }],
+        },
+      });
+    });
+
+    it('should exponer montoInicial y el desglose por tipo en el detalle del cierre', async () => {
+      mockDetalle.execute.mockResolvedValue({
+        caja: { id: 5, estado: 'CERRADA', montoServicios: 80000, montoProductos: 20000 },
+        reporte: { montoInicial: 50000, ingresosServicios: 80000, ingresosProductos: 20000 },
+        movimientos: [],
+      });
+
+      const req = { salonId: 3, params: { id: '5' } } as unknown as Request;
+      const res = makeRes();
+
+      await controller.detalleCierre(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        ok: true,
+        data: {
+          caja: { id: 5, estado: 'CERRADA', montoServicios: 80000, montoProductos: 20000 },
+          reporte: { montoInicial: 50000, ingresosServicios: 80000, ingresosProductos: 20000 },
+          movimientos: [],
         },
       });
     });

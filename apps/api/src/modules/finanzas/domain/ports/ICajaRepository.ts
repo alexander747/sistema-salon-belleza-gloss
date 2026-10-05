@@ -11,6 +11,9 @@ export interface CerrarCajaData {
   montoTransferencia?: number;
   /** Σ(efectivo + tarjeta + transferencia) del día. */
   montoRecaudado?: number;
+  /** Ingresos NETOS (post-descuento) del día por tipo (devengado). */
+  montoServicios?: number;
+  montoProductos?: number;
 }
 
 export interface ICajaRepository {

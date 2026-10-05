@@ -122,6 +122,13 @@ export class ObtenerDetalleCierreCajaUseCase {
         };
         reporte.totalRecaudado = Number(caja.montoRecaudado);
       }
+
+      // Origen del ingreso por tipo persistido al cerrar (si existe). Filas legacy
+      // (sin desglose) conservan el recálculo vivo de arriba.
+      if (caja.montoServicios != null || caja.montoProductos != null) {
+        reporte.ingresosServicios = Number(caja.montoServicios ?? 0);
+        reporte.ingresosProductos = Number(caja.montoProductos ?? 0);
+      }
     }
 
     // Movimientos: registros ACTIVOS como SERVICIO + gastos como GASTO.

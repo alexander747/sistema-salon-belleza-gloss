@@ -2,6 +2,9 @@ import { EstadoRegistro } from '../../../../../infrastructure/persistence/entiti
 
 export type MetodoPagoCaja = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
 
+/** Alcance del descuento global por registro (espejo de RegistroServicioEntity). */
+export type DescuentoAlcanceInput = 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS';
+
 export interface PorMetodoPagoTotals {
   EFECTIVO: number;
   TARJETA: number;
@@ -23,6 +26,10 @@ export interface MovimientoCajaInput {
   precioAjustado: boolean;
   valorOriginal: number;
   valorFinal: number;
+  /** % de descuento global aplicado al registro (server-derived). 0/undefined = sin descuento. */
+  porcentajeDescuento?: number;
+  /** A qué tipo(s) aplica ese %. Nullable legacy → se asume 'AMBOS'. */
+  descuentoAlcance?: DescuentoAlcanceInput | null;
 }
 
 /**
@@ -55,8 +62,20 @@ export interface EgresoCajaInput {
 }
 
 export interface ReporteCierre {
+  /** Devengado BRUTO del día (pre-descuento, sin propina). */
   totalServicios: number;
   totalProductos: number;
+  /**
+   * Origen del ingreso del día por TIPO, NETO de descuento (valores que
+   * reflejan la recaudación real, no el precio de lista). Invariante:
+   * `ingresosServicios + ingresosProductos === ingresosNetos`.
+   * Ojo: es DEVENGADO (registros del día), mientras `totalRecaudado` es CAJA
+   * (pagos efectivamente recibidos, abonos incluidos); por diseño no suman igual.
+   */
+  ingresosServicios: number;
+  ingresosProductos: number;
+  /** Fondo con el que se abrió la caja (`montoInicial`); informativo del arqueo. */
+  montoInicial: number;
   ingresosBrutos: number;
   descuentos: number;
   ingresosNetos: number;
@@ -121,6 +140,37 @@ export function calcularReporteCierre(
   );
   const comisiones = activos.reduce((sum, r) => sum + Number(r.comisionCalculada), 0);
 
+  // Origen del ingreso por tipo, NETO de descuento (revenue real). El descuento
+  // total por registro ya está en `valorOriginal − valorFinal`; acá solo se
+  // REPARTE entre servicios y productos según el ALCANCE del %:
+  //   - Con % (>0): el peso de cada tipo es su bruto ponderado por su % de
+  //     descuento (el tipo fuera del alcance pesa 0 → se lleva 0 del descuento).
+  //   - Legacy sin %: se reparte proporcional al bruto de cada tipo.
+  // Así `ingresosServicios + ingresosProductos === ingresosNetos` exactamente.
+  let ingresosServicios = 0;
+  let ingresosProductos = 0;
+  for (const r of activos) {
+    const brutoServ = Number(r.totalServicios);
+    const brutoProd = Number(r.totalProductos);
+    const descuento = r.precioAjustado ? Number(r.valorOriginal) - Number(r.valorFinal) : 0;
+
+    const pct = Number(r.porcentajeDescuento ?? 0);
+    const alcance: DescuentoAlcanceInput = r.descuentoAlcance ?? 'AMBOS';
+    const pctServ = alcance === 'SERVICIOS' || alcance === 'AMBOS' ? pct : 0;
+    const pctProd = alcance === 'PRODUCTOS' || alcance === 'AMBOS' ? pct : 0;
+    const conPorcentaje = pctServ > 0 || pctProd > 0;
+
+    const pesoServ = conPorcentaje ? brutoServ * pctServ : brutoServ;
+    const pesoProd = conPorcentaje ? brutoProd * pctProd : brutoProd;
+    const pesoTotal = pesoServ + pesoProd;
+
+    const descuentoServ = pesoTotal > 0 ? (descuento * pesoServ) / pesoTotal : 0;
+    const descuentoProd = descuento - descuentoServ;
+
+    ingresosServicios += brutoServ - descuentoServ;
+    ingresosProductos += brutoProd - descuentoProd;
+  }
+
   // Dinero de la caja: SOLO los pagos que pertenecen a esta caja (pagosExtra).
   // No se suman r.pagos: un pago de un abono posterior (pago.cajaId = otra caja)
   // vive en el registro pero debe contar en la caja donde se recibió.
@@ -163,6 +213,9 @@ export function calcularReporteCierre(
   return {
     totalServicios: round2(totalServicios),
     totalProductos: round2(totalProductos),
+    ingresosServicios: round2(ingresosServicios),
+    ingresosProductos: round2(ingresosProductos),
+    montoInicial: round2(montoInicial),
     ingresosBrutos: round2(ingresosBrutos),
     descuentos: round2(descuentos),
     ingresosNetos: round2(ingresosNetos),

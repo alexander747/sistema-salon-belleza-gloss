@@ -14,6 +14,9 @@ export interface CajaDTO {
   montoTransferencia: number | null;
   /** Σ(efectivo + tarjeta + transferencia) persistido al cerrar. */
   montoRecaudado: number | null;
+  /** Ingresos NETOS por tipo (post-descuento) persistidos al cerrar (null si ABIERTA/legacy). */
+  montoServicios: number | null;
+  montoProductos: number | null;
   estado: EstadoCaja;
   aperturaPorId: number | null;
   aperturaEn: Date;
@@ -38,6 +41,8 @@ export function cajaToDTO(entity: CajaEntity): CajaDTO {
     montoTarjeta: numOrNull(entity.montoTarjeta),
     montoTransferencia: numOrNull(entity.montoTransferencia),
     montoRecaudado: numOrNull(entity.montoRecaudado),
+    montoServicios: numOrNull(entity.montoServicios),
+    montoProductos: numOrNull(entity.montoProductos),
     estado: entity.estado,
     aperturaPorId: entity.aperturaPorId ?? null,
     aperturaEn: entity.aperturaEn,

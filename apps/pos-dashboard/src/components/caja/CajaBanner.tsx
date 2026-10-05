@@ -24,6 +24,9 @@ export interface CajaDTO {
   montoTarjeta?: number | null;
   montoTransferencia?: number | null;
   montoRecaudado?: number | null;
+  /** Ingresos NETOS por tipo (post-descuento) persistidos al cerrar (null/undefined si ABIERTA/legacy). */
+  montoServicios?: number | null;
+  montoProductos?: number | null;
   estado: 'ABIERTA' | 'CERRADA';
   aperturaPorId: number | null;
   aperturaEn: string;

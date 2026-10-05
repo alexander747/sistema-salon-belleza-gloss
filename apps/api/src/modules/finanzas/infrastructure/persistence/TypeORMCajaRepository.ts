@@ -48,6 +48,8 @@ export class TypeORMCajaRepository implements ICajaRepository {
         montoTarjeta: data.montoTarjeta ?? null,
         montoTransferencia: data.montoTransferencia ?? null,
         montoRecaudado: data.montoRecaudado ?? null,
+        montoServicios: data.montoServicios ?? null,
+        montoProductos: data.montoProductos ?? null,
         cierrePorId: data.cierrePorId ?? null,
         cierreEn: new Date(),
       })
@@ -75,6 +77,8 @@ export class TypeORMCajaRepository implements ICajaRepository {
         montoTarjeta: null,
         montoTransferencia: null,
         montoRecaudado: null,
+        montoServicios: null,
+        montoProductos: null,
         cierrePorId: null,
         cierreEn: null,
       })

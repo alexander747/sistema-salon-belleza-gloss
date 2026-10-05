@@ -309,6 +309,26 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     expect(result.caja.montoRecaudado).toBe(160000);
   });
 
+  it('caja CERRADA: usa el desglose por tipo PERSISTIDO (neto) en vez del recálculo vivo', async () => {
+    mockCajaRepo.findById.mockResolvedValue({
+      ...cajaCerrada,
+      montoServicios: 70000,
+      montoProductos: 30000,
+    });
+    mockRegistroRepo.search.mockResolvedValue([]); // recálculo vivo daría 0/0
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([]);
+
+    const result = await useCase.execute({ salonId: 1, cajaId: 5 });
+
+    expect(result.reporte.ingresosServicios).toBe(70000);
+    expect(result.reporte.ingresosProductos).toBe(30000);
+    expect(result.caja.montoServicios).toBe(70000);
+    expect(result.caja.montoProductos).toBe(30000);
+    // El fondo de apertura sigue expuesto aunque el desglose venga persistido
+    expect(result.reporte.montoInicial).toBe(50000);
+  });
+
   it('should devolver caja ABIERTA sin arqueo falso: montoReal null y diferencia null (no fabricar 0)', async () => {
     mockCajaRepo.findById.mockResolvedValue({
       id: 9,

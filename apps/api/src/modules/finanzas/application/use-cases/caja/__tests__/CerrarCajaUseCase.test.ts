@@ -124,13 +124,21 @@ describe('CerrarCajaUseCase', () => {
         montoTarjeta: 0,
         montoTransferencia: 0,
         montoRecaudado: 180000,
+        montoServicios: 180000,
+        montoProductos: 0,
       }),
     );
     expect(result.reporte.montoEsperado).toBe(210000);
     expect(result.reporte.diferencia).toBe(0);
     expect(result.reporte.totalRecaudado).toBe(180000);
+    // Reporte expone el fondo de apertura y el desglose por tipo (neto)
+    expect(result.reporte.montoInicial).toBe(50000);
+    expect(result.reporte.ingresosServicios).toBe(180000);
+    expect(result.reporte.ingresosProductos).toBe(0);
     expect(result.caja.estado).toBe('CERRADA');
     expect(result.caja.montoRecaudado).toBe(180000);
+    expect(result.caja.montoServicios).toBe(180000);
+    expect(result.caja.montoProductos).toBe(0);
   });
 
   it('should reportar diferencia negativa cuando el real no cuadra', async () => {

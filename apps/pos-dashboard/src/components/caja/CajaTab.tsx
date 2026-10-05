@@ -26,6 +26,11 @@ export interface PorMetodoPagoTotals {
 export interface ReporteCierre {
   totalServicios: number;
   totalProductos: number;
+  /** Ingresos NETOS por tipo (post-descuento). Opcionales: fallback si falta (API vieja/mocks). */
+  ingresosServicios?: number;
+  ingresosProductos?: number;
+  /** Fondo de apertura (montoInicial) expuesto por el reporte. Opcional por compatibilidad. */
+  montoInicial?: number;
   ingresosBrutos: number;
   descuentos: number;
   ingresosNetos: number;
@@ -86,6 +91,24 @@ function totalRecaudadoDe(reporte: ReporteCierre): number {
   if (typeof reporte.totalRecaudado === 'number') return reporte.totalRecaudado;
   const p = reporte.porMetodoPago;
   return (p?.EFECTIVO ?? 0) + (p?.TARJETA ?? 0) + (p?.TRANSFERENCIA ?? 0);
+}
+
+/**
+ * Fondo de apertura del cierre. El reporte lo expone (`montoInicial`); si falta
+ * (API vieja/mocks) se usa el `montoInicial` del DTO de la caja como fallback.
+ */
+function montoAperturaDe(reporte: ReporteCierre, caja?: CajaDTO | null): number {
+  if (typeof reporte.montoInicial === 'number') return reporte.montoInicial;
+  return caja?.montoInicial ?? 0;
+}
+
+/** Ingresos NETOS del día por tipo; fallback a los brutos si el API no los trae. */
+function ingresosServiciosDe(reporte: ReporteCierre): number {
+  return typeof reporte.ingresosServicios === 'number' ? reporte.ingresosServicios : reporte.totalServicios;
+}
+
+function ingresosProductosDe(reporte: ReporteCierre): number {
+  return typeof reporte.ingresosProductos === 'number' ? reporte.ingresosProductos : reporte.totalProductos;
 }
 
 /** Badge de estado: ABIERTA verde, CERRADA ámbar (filas y modales). */
@@ -199,6 +222,46 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "'DM Sans', sans-serif",
   fontSize: '0.875rem',
   outline: 'none',
+};
+
+/* ── Arqueo (cierre de caja): agrupación visual del modal ── */
+
+/** Caja que agrupa un bloque del arqueo (efectivo, no-efectivo, info). */
+const arqueoGroupStyle: React.CSSProperties = {
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '0.75rem 0.9rem',
+  marginBottom: '0.9rem',
+};
+
+/** Título de sección (uppercase, mismo patrón que el resto de Finanzas). */
+const arqueoSectionTitleStyle: React.CSSProperties = {
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.7rem',
+  color: 'var(--text-dim)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  marginBottom: '0.5rem',
+};
+
+/** Fila label / monto dentro de un bloque del arqueo. */
+const arqueoRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'baseline',
+  gap: '0.75rem',
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.8rem',
+};
+
+/** Nota explicativa chica (helper text) dentro del arqueo. */
+const arqueoNoteStyle: React.CSSProperties = {
+  fontFamily: "'DM Sans', sans-serif",
+  fontSize: '0.7rem',
+  color: 'var(--text-dim)',
+  lineHeight: 1.5,
+  margin: '0 0 0.5rem',
 };
 
 /* ================================================================ */
@@ -555,7 +618,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginTop: '0.9rem' }}>
               <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.2rem' }}>Fondo inicial</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.2rem' }}>Monto de apertura</div>
                 <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem', fontWeight: 700, color: 'var(--accent)' }}>{formatCurrency(caja?.montoInicial)}</div>
               </div>
               <div>
@@ -898,46 +961,50 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                   <div style={{ color: 'var(--text-dim)', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem' }}>Calculando esperado…</div>
                 ) : esperado ? (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.7rem 0.9rem', marginBottom: '0.75rem' }}>
-                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Efectivo esperado</span>
-                      <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1rem', fontWeight: 800, color: 'var(--accent)' }}>{formatCurrency(esperado.montoEsperado)}</span>
-                    </div>
-
-                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
-                      Cobros por método
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
-                      {(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'] as const).map((met) => (
-                        <div key={met} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>{METODO_LABELS[met]}</span>
-                          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.porMetodoPago?.[met])}</span>
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
-                        <span data-testid="arqueo-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(esperado))}</span>
+                    {/* 1. Arqueo de efectivo: lo ÚNICO que se cuenta en el cajón */}
+                    <div style={{ ...arqueoGroupStyle, borderColor: 'rgba(212,168,83,0.35)' }}>
+                      <div style={{ ...arqueoSectionTitleStyle, color: 'var(--accent)' }}>
+                        💵 Efectivo del cajón — esto es lo que contás
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Gastos</span>
-                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.totalGastos)}</span>
+
+                      <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Monto de apertura</span>
+                        <span data-testid="arqueo-monto-apertura" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(montoAperturaDe(esperado, caja))}</span>
+                      </div>
+                      <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Cobros en efectivo</span>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.porMetodoPago?.EFECTIVO)}</span>
+                      </div>
+
+                      <div style={{ ...arqueoRowStyle, borderTop: '1px solid var(--border)', paddingTop: '0.5rem', marginTop: '0.35rem' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Efectivo esperado en el cajón</span>
+                        <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent)' }}>{formatCurrency(esperado.montoEsperado)}</span>
                       </div>
                     </div>
 
-                    <label htmlFor="montoReal" style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      Monto real en efectivo (conteo físico)
-                    </label>
-                    <MoneyInput
-                      id="montoReal"
-                      ariaLabel="Monto real en efectivo"
-                      value={Number(montoRealEfectivo) || 0}
-                      onChange={(n) => setMontoRealEfectivo(n === 0 ? '' : String(n))}
-                      placeholder="0"
-                      style={inputStyle}
-                    />
+                    {/* Conteo físico: SOLO efectivo */}
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label htmlFor="montoReal" style={{ display: 'block', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
+                        ¿Cuánto contaste en el cajón?
+                      </label>
+                      <MoneyInput
+                        id="montoReal"
+                        ariaLabel="¿Cuánto contaste en el cajón?"
+                        value={Number(montoRealEfectivo) || 0}
+                        onChange={(n) => setMontoRealEfectivo(n === 0 ? '' : String(n))}
+                        placeholder="0"
+                        style={inputStyle}
+                      />
+                      <p style={{ ...arqueoNoteStyle, margin: '0.4rem 0 0' }}>
+                        Contá TODO el efectivo del cajón, incluido el fondo de apertura. Las transferencias y tarjeta NO van acá (no están en el cajón).
+                      </p>
+                    </div>
 
                     {diferenciaPreview !== null && (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.75rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.7rem 0.9rem' }}>
-                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Diferencia</span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.7rem 0.9rem' }}>
+                        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          Diferencia ({diferenciaPreview < 0 ? 'faltante' : diferenciaPreview > 0 ? 'sobrante' : 'cuadra'})
+                        </span>
                         <span
                           style={{
                             fontFamily: "'DM Sans', sans-serif",
@@ -950,6 +1017,47 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                         </span>
                       </div>
                     )}
+
+                    {/* 2. Cobros que NO entran al cajón */}
+                    <div style={arqueoGroupStyle}>
+                      <div style={arqueoSectionTitleStyle}>
+                        🏦 Cobros que NO van al cajón
+                      </div>
+                      <p style={arqueoNoteStyle}>No se cuentan en el arqueo.</p>
+                      <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Tarjeta</span>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.porMetodoPago?.TARJETA)}</span>
+                      </div>
+                      <div style={arqueoRowStyle}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Transferencia</span>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.porMetodoPago?.TRANSFERENCIA)}</span>
+                      </div>
+                    </div>
+
+                    {/* 3. Información del día: NO se cuenta en el arqueo */}
+                    <div style={{ ...arqueoGroupStyle, background: 'transparent', borderStyle: 'dashed', marginBottom: 0 }}>
+                      <div style={arqueoSectionTitleStyle}>📊 Información del día (no se cuenta)</div>
+                      <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Total recaudado (todos los métodos)</span>
+                        <span data-testid="arqueo-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(esperado))}</span>
+                      </div>
+                      <div style={{ ...arqueoRowStyle, marginBottom: '0.6rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Gastos</span>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.totalGastos)}</span>
+                      </div>
+
+                      <div style={{ ...arqueoSectionTitleStyle, marginTop: '0.2rem', marginBottom: '0.4rem' }}>
+                        Ingresos por tipo (neto)
+                      </div>
+                      <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Servicios</span>
+                        <span data-testid="arqueo-ingresos-servicios" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(ingresosServiciosDe(esperado))}</span>
+                      </div>
+                      <div style={arqueoRowStyle}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Productos</span>
+                        <span data-testid="arqueo-ingresos-productos" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(ingresosProductosDe(esperado))}</span>
+                      </div>
+                    </div>
                   </>
                 ) : (
                   <div style={{ color: 'var(--danger)', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8125rem' }}>
@@ -1010,6 +1118,11 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                   ))}
                 </div>
 
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Monto de apertura</span>
+                  <span data-testid="reporte-monto-apertura" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(montoAperturaDe(reporte.reporte, reporte.caja))}</span>
+                </div>
+
                 <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
                   Cobros por método
                 </div>
@@ -1023,6 +1136,20 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
                     <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
                     <span data-testid="reporte-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(reporte.reporte))}</span>
+                  </div>
+                </div>
+
+                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+                  Ingresos por tipo (neto)
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Servicios</span>
+                    <span data-testid="reporte-ingresos-servicios" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(ingresosServiciosDe(reporte.reporte))}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Productos</span>
+                    <span data-testid="reporte-ingresos-productos" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(ingresosProductosDe(reporte.reporte))}</span>
                   </div>
                 </div>
 
@@ -1091,7 +1218,7 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
                       {[
-                        { label: 'Fondo inicial', value: detalleCierre.montoInicial },
+                        { label: 'Monto de apertura', value: detalleCierre.montoInicial },
                         { label: 'Servicios', value: detalleReporte.totalServicios },
                         { label: 'Productos', value: detalleReporte.totalProductos },
                         { label: 'Ingresos brutos', value: detalleReporte.ingresosBrutos },
@@ -1121,6 +1248,20 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
                         <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
                         <span data-testid="detalle-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(detalleReporte))}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+                      Ingresos por tipo (neto)
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Servicios</span>
+                        <span data-testid="detalle-ingresos-servicios" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(ingresosServiciosDe(detalleReporte))}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Productos</span>
+                        <span data-testid="detalle-ingresos-productos" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(ingresosProductosDe(detalleReporte))}</span>
                       </div>
                     </div>
 

@@ -95,6 +95,9 @@ export class CerrarCajaUseCase {
       montoTarjeta: reporte.porMetodoPago.TARJETA,
       montoTransferencia: reporte.porMetodoPago.TRANSFERENCIA,
       montoRecaudado: reporte.totalRecaudado,
+      // Origen del ingreso del día por tipo (neto de descuento), informativo.
+      montoServicios: reporte.ingresosServicios,
+      montoProductos: reporte.ingresosProductos,
     });
 
     if (!cerrado) {
@@ -112,6 +115,8 @@ export class CerrarCajaUseCase {
       montoTarjeta: reporte.porMetodoPago.TARJETA,
       montoTransferencia: reporte.porMetodoPago.TRANSFERENCIA,
       montoRecaudado: reporte.totalRecaudado,
+      montoServicios: reporte.ingresosServicios,
+      montoProductos: reporte.ingresosProductos,
       cierrePorId: input.cierrePorId ?? null,
       cierreEn: new Date(),
     };

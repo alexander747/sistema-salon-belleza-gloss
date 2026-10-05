@@ -63,6 +63,9 @@ const cierre = {
 const reporteEsperado = {
   totalServicios: 120000,
   totalProductos: 50000,
+  ingresosServicios: 120000,
+  ingresosProductos: 50000,
+  montoInicial: 50000,
   ingresosBrutos: 170000,
   descuentos: 0,
   ingresosNetos: 170000,
@@ -314,9 +317,21 @@ describe('CajaTab', () => {
     expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/actual/esperado');
     expect(await screen.findByText(/140\.000/)).toBeInTheDocument();
     expect(screen.getByText(/150\.000/)).toBeInTheDocument(); // EFECTIVO breakdown
+    // Monto de apertura + desglose por tipo (neto) en el arqueo
+    expect(await screen.findByTestId('arqueo-monto-apertura')).toHaveTextContent(/50\.000/);
+    expect(screen.getByTestId('arqueo-ingresos-servicios')).toHaveTextContent(/120\.000/);
+    expect(screen.getByTestId('arqueo-ingresos-productos')).toHaveTextContent(/50\.000/);
+
+    // El arqueo separa EFECTIVO (lo que se cuenta) de los demás métodos:
+    // helper que aclara que transferencias/tarjeta NO van al cajón + total del día informativo.
+    expect(screen.getByText(/incluido el fondo de apertura/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cobros que NO van al cajón/i)).toBeInTheDocument();
+    expect(screen.getByText(/Total recaudado \(todos los métodos\)/i)).toBeInTheDocument();
+    // El input de conteo pide el efectivo del cajón, no "el total".
+    expect(screen.getByLabelText(/cuánto contaste en el cajón/i)).toBeInTheDocument();
 
     // Diferencia en vivo: real 135000 - esperado 140000 = -5000
-    fireEvent.change(screen.getByLabelText(/monto real/i), { target: { value: '135000' } });
+    fireEvent.change(screen.getByLabelText(/cuánto contaste/i), { target: { value: '135000' } });
     expect(await screen.findByText(/-\$\s*5\.000/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /confirmar cierre/i }));
@@ -331,6 +346,10 @@ describe('CajaTab', () => {
     expect(within(reporteModal).getByText(/140\.000/)).toBeInTheDocument();
     expect(within(reporteModal).getByText(/135\.000/)).toBeInTheDocument();
     expect(within(reporteModal).getByText(/-\$\s*5\.000/)).toBeInTheDocument();
+    // El reporte también muestra apertura y el desglose por tipo (neto)
+    expect(within(reporteModal).getByTestId('reporte-monto-apertura')).toHaveTextContent(/50\.000/);
+    expect(within(reporteModal).getByTestId('reporte-ingresos-servicios')).toHaveTextContent(/120\.000/);
+    expect(within(reporteModal).getByTestId('reporte-ingresos-productos')).toHaveTextContent(/50\.000/);
   });
 
   it('el cierre contempla TRANSFERENCIAS: muestra el desglose por método y el total recaudado', async () => {
@@ -391,9 +410,11 @@ describe('CajaTab', () => {
     // El modal de arqueo lista el desglose por método y el total recaudado
     expect(await screen.findByText(/efectivo esperado/i)).toBeInTheDocument();
     expect(screen.getByText('Transferencia')).toBeInTheDocument();
+    // Transferencia vive en el bloque "NO se cuentan en el arqueo"
+    expect(screen.getByText(/No se cuentan en el arqueo/i)).toBeInTheDocument();
     expect(await screen.findByTestId('arqueo-total-recaudado')).toHaveTextContent(/220\.000/);
 
-    fireEvent.change(screen.getByLabelText(/monto real/i), { target: { value: '140000' } });
+    fireEvent.change(screen.getByLabelText(/cuánto contaste/i), { target: { value: '140000' } });
     fireEvent.click(screen.getByRole('button', { name: /confirmar cierre/i }));
 
     // Reporte de cierre: transferencias + total recaudado de todos los métodos
@@ -691,10 +712,13 @@ describe('CajaTab', () => {
     // Modal con reporte del arqueo + tabla de movimientos (SERVICIO y GASTO)
     const modal = await screen.findByTestId('detalle-cierre-modal');
     expect(within(modal).getByText(/detalle del cierre/i)).toBeInTheDocument();
-    expect(within(modal).getByText(/fondo inicial/i)).toBeInTheDocument();
+    expect(within(modal).getByText(/monto de apertura/i)).toBeInTheDocument();
     // 50.000 es el montoInicial de apertura (puede repetirse en el desglose)
     expect(within(modal).getAllByText(/50\.000/).length).toBeGreaterThanOrEqual(1);
     expect(within(modal).getByText(/140\.000/)).toBeInTheDocument(); // montoEsperado
+    // Desglose por tipo (neto) visible en el detalle
+    expect(within(modal).getByTestId('detalle-ingresos-servicios')).toHaveTextContent(/120\.000/);
+    expect(within(modal).getByTestId('detalle-ingresos-productos')).toHaveTextContent(/50\.000/);
     // 170.000 aparece como ingresosBrutos y como montoReal del arqueo
     expect(within(modal).getAllByText(/170\.000/).length).toBeGreaterThanOrEqual(1);
     expect(within(modal).getByText('SERVICIO')).toBeInTheDocument();
@@ -1073,7 +1097,7 @@ describe('CajaTab — cerrar por id y gate de Abrir (huérfanas)', () => {
     expect(await screen.findByText(/efectivo esperado/i)).toBeInTheDocument();
     expect(screen.getByText(/140\.000/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/monto real/i), { target: { value: '135000' } });
+    fireEvent.change(screen.getByLabelText(/cuánto contaste/i), { target: { value: '135000' } });
     fireEvent.click(screen.getByRole('button', { name: /confirmar cierre/i }));
 
     // POST con cajaId de ESA caja

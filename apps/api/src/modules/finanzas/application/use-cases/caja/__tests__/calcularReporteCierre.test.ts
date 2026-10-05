@@ -104,6 +104,13 @@ describe('calcularReporteCierre', () => {
     expect(reporte.ingresosBrutos).toBe(300000);
     expect(reporte.descuentos).toBe(10000);
     expect(reporte.ingresosNetos).toBe(290000);
+    // Desglose por tipo NETO: el descuento legacy (sin %/alcance) se reparte
+    // POR REGISTRO proporcional a su bruto. El registro con descuento
+    // (serv 150000 / prod 60000) aporta 7142.86 al descuento de servicios y
+    // 2857.14 al de productos; el otro registro no tiene descuento.
+    expect(reporte.ingresosServicios).toBeCloseTo(232857.14, 2);
+    expect(reporte.ingresosProductos).toBeCloseTo(57142.86, 2);
+    expect(reporte.ingresosServicios + reporte.ingresosProductos).toBeCloseTo(reporte.ingresosNetos, 2);
     expect(reporte.porMetodoPago).toEqual({ EFECTIVO: 200000, TARJETA: 90000, TRANSFERENCIA: 0 });
     expect(reporte.totalRecaudado).toBe(290000);
     expect(reporte.comisiones).toBe(96000);
@@ -159,6 +166,59 @@ describe('calcularReporteCierre', () => {
     // Fondo 50000 + ventas EFECTIVO 10000 = 60000 esperado en cajón
     expect(reporte.montoEsperado).toBe(60000);
     expect(reporte.diferencia).toBe(0);
+    // El fondo de apertura se expone tal cual en el reporte (para el cierre).
+    expect(reporte.montoInicial).toBe(50000);
+  });
+
+  it('expone montoInicial = 0 por defecto (preview sin fondo)', () => {
+    const reporte = calcularReporteCierre([], [], null);
+    expect(reporte.montoInicial).toBe(0);
+    expect(reporte.ingresosServicios).toBe(0);
+    expect(reporte.ingresosProductos).toBe(0);
+  });
+
+  it('desglose por tipo NETO: descuento con alcance SERVICIOS no toca los productos', () => {
+    const registros = [
+      makeRegistro({
+        totalServicios: 100000,
+        totalProductos: 50000,
+        precioAjustado: true,
+        porcentajeDescuento: 10,
+        descuentoAlcance: 'SERVICIOS',
+        valorOriginal: 150000,
+        valorFinal: 140000, // descuento 10000, todo sobre servicios
+      }),
+    ];
+
+    const reporte = calcularReporteCierre(registros, [], null, 0);
+
+    expect(reporte.ingresosServicios).toBe(90000);
+    expect(reporte.ingresosProductos).toBe(50000);
+    expect(reporte.ingresosBrutos).toBe(150000);
+    expect(reporte.descuentos).toBe(10000);
+    expect(reporte.ingresosNetos).toBe(140000);
+    // Invariante: el desglose por tipo suma el ingreso neto total.
+    expect(reporte.ingresosServicios + reporte.ingresosProductos).toBe(reporte.ingresosNetos);
+  });
+
+  it('desglose por tipo NETO: descuento AMBOS reparte según el peso de cada tipo', () => {
+    const registros = [
+      makeRegistro({
+        totalServicios: 100000,
+        totalProductos: 100000,
+        precioAjustado: true,
+        porcentajeDescuento: 10,
+        descuentoAlcance: 'AMBOS',
+        valorOriginal: 200000,
+        valorFinal: 180000, // descuento 20000, mitad y mitad
+      }),
+    ];
+
+    const reporte = calcularReporteCierre(registros, [], null, 0);
+
+    expect(reporte.ingresosServicios).toBe(90000);
+    expect(reporte.ingresosProductos).toBe(90000);
+    expect(reporte.ingresosServicios + reporte.ingresosProductos).toBe(reporte.ingresosNetos);
   });
 
   it('Rule B/C: resta egresos EFECTIVO (devoluciones + nómina) y excluye TRANSFERENCIA', () => {

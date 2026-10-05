@@ -61,6 +61,16 @@ export class CajaEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   montoRecaudado: number | null;
 
+  // Origen del ingreso del día por TIPO, NETO de descuento, persistido al cerrar
+  // (informativo, devengado). Columnas aditivas nullable (prod corre con
+  // DB_SYNCHRONIZE=true); null en ABIERTA, legacy cerradas antes de esta mejora
+  // y tras reabrir.
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoServicios: number | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoProductos: number | null;
+
   @Column({
     type: 'enum',
     enum: ['ABIERTA', 'CERRADA'],
