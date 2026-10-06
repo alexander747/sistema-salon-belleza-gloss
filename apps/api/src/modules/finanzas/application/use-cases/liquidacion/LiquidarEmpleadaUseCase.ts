@@ -13,6 +13,7 @@ import { PagoPrestamoEntity } from '../../../../../infrastructure/persistence/en
 import { PrestamoEntity } from '../../../../../infrastructure/persistence/entities/PrestamoEntity';
 import { MetodoPago } from '../../../../../infrastructure/persistence/entities/MetodoPago';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
+import { sueldoFijoDelPeriodo } from './NominaPendienteUseCase';
 
 export interface DescuentoPrestamoInput {
   prestamoId: number;
@@ -118,10 +119,10 @@ export class LiquidarEmpleadaUseCase {
       (sum, r) => sum + Number(r.propina),
       0,
     );
-    // Comp fijo PRORRATEADO POR DÍAS (estándar industria, divisor días del mes):
-    // salario diario = mensual ÷ días del mes; el período paga salario diario ×
-    // días del período. MUST match NominaPendienteUseCase so the historial never
-    // drifts from the UI. El dueño elige el rango a liquidar en el modal.
+    // Comp fijo: `bonoHorario` keeps the day-proration (per-time-unit bonus);
+    // `sueldoFijo` uses the complete-period rule (QUINCENAL /2, SEMANAL /4,
+    // MENSUAL full) and only prorates by days on partial periods. MUST match
+    // NominaPendienteUseCase so the historial never drifts from the UI.
     const MS_DIA = 86_400_000;
     const diasPeriodo = Math.max(
       1,
@@ -131,7 +132,12 @@ export class LiquidarEmpleadaUseCase {
     const m = input.periodoInicio.getUTCMonth(); // 0-based
     const diasMes = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
     const bonoHorario = diasMes > 0 ? Math.round((Number(empleada.bonoHorario) * diasPeriodo) / diasMes) : 0;
-    const sueldoFijo = diasMes > 0 ? Math.round((Number(empleada.sueldoFijo) * diasPeriodo) / diasMes) : 0;
+    const sueldoFijo = sueldoFijoDelPeriodo(
+      Number(empleada.sueldoFijo),
+      empleada.frecuenciaPago ?? 'MENSUAL',
+      input.periodoInicio,
+      input.periodoFin,
+    );
     const calculatedTotal = totalComisiones + totalPropinas + bonoHorario + sueldoFijo;
 
     // 4. Validate descuentos por préstamos

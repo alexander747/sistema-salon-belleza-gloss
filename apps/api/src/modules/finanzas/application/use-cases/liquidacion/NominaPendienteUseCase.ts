@@ -313,15 +313,21 @@ export class NominaPendienteUseCase {
           return fechaNegocio >= periodo.inicio && fechaNegocio <= periodo.fin;
         });
 
-        // Comp fijo PRORRATEADO POR DÍAS (estándar industria, divisor días del mes):
-        // salario diario = mensual ÷ días del mes; el tramo paga salario diario × días
-        // del tramo. Así el total mensual nunca varía y el tramo parcial (ej. 3 días
-        // de una semana en mes de 31) paga lo justo, no un factor fijo inflado.
         const { diasTramo, diasMes } = diasDelPeriodo(periodo.inicio, periodo.fin);
+        // `bonoHorario` is a per-time-unit bonus: it keeps the day-proration
+        // (daily rate = monthly ÷ days of month × days of period), unchanged.
         const bonoHorarioPeriodo =
           diasMes > 0 ? Math.round((Number(empleada.bonoHorario) * diasTramo) / diasMes) : 0;
-        const sueldoFijoPeriodo =
-          diasMes > 0 ? Math.round((Number(empleada.sueldoFijo) * diasTramo) / diasMes) : 0;
+        // `sueldoFijo` follows the "complete period pays the exact share" rule
+        // (see `sueldoFijoDelPeriodo`): a complete QUINCENAL pays /2, a complete
+        // SEMANAL pays /4, a complete MENSUAL pays the full monthly; partial
+        // periods (e.g. MENSUAL [1st → today]) fall back to day-proration.
+        const sueldoFijoPeriodo = sueldoFijoDelPeriodo(
+          Number(empleada.sueldoFijo),
+          frecuenciaPago,
+          periodo.inicio,
+          periodo.fin,
+        );
         const totalComisiones = delPeriodo.reduce((sum, r) => sum + Number(r.comisionCalculada), 0);
         const totalPropinas = delPeriodo.reduce((sum, r) => sum + Number(r.propina), 0);
         // PR3 — insumo informativo del período: se computa sobre el MISMO `delPeriodo`
@@ -381,4 +387,70 @@ function diasDelPeriodo(inicio: Date, fin: Date): { diasTramo: number; diasMes: 
   const m = inicio.getUTCMonth(); // 0-based
   const diasMes = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   return { diasTramo, diasMes };
+}
+
+/**
+ * `true` when the period is a COMPLETE natural period of the employee's payment
+ * frequency — a whole month (MENSUAL), a whole fortnight (QUINCENAL) or a whole
+ * Monday→Sunday week (SEMANAL). Anything shorter is PARTIAL and gets prorated by
+ * calendar days.
+ *
+ * Boundaries are COT day borders, so `inicio` sits at 05:00 UTC of the first day
+ * and `fin` at 05:00 UTC of the day after the last:
+ * - MENSUAL: complete when the span equals the days of the month. A `[1st → today]`
+ *   period before month end is PARTIAL.
+ * - QUINCENAL: complete for the natural fortnights [1–15] or [16–last day].
+ * - SEMANAL: complete for a 7-day week that starts on Monday.
+ */
+function esPeriodoCompleto(frecuenciaPago: FrecuenciaPago, inicio: Date, fin: Date): boolean {
+  const { diasTramo, diasMes } = diasDelPeriodo(inicio, fin);
+
+  if (frecuenciaPago === 'SEMANAL') {
+    return diasTramo === 7 && inicio.getUTCDay() === 1; // 1 = Monday
+  }
+
+  if (frecuenciaPago === 'MENSUAL') {
+    return diasTramo === diasMes;
+  }
+
+  // QUINCENAL: natural fortnights [1–15] and [16–last day of month].
+  const dia = inicio.getUTCDate();
+  if (dia === 1) return diasTramo === 15;
+  if (dia === 16) return diasTramo === diasMes - 15;
+  return false;
+}
+
+/**
+ * Fixed monthly salary (`sueldoFijo`) share for a period, per the owner's rule:
+ * - COMPLETE period of the frequency → the exact share:
+ *   QUINCENAL → monthly / 2, SEMANAL → monthly / 4, MENSUAL → the full monthly.
+ * - PARTIAL period (e.g. the MENSUAL `[1st → today]` before month end, or a
+ *   tenure that covers only part of the period) → prorate by calendar days
+ *   (daily rate = monthly ÷ days of the period's month), preserving the old
+ *   behaviour.
+ *
+ * Single source of truth shared by `NominaPendienteUseCase` (pre-liquidación)
+ * and `LiquidarEmpleadaUseCase` (historial) so both never drift.
+ */
+export function sueldoFijoDelPeriodo(
+  sueldoFijoMensual: number,
+  frecuenciaPago: FrecuenciaPago,
+  periodoInicio: Date,
+  periodoFin: Date,
+): number {
+  if (sueldoFijoMensual <= 0) return 0;
+
+  if (esPeriodoCompleto(frecuenciaPago, periodoInicio, periodoFin)) {
+    switch (frecuenciaPago) {
+      case 'QUINCENAL':
+        return Math.round(sueldoFijoMensual / 2);
+      case 'SEMANAL':
+        return Math.round(sueldoFijoMensual / 4);
+      default:
+        return Math.round(sueldoFijoMensual);
+    }
+  }
+
+  const { diasTramo, diasMes } = diasDelPeriodo(periodoInicio, periodoFin);
+  return diasMes > 0 ? Math.round((sueldoFijoMensual * diasTramo) / diasMes) : 0;
 }

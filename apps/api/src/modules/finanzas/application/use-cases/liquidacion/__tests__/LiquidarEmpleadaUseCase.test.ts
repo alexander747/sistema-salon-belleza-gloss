@@ -492,16 +492,16 @@ describe('LiquidarEmpleadaUseCase', () => {
     expect(result).toEqual(expect.objectContaining({ id: 15, totalPagado: 230000 }));
   });
 
-  it('liquida a empleada QUINCENAL prorrateando el comp fijo por días del período (coherente con NominaPendiente)', async () => {
+  it('liquida a empleada QUINCENAL con media mensualidad por la quincena completa (coherente con NominaPendiente)', async () => {
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, frecuenciaPago: 'QUINCENAL', sueldoFijo: 200000, bonoHorario: 50000 }),
     );
     mockRegistroRepo.search.mockResolvedValue([]);
     mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
     mockLiquidacionRepo.create.mockResolvedValue({ id: 20 });
-    mockLiquidacionRepo.findById.mockResolvedValue({ id: 20, totalPagado: 120968 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 20, totalPagado: 124194 });
 
-    // Quincena 1-15 de agosto (15 días de 31) — bordes Colombia (05:00 UTC)
+    // Quincena 1-15 de agosto (15 días) — bordes Colombia (05:00 UTC)
     const result = await useCase.execute({
       ...baseInput,
       periodoInicio: new Date('2026-08-01T05:00:00.000Z'),
@@ -512,27 +512,27 @@ describe('LiquidarEmpleadaUseCase', () => {
       expect.objectContaining({
         totalComisiones: 0,
         totalPropinas: 0,
-        // 200.000 × 15/31 = 96.774; 50.000 × 15/31 = 24.194
-        sueldoFijo: 96774,
+        // Quincena COMPLETA → 200.000 / 2 = 100.000; bono: 50.000 × 15/31 = 24.194
+        sueldoFijo: 100000,
         bonoHorario: 24194,
-        totalPagado: 120968,
+        totalPagado: 124194,
         estado: 'PAGADA',
       }),
       expect.anything(),
     );
-    expect(result).toEqual(expect.objectContaining({ id: 20, totalPagado: 120968 }));
+    expect(result).toEqual(expect.objectContaining({ id: 20, totalPagado: 124194 }));
   });
 
-  it('liquida a empleada SEMANAL prorrateando el comp fijo por días del período (coherente con NominaPendiente)', async () => {
+  it('liquida a empleada SEMANAL con un cuarto de mensualidad por la semana completa (coherente con NominaPendiente)', async () => {
     mockUsuarioRepo.findBySalonAndId.mockResolvedValue(
       makeEmpleada({ id: 2, frecuenciaPago: 'SEMANAL', sueldoFijo: 200000, bonoHorario: 50000 }),
     );
     mockRegistroRepo.search.mockResolvedValue([]);
     mockLiquidacionRepo.findBySalonEmpleadaAndPeriodo.mockResolvedValue([]);
     mockLiquidacionRepo.create.mockResolvedValue({ id: 30 });
-    mockLiquidacionRepo.findById.mockResolvedValue({ id: 30, totalPagado: 56451 });
+    mockLiquidacionRepo.findById.mockResolvedValue({ id: 30, totalPagado: 61290 });
 
-    // Semana 10-16 de agosto (7 días de 31) — bordes Colombia (05:00 UTC)
+    // Semana 10-16 de agosto (7 días) — bordes Colombia (05:00 UTC)
     const result = await useCase.execute({
       ...baseInput,
       periodoInicio: new Date('2026-08-10T05:00:00.000Z'),
@@ -543,15 +543,15 @@ describe('LiquidarEmpleadaUseCase', () => {
       expect.objectContaining({
         totalComisiones: 0,
         totalPropinas: 0,
-        // 200.000 × 7/31 = 45.161; 50.000 × 7/31 = 11.290
-        sueldoFijo: 45161,
+        // Semana COMPLETA → 200.000 / 4 = 50.000; bono: 50.000 × 7/31 = 11.290
+        sueldoFijo: 50000,
         bonoHorario: 11290,
-        totalPagado: 56451,
+        totalPagado: 61290,
         estado: 'PAGADA',
       }),
       expect.anything(),
     );
-    expect(result).toEqual(expect.objectContaining({ id: 30, totalPagado: 56451 }));
+    expect(result).toEqual(expect.objectContaining({ id: 30, totalPagado: 61290 }));
   });
 
   it('hace rollback y re-lanza el error cuando falla la creación dentro de la transacción', async () => {

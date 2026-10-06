@@ -247,19 +247,25 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
       return Promise.resolve({ data: {} });
     });
 
-    expect(await screen.findByText('💰 Ingresos brutos')).toBeInTheDocument();
+    expect(await screen.findByText('💰 Ventas brutas (antes de descuentos)')).toBeInTheDocument();
     expect(screen.getByText(fmt(350000))).toBeInTheDocument(); // ingresos brutos
     expect(screen.getByText(fmt(315000))).toBeInTheDocument(); // ingresos netos
     expect(screen.getByText(fmt(35000))).toBeInTheDocument(); // descuentos
     expect(screen.getByText(fmt(60000))).toBeInTheDocument(); // insumos
     expect(screen.getByText(fmt(20000))).toBeInTheDocument(); // devoluciones
     expect(screen.getByText(fmt(-93000))).toBeInTheDocument(); // utilidad neta
+    // Nuevas tarjetas informativas: atenciones y ticket promedio (neto ÷ atenciones = 315000 / 3)
+    expect(screen.getByText('✂️ Atenciones')).toBeInTheDocument();
+    expect(screen.getByText('🎫 Ticket promedio')).toBeInTheDocument();
+    expect(screen.getByText(fmt(105000))).toBeInTheDocument();
+    // El salón ya no acepta propinas: la tarjeta se eliminó junto con el uso de pyl.propinas
+    expect(screen.queryByText('🎁 Propinas')).toBeNull();
     // Sin filtro de empleada se conserva el layout salon-wide: Gastos/Devoluciones
     // totales y utilidad neta, SIN el desglose "Del salón".
     expect(screen.getByText(fmt(280000))).toBeInTheDocument(); // gastos salon-wide (200000 + 80000)
-    expect(screen.getByText('📊 Utilidad neta')).toBeInTheDocument();
+    expect(screen.getByText('📊 Ganancia neta (utilidad)')).toBeInTheDocument();
     expect(screen.queryByText('🏠 Del salón (no se descuenta a la empleada)')).toBeNull();
-    expect(screen.queryByText('👤 Contribución (resultado de la empleada)')).toBeNull();
+    expect(screen.queryByText('👤 Aporte de la empleada (lo que genera)')).toBeNull();
   });
 
   it('con filtro de empleada muestra su contribución y los gastos/devoluciones del salón en un grupo aparte', async () => {
@@ -294,7 +300,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '📊 Reportes' }));
-    await screen.findByText('💰 Ingresos brutos');
+    await screen.findByText('💰 Ventas brutas (antes de descuentos)');
 
     // Seleccionar la empleada en el filtro (dispara el refetch con usuarioId)
     fireEvent.focus(screen.getByPlaceholderText('🔍 Buscar empleada...'));
@@ -309,7 +315,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
 
     // Contribución de la empleada (cobrado − insumos − comisiones)
     expect(
-      await screen.findByText('👤 Contribución (resultado de la empleada)'),
+      await screen.findByText('👤 Aporte de la empleada (lo que genera)'),
     ).toBeInTheDocument();
     expect(screen.getByText(fmt(80000))).toBeInTheDocument();
 
@@ -323,7 +329,7 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(screen.getByText(fmt(20000))).toBeInTheDocument(); // devolucionesNegocio
 
     // En modo filtrado no se muestra la utilidad neta salon-wide
-    expect(screen.queryByText('📊 Utilidad neta')).toBeNull();
+    expect(screen.queryByText('📊 Ganancia neta (utilidad)')).toBeNull();
   });
 
   it('P&L cash-basis: muestra Cobrado, Fiado del período y Deudas por cobrar (PR2)', async () => {
@@ -340,15 +346,15 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
       return Promise.resolve({ data: {} });
     });
 
-    expect(await screen.findByText('💰 Cobrado')).toBeInTheDocument();
+    expect(await screen.findByText('💰 Cobrado en el período (lo que entró)')).toBeInTheDocument();
     expect(screen.getByText(fmt(150000))).toBeInTheDocument(); // cobrado
-    expect(screen.getByText('🧾 Fiado del período')).toBeInTheDocument();
+    expect(screen.getByText('🧾 Fiado nuevo (aún sin cobrar)')).toBeInTheDocument();
     expect(screen.getByText(fmt(100000))).toBeInTheDocument(); // fiadoPeriodo
     // La deuda por cobrar es un snapshot acumulado a la fecha Hasta: se movió
     // fuera de "Dinero de caja" a su propia sección de cuentas por cobrar.
     expect(screen.getByText('📌 Cuentas por cobrar')).toBeInTheDocument();
     expect(
-      screen.getByText('📌 Deudas por cobrar al 2026-05-31 (acumulado)'),
+      screen.getByText('📌 Te deben (total acumulado al 2026-05-31)'),
     ).toBeInTheDocument();
     expect(screen.getByText(fmt(210000))).toBeInTheDocument(); // deudasPorCobrar
   });
@@ -608,7 +614,7 @@ describe('FinanzasPage — Exportar Excel', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '📊 Reportes' }));
-    await screen.findByText('💰 Ingresos brutos');
+    await screen.findByText('💰 Ventas brutas (antes de descuentos)');
 
     fireEvent.click(screen.getByRole('button', { name: /exportar excel/i }));
 
@@ -659,7 +665,7 @@ describe('FinanzasPage — Exportar Excel', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '📊 Reportes' }));
-    await screen.findByText('💰 Ingresos brutos');
+    await screen.findByText('💰 Ventas brutas (antes de descuentos)');
 
     fireEvent.click(screen.getByRole('button', { name: /exportar excel/i }));
 
@@ -1261,7 +1267,9 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
       if (url.includes('/caja/actual')) return Promise.reject(error404);
       if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: [] });
       if (url.includes('/finanzas/nomina')) return Promise.resolve({ data: rows });
-      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 1, nombre: 'Ana' }, { id: 2, nombre: 'Beto' }] });
+      }
       if (url.includes('/clientes')) return Promise.resolve({ data: [] });
       if (url.includes('/registros')) {
         return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
@@ -1276,20 +1284,22 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
     expect(await screen.findByText('3 servicios realizados')).toBeInTheDocument();
     expect(screen.getByText('7 servicios realizados')).toBeInTheDocument();
 
-    const select = screen.getByLabelText('Filtrar por empleada');
-    expect(within(select).getByRole('option', { name: 'Todas' })).toBeInTheDocument();
-    expect(within(select).getByRole('option', { name: 'Ana' })).toBeInTheDocument();
-    expect(within(select).getByRole('option', { name: 'Beto' })).toBeInTheDocument();
+    const search = screen.getByPlaceholderText('🔍 Buscar empleada...');
 
-    fireEvent.change(select, { target: { value: '1' } });
+    // Select Ana → only her card remains.
+    fireEvent.focus(search);
+    fireEvent.click(await screen.findByRole('option', { name: /Ana/ }));
     expect(screen.getByText('3 servicios realizados')).toBeInTheDocument();
     expect(screen.queryByText('7 servicios realizados')).not.toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: '2' } });
+    // Switch to Beto (reopening the dropdown refetches the active employees).
+    fireEvent.focus(search);
+    fireEvent.click(await screen.findByRole('option', { name: /Beto/ }));
     expect(screen.queryByText('3 servicios realizados')).not.toBeInTheDocument();
     expect(screen.getByText('7 servicios realizados')).toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: '' } });
+    // Clearing the selection goes back to "all employees" (Todas).
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar empleada' }));
     expect(screen.getByText('3 servicios realizados')).toBeInTheDocument();
     expect(screen.getByText('7 servicios realizados')).toBeInTheDocument();
   });
@@ -1353,7 +1363,10 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
     expect(await screen.findByText(fmt(111111))).toBeInTheDocument();
     expect(screen.getByText(fmt(222222))).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Filtrar por empleada'), { target: { value: '1' } });
+    // Filter by Ana through the searchable employee selector (active employees).
+    const search = screen.getByPlaceholderText('🔍 Buscar empleada...');
+    fireEvent.focus(search);
+    fireEvent.click(await screen.findByRole('option', { name: /Ana/ }));
 
     // After filtering, only Ana's liquidation remains (the amount also shows in "Total filtrado").
     expect(screen.getAllByText(fmt(111111)).length).toBeGreaterThanOrEqual(1);
@@ -1452,39 +1465,88 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     await screen.findByText('Auditoría pre-liquidación');
   }
 
-  it('precarga Desde/Hasta con el MES COMPLETO (1° → último día) aunque la fila sea semanal', async () => {
+  it('precarga Desde/Hasta con el período REAL de la fila (semana), no el mes completo', async () => {
     auditApiMock();
     await openAuditModal();
 
-    // El default es el mes completo del período de la fila, no la semana
-    expect(screen.getByLabelText('Período desde')).toHaveValue('2026-08-01');
-    expect(screen.getByLabelText('Período hasta')).toHaveValue('2026-08-31');
+    // El default es el período de la frecuencia (SEMANAL: lunes 10 → domingo 16),
+    // porque el fin de período del backend es EXCLUSIVO (17/08 05:00 UTC).
+    expect(screen.getByLabelText('Período desde')).toHaveValue('2026-08-10');
+    expect(screen.getByLabelText('Período hasta')).toHaveValue('2026-08-16');
 
     // El sueldo fijo mensual se muestra como aclaración (prorrateado por frecuencia SEMANAL)
     expect(screen.getByText(/sueldo fijo se guarda como valor mensual/i)).toBeInTheDocument();
   });
 
-  it('con el mes completo por defecto muestra todos los registros del mes; editar Hasta re-filtra', async () => {
+  it('empleada QUINCENAL: default = quincena real (01→15) y chips consistentes', async () => {
+    const quincenal = {
+      empleadaId: 7,
+      nombre: 'Lucely',
+      totalComisionesPendientes: 120000,
+      totalPropinas: 0,
+      bonoHorario: 0,
+      sueldoFijo: 500000,
+      sueldoFijoMensual: 1000000,
+      porcentajeComisionServicio: 40,
+      totalAPagar: 620000,
+      cantidadRegistros: 0,
+      periodoInicio: '2026-08-01T05:00:00.000Z',
+      periodoFin: '2026-08-16T05:00:00.000Z', // exclusivo → 15/08 inclusivo
+      frecuenciaPago: 'QUINCENAL',
+    };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/nomina/historial')) return Promise.resolve({ data: [] });
+      if (url.includes('/finanzas/nomina')) return Promise.resolve({ data: [quincenal] });
+      if (url.includes('/prestamos')) return Promise.resolve({ data: { data: [] } });
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 0 } } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Auditar y Liquidar' }));
+    await screen.findByText('Auditoría pre-liquidación');
+
+    // QUINCENAL: 01 → 15/08 (el fin de período llega como borde exclusivo 16/08 05:00 UTC).
+    expect(screen.getByLabelText('Período desde')).toHaveValue('2026-08-01');
+    expect(screen.getByLabelText('Período hasta')).toHaveValue('2026-08-15');
+
+    // Chips inequívocos: el sueldo es el del período y la comisión es la config actual.
+    expect(screen.getByText(/Sueldo fijo del período/i)).toBeInTheDocument();
+    expect(screen.getByText(/Comisión actual: 40%/i)).toBeInTheDocument();
+
+    // La nota de prorrateo sigue siendo correcta para la frecuencia.
+    expect(screen.getByText(/sueldo fijo se guarda como valor mensual/i)).toBeInTheDocument();
+    expect(screen.getByText(/QUINCENAL →/i)).toBeInTheDocument();
+  });
+
+  it('con el período de la semana por defecto solo muestra registros de la semana; editar Hasta re-filtra', async () => {
     auditApiMock();
     await openAuditModal();
 
-    // Default = mes completo → ambos registros (11 y 20/08) están dentro
+    // Default = semana (10→16/08) → solo el registro del 11/08; el del 20/08 queda fuera.
     expect(await screen.findByText('Manicure Básico')).toBeInTheDocument();
-    expect(screen.getByText('Manicure Avanzado')).toBeInTheDocument();
-    expect(screen.getByText('2 registros')).toBeInTheDocument();
+    expect(screen.queryByText('Manicure Avanzado')).toBeNull();
+    expect(screen.getByText('1 registros')).toBeInTheDocument();
 
-    // Acotar Hasta al 15/08 → el registro del 20/08 sale del detalle
+    // Extender Hasta al 31/08 → el registro del 20/08 entra al detalle.
     fireEvent.change(screen.getByLabelText('Período hasta'), {
-      target: { value: '2026-08-15' },
+      target: { value: '2026-08-31' },
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Manicure Avanzado')).toBeNull();
+      expect(screen.getByText('Manicure Avanzado')).toBeInTheDocument();
     });
-    expect(screen.getByText('1 registros')).toBeInTheDocument();
+    expect(screen.getByText('2 registros')).toBeInTheDocument();
   });
 
-  it('confirmar la liquidación envía el período EDITADO en bordes Colombia (T05:00:00.000Z)', async () => {
+  it('confirmar la liquidación pide confirmación antes del POST y envía el período EDITADO en bordes Colombia', async () => {
     auditApiMock();
     mockPost.mockResolvedValue({ data: {} });
     await openAuditModal();
@@ -1495,7 +1557,14 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     fireEvent.change(screen.getByLabelText('Período hasta'), {
       target: { value: '2026-08-20' },
     });
+
+    // Primer clic: NO debe POSTear todavía, solo abrir la confirmación.
     fireEvent.click(screen.getByRole('button', { name: '✅ Confirmar liquidación' }));
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(screen.getByText(/¿Confirmar la liquidación de Ana/i)).toBeInTheDocument();
+
+    // Confirmación explícita → recién ahora se POSTea.
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }));
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
@@ -1509,7 +1578,7 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     });
   });
 
-  it('avisa si el período (mes completo por defecto) se solapa con una liquidación previa del historial', async () => {
+  it('avisa si el período editado se solapa con una liquidación previa del historial', async () => {
     auditApiMock({
       historial: [
         {
@@ -1524,12 +1593,19 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     });
     await openAuditModal();
 
-    // El default es el mes completo (01→31/08) → SOLAPA la liquidación 01→09
+    // El default (semana 10→16) NO solapa la liquidación 01→09.
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // Editar Desde al 01/08 → el rango 01→16 SÍ solapa la liquidación 01→09.
+    fireEvent.change(screen.getByLabelText('Período desde'), {
+      target: { value: '2026-08-01' },
+    });
+
     const alerta = await screen.findByRole('alert');
     expect(within(alerta).getByText(/#5/i)).toBeInTheDocument();
     expect(alerta).toHaveTextContent(/comp fijo podría pagarse nuevamente/i);
 
-    // Acotar Desde al 10/08 → el rango 10→31 ya no solapa la liquidación 01→09
+    // Acotar Desde al 10/08 → el rango 10→16 ya no solapa la liquidación 01→09.
     fireEvent.change(screen.getByLabelText('Período desde'), {
       target: { value: '2026-08-10' },
     });
@@ -1584,7 +1660,7 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     expect(within(dialog).queryByText('Propinas')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('🎁')).not.toBeInTheDocument();
 
-    // Total bruto no longer includes tips: 50000 comisiones + 62500 bono+sueldo.
+    // Total bruto no longer includes tips: periodo de la semana → 30000 comisiones + 62500 bono+sueldo.
     const fmt = (n: number) =>
       new Intl.NumberFormat('es-CO', {
         style: 'currency',
@@ -1595,8 +1671,8 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
         .format(n)
         .replace(/\u00a0/g, ' ');
     expect(within(dialog).getByText('Total bruto')).toBeInTheDocument();
-    expect(within(dialog).getByText(fmt(112500))).toBeInTheDocument();
-    expect(within(dialog).queryByText(fmt(117500))).not.toBeInTheDocument();
+    // 30000 comisiones + 62500 bono+sueldo: la propina (5000) NO entra al total bruto.
+    expect(within(dialog).getByText(fmt(92500))).toBeInTheDocument();
   });
 
   it('pide el rango de fechas al server y totaliza TODOS los registros del período (sin cap de 50)', async () => {
@@ -1642,7 +1718,7 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
 
     await openAuditModal();
 
-    // El fetch del modal lleva el rango del período (mes completo por defecto) y estado=ACTIVOS.
+    // El fetch del modal lleva el rango del período real de la fila (semana) y estado=ACTIVOS.
     const auditCall = mockGet.mock.calls.find(
       ([u, c]) => String(u).endsWith('/registros') && c?.params?.usuarioId === 1,
     );
@@ -1650,8 +1726,8 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     expect(auditCall![1].params).toMatchObject({
       usuarioId: 1,
       estado: 'ACTIVOS',
-      desde: '2026-08-01',
-      hasta: '2026-08-31',
+      desde: '2026-08-10',
+      hasta: '2026-08-16',
     });
 
     // Totales sobre el set COMPLETO (120 × 1000), no los 50 del cap viejo.
@@ -1669,6 +1745,46 @@ describe('FinanzasPage — modal auditoría (período editable / pago fuera de c
     // Los totales suman el set completo (120 × 1000), no el cap viejo de 50.
     expect(within(dialog).getAllByText(fmt(120000)).length).toBeGreaterThan(0);
     expect(within(dialog).queryAllByText(fmt(50000)).length).toBe(0);
+  });
+
+  it('liquidación exitosa: muestra toast de confirmación y cierra el modal', async () => {
+    auditApiMock();
+    mockPost.mockResolvedValue({ data: { id: 99 } });
+    await openAuditModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '✅ Confirmar liquidación' }));
+    // Aún no hay POST hasta confirmar explícitamente.
+    expect(mockPost).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }));
+
+    expect(
+      await screen.findByText(/Liquidación de Ana registrada correctamente/i),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('Auditoría pre-liquidación')).toBeNull();
+    });
+  });
+
+  it('liquidación fallida: toast de error y la fila sigue pendiente (sin cambio optimista)', async () => {
+    auditApiMock();
+    mockPost.mockRejectedValue({
+      response: { data: { error: { message: 'CAJA_CERRADA' } } },
+    });
+    await openAuditModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '✅ Confirmar liquidación' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, confirmar' }));
+
+    // Toast de error + el error inline del backend.
+    expect(
+      await screen.findByText(/No se pudo registrar la liquidación/i),
+    ).toBeInTheDocument();
+    // El modal permanece abierto (no hubo cierre optimista).
+    expect(screen.getByText('Auditoría pre-liquidación')).toBeInTheDocument();
+
+    // Al cerrar, la empleada sigue listada como pendiente (la fila NO se removió).
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(await screen.findByRole('button', { name: 'Auditar y Liquidar' })).toBeInTheDocument();
   });
 });
 

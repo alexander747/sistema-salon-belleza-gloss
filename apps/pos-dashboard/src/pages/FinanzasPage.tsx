@@ -463,13 +463,6 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Primer día del mes de una fecha, como 'YYYY-MM-DD'. */
-function firstOfMonthISO(d: Date): string {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return `${y}-${m}-01`;
-}
-
 /**
  * Fecha de HOY en Colombia (UTC-5) como 'YYYY-MM-DD'. A las 23:30 COT del 31/08,
  * UTC ya es 01/09 — la UI debe mostrar el 31/08 (día de negocio Colombia).
@@ -2672,7 +2665,10 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
 
   // ── Filters (client-side) ──
   // The employee filter is shared by the Pendientes and Historial sub-tabs.
+  // `nominaEmpleadaId` keeps its `''`-means-all semantics; the display name is
+  // only cached so the searchable select can show the current selection.
   const [nominaEmpleadaId, setNominaEmpleadaId] = useState('');
+  const [nominaEmpleadaNombre, setNominaEmpleadaNombre] = useState('');
   const [historialDesde, setHistorialDesde] = useState('');
   const [historialHasta, setHistorialHasta] = useState('');
   const [historialSearch, setHistorialSearch] = useState('');
@@ -2694,6 +2690,15 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
   // Detail modal opened from the audit table (each service row opens its registro)
   const [auditDetailRegistro, setAuditDetailRegistro] = useState<Registro | null>(null);
   const [auditDetailOpen, setAuditDetailOpen] = useState(false);
+
+  // ── Liquidar confirmation + toast (Task B: never POST straight from the click) ──
+  const [confirmLiquidarOpen, setConfirmLiquidarOpen] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // ── Payment adjustment state ──
   const [ajustarPago, setAjustarPago] = useState(false);
@@ -2768,21 +2773,6 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
       }) ?? null
     );
   }, [historial, selectedEmpleada, auditDesde, auditHasta]);
-
-  // ── Employee options for the shared filter ──
-  // Union of the loaded employees map, the pending rows and the payroll history,
-  // so the filter stays usable even when one source is missing a name.
-  const empleadasParaFiltro = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const [id, nombre] of empleadasMap) map.set(id, nombre);
-    for (const p of pendientes) {
-      if (!map.has(p.empleadaId)) map.set(p.empleadaId, p.nombre);
-    }
-    for (const h of historial) {
-      if (!map.has(h.usuarioId)) map.set(h.usuarioId, `Empleada #${h.usuarioId}`);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'es'));
-  }, [empleadasMap, pendientes, historial]);
 
   // ── Filtered historial (client-side) ──
   const filteredHistorial = useMemo(() => {
@@ -2920,17 +2910,14 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
 
   const handleAuditar = async (emp: NominaEmpleado) => {
     setSelectedEmpleada(emp);
-    // Default del período editable = MES COMPLETO (1° → último día del mes de la
-    // fila pendiente), sin importar la frecuencia (semanal/quincenal/mensual).
-    // El usuario MAY cambiarlo: pago fuera de ciclo / adelantado.
-    const mesInicio = periodoDayInput(emp.periodoInicio);
-    const primerDia = mesInicio ? firstOfMonthISO(new Date(`${mesInicio}T12:00:00Z`)) : '';
-    // Último día del mes: día 0 del mes siguiente (Date.UTC normaliza).
-    const anio = Number(primerDia.slice(0, 4));
-    const mes = Number(primerDia.slice(5, 7));
-    const ultimoDiaMes = String(new Date(Date.UTC(anio, mes, 0)).getUTCDate()).padStart(2, '0');
-    setAuditDesde(primerDia);
-    setAuditHasta(`${primerDia.slice(0, 8)}${ultimoDiaMes}`);
+    // Default = the employee's REAL pending period (frequency-aware, computed by the
+    // backend on the pendiente row): QUINCENAL 1–15 / 16–end, SEMANAL week, MENSUAL.
+    // `periodoFin` is an EXCLUSIVE Colombia boundary → render it as the inclusive last
+    // day. The user MAY still edit it: pago fuera de ciclo / adelantado.
+    const periodoDesdeDefault = periodoDayInput(emp.periodoInicio);
+    const periodoHastaDefault = periodoDayInput(emp.periodoFin, true);
+    setAuditDesde(periodoDesdeDefault);
+    setAuditHasta(periodoHastaDefault);
     setPagoAjustado(emp.totalAPagar);
     setAjustarPago(false);
     setMotivoAjuste('');
@@ -2969,7 +2956,6 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
       setAuditarLoading(true);
       try {
         const AUDITORIA_PAGE_SIZE = 100;
-        const auditHastaDefault = `${primerDia.slice(0, 8)}${ultimoDiaMes}`;
         let allRegs: Registro[] = [];
         let page = 1;
         for (;;) {
@@ -2977,7 +2963,7 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
             params: {
               usuarioId: emp.empleadaId,
               estado: 'ACTIVOS',
-              ...(primerDia ? { desde: primerDia, hasta: auditHastaDefault } : {}),
+              ...(periodoDesdeDefault ? { desde: periodoDesdeDefault, hasta: periodoHastaDefault } : {}),
               page,
               limit: AUDITORIA_PAGE_SIZE,
             },
@@ -3006,6 +2992,8 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
   const handleConfirmLiquidar = async () => {
     if (!selectedEmpleada) return;
     setAuditarError(null);
+    setConfirmLiquidarOpen(false);
+    const nombreEmpleada = selectedEmpleada.nombre;
     const totalPagadoOverride = ajustarPago && motivoAjuste.length >= 10 ? pagoAjustado : undefined;
     const descuentos = Object.entries(descuentosPrestamos)
       .filter(([, v]) => v.checked && v.monto > 0)
@@ -3032,9 +3020,12 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
       setAuditDesde('');
       setAuditHasta('');
       setAuditarAllRegistros([]);
+      setToast({ type: 'success', message: `Liquidación de ${nombreEmpleada} registrada correctamente.` });
     } catch (err: any) {
       const msg = err?.message ?? err?.response?.data?.error?.message ?? 'Error al liquidar nómina';
+      // No optimistic removal: the pending row/state is untouched, only the error is surfaced.
       setAuditarError(msg);
+      setToast({ type: 'error', message: `No se pudo registrar la liquidación: ${msg}` });
     }
   };
 
@@ -3117,18 +3108,21 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
           fontWeight: 500,
         }}>
           Empleada:
-          <select
-            aria-label="Filtrar por empleada"
-            className={styles.filterInput}
-            style={{ display: 'block', marginTop: '0.2rem', minWidth: '160px' }}
-            value={nominaEmpleadaId}
-            onChange={(e) => setNominaEmpleadaId(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {empleadasParaFiltro.map(([id, nombre]) => (
-              <option key={id} value={id}>{nombre}</option>
-            ))}
-          </select>
+          {salonId && (
+            <div style={{ marginTop: '0.2rem', minWidth: '200px' }}>
+              <EmpleadaSearchableSelect
+                salonId={salonId}
+                value={nominaEmpleadaId ? Number(nominaEmpleadaId) : null}
+                selectedName={nominaEmpleadaNombre || undefined}
+                onSelect={(e) => {
+                  // `''` = "Todas" (all employees), same semantics as before.
+                  setNominaEmpleadaId(e.id ? String(e.id) : '');
+                  setNominaEmpleadaNombre(e.id ? e.nombre : '');
+                }}
+                placeholder="🔍 Buscar empleada..."
+              />
+            </div>
+          )}
         </label>
       </div>
 
@@ -3600,7 +3594,7 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
                           fontFamily: "'DM Sans', sans-serif",
                           whiteSpace: 'nowrap',
                         }}>
-                          💼 Sueldo fijo: {formatCurrency(selectedEmpleada.sueldoFijo)}
+                          💼 Sueldo fijo del período: {formatCurrency(selectedEmpleada.sueldoFijo)}
                         </span>
                       )}
                       {selectedEmpleada.porcentajeComisionServicio > 0 && (
@@ -3614,7 +3608,7 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
                           fontFamily: "'DM Sans', sans-serif",
                           whiteSpace: 'nowrap',
                         }}>
-                          💰 Comisión: {selectedEmpleada.porcentajeComisionServicio}%
+                          💰 Comisión actual: {selectedEmpleada.porcentajeComisionServicio}%
                         </span>
                       )}
                       {selectedEmpleada.sueldoFijo <= 0 && selectedEmpleada.porcentajeComisionServicio <= 0 && (
@@ -4318,45 +4312,102 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
               )}
 
               <div className={styles.auditModalFooter}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setAuditarOpen(false);
-                    setSelectedEmpleada(null);
-                    setAjustarPago(false);
-                    setMotivoAjuste('');
-                    setAuditDesde('');
-                    setAuditHasta('');
-                    setAuditarAllRegistros([]);
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <motion.button
-                  style={{
-                    ...primaryBtnStyle,
-                    padding: '0.6rem 1.5rem',
-                    fontSize: '0.875rem',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    boxShadow: submittingId === selectedEmpleada.empleadaId
-                      ? 'none'
-                      : '0 2px 16px rgba(212,168,83,0.35)',
-                  }}
-                  whileHover={submittingId === selectedEmpleada.empleadaId ? {} : {
-                    scale: 1.03,
-                    boxShadow: '0 4px 24px rgba(212,168,83,0.5)',
-                  }}
-                  whileTap={{ scale: 0.97 }}
-                  disabled={submittingId === selectedEmpleada.empleadaId || (ajustarPago && motivoAjuste.length < 10)}
-                  onClick={handleConfirmLiquidar}
-                >
-                  {submittingId === selectedEmpleada.empleadaId
-                    ? '⏳ Liquidando...'
-                    : '✅ Confirmar liquidación'}
-                </motion.button>
+                {confirmLiquidarOpen ? (
+                  <>
+                    <span style={{
+                      marginRight: 'auto',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.8125rem',
+                      color: 'var(--text-primary)',
+                      fontWeight: 600,
+                      alignSelf: 'center',
+                    }}>
+                      ¿Confirmar la liquidación de {selectedEmpleada.nombre} por{' '}
+                      {((): string => {
+                        const base = ajustarPago ? pagoAjustado : selectedEmpleada.totalAPagar;
+                        const descuento = Object.entries(descuentosPrestamos)
+                          .filter(([, v]) => v.checked)
+                          .reduce((s, [, v]) => s + v.monto, 0);
+                        return formatCurrency(Math.max(0, base - descuento));
+                      })()}?
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={submittingId === selectedEmpleada.empleadaId}
+                      onClick={() => setConfirmLiquidarOpen(false)}
+                    >
+                      Volver
+                    </Button>
+                    <motion.button
+                      style={{
+                        ...primaryBtnStyle,
+                        padding: '0.6rem 1.5rem',
+                        fontSize: '0.875rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        boxShadow: submittingId === selectedEmpleada.empleadaId
+                          ? 'none'
+                          : '0 2px 16px rgba(212,168,83,0.35)',
+                      }}
+                      whileHover={submittingId === selectedEmpleada.empleadaId ? {} : {
+                        scale: 1.03,
+                        boxShadow: '0 4px 24px rgba(212,168,83,0.5)',
+                      }}
+                      whileTap={{ scale: 0.97 }}
+                      disabled={submittingId === selectedEmpleada.empleadaId}
+                      onClick={handleConfirmLiquidar}
+                    >
+                      {submittingId === selectedEmpleada.empleadaId
+                        ? '⏳ Liquidando...'
+                        : 'Sí, confirmar'}
+                    </motion.button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setAuditarOpen(false);
+                        setSelectedEmpleada(null);
+                        setAjustarPago(false);
+                        setMotivoAjuste('');
+                        setAuditDesde('');
+                        setAuditHasta('');
+                        setAuditarAllRegistros([]);
+                        setConfirmLiquidarOpen(false);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <motion.button
+                      style={{
+                        ...primaryBtnStyle,
+                        padding: '0.6rem 1.5rem',
+                        fontSize: '0.875rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        boxShadow: submittingId === selectedEmpleada.empleadaId
+                          ? 'none'
+                          : '0 2px 16px rgba(212,168,83,0.35)',
+                      }}
+                      whileHover={submittingId === selectedEmpleada.empleadaId ? {} : {
+                        scale: 1.03,
+                        boxShadow: '0 4px 24px rgba(212,168,83,0.5)',
+                      }}
+                      whileTap={{ scale: 0.97 }}
+                      disabled={submittingId === selectedEmpleada.empleadaId || (ajustarPago && motivoAjuste.length < 10)}
+                      onClick={() => setConfirmLiquidarOpen(true)}
+                    >
+                      {submittingId === selectedEmpleada.empleadaId
+                        ? '⏳ Liquidando...'
+                        : '✅ Confirmar liquidación'}
+                    </motion.button>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -4374,6 +4425,35 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
           />
         )}
       </AnimatePresence>
+
+      {/* ── Liquidar feedback toast (success / error) ── */}
+      {toast && (
+        <div
+          role={toast.type === 'error' ? 'alert' : 'status'}
+          aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+          style={{
+            position: 'fixed',
+            right: '1.25rem',
+            bottom: '1.25rem',
+            zIndex: 10000,
+            maxWidth: '380px',
+            padding: '0.75rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            border: `1px solid ${toast.type === 'success' ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'}`,
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-primary)',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.8125rem',
+            boxShadow: '0 8px 28px rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+          }}
+        >
+          <span>{toast.type === 'success' ? '✅' : '⚠️'}</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </motion.div>
   );
 };
@@ -4667,13 +4747,13 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           </div>
           <div className={styles.summaryGrid}>
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
-              <span className={styles.summaryLabel}>💰 Cobrado</span>
+              <span className={styles.summaryLabel}>💰 Cobrado en el período (lo que entró)</span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>
                 {pyl.cobrado != null ? formatCurrency(pyl.cobrado) : '$0'}
               </span>
             </div>
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
-              <span className={styles.summaryLabel}>🧾 Fiado del período</span>
+              <span className={styles.summaryLabel}>🧾 Fiado nuevo (aún sin cobrar)</span>
               <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
                 {pyl.fiadoPeriodo != null ? formatCurrency(pyl.fiadoPeriodo) : '$0'}
               </span>
@@ -4687,7 +4767,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           <div className={styles.summaryGrid}>
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(251,191,36,0.3)' }}>
               <span className={styles.summaryLabel}>
-                📌 Deudas por cobrar al {pyl.hasta} (acumulado)
+                📌 Te deben (total acumulado al {pyl.hasta})
               </span>
               <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>
                 {pyl.deudasPorCobrar != null ? formatCurrency(pyl.deudasPorCobrar) : '$0'}
@@ -4701,34 +4781,44 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           </div>
           <div className={styles.summaryGrid}>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💰 Ingresos brutos</span>
+              <span className={styles.summaryLabel}>💰 Ventas brutas (antes de descuentos)</span>
               <span className={styles.summaryValueAccent}>{formatCurrency(pyl.ingresosBrutos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🏷️ Descuentos</span>
+              <span className={styles.summaryLabel}>🏷️ Descuentos aplicados</span>
               <span className={styles.summaryValue}>{formatCurrency(pyl.descuentos)}</span>
             </div>
             {pyl.incrementos ? (
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>📈 Incrementos</span>
+                <span className={styles.summaryLabel}>📈 Ajustes al alza</span>
                 <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>{formatCurrency(pyl.incrementos)}</span>
               </div>
             ) : null}
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
-              <span className={styles.summaryLabel}>💵 Ingresos netos</span>
+              <span className={styles.summaryLabel}>💵 Ventas netas (después de descuentos)</span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.ingresosNetos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💇 Servicios</span>
+              <span className={styles.summaryLabel}>💇 Ventas de servicios</span>
               <span className={styles.summaryValue} style={{ color: '#818cf8' }}>{formatCurrency(pyl.totalServicios)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🛒 Productos</span>
+              <span className={styles.summaryLabel}>🛒 Ventas de productos</span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.totalProductos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🎁 Propinas</span>
-              <span className={styles.summaryValueSuccess}>{formatCurrency(pyl.propinas)}</span>
+              <span className={styles.summaryLabel}>✂️ Atenciones</span>
+              <span className={styles.summaryValue} style={{ color: '#818cf8' }}>{pyl.cantidadAtenciones}</span>
+            </div>
+            <div className={styles.summaryCard}>
+              <span className={styles.summaryLabel}>🎫 Ticket promedio</span>
+              {/* Ticket = ventas netas del período ÷ atenciones (promedio facturado por atención).
+                  Se usa el neto para reflejar lo realmente facturado, no el bruto. Guard anti división por cero. */}
+              <span className={styles.summaryValue}>
+                {pyl.cantidadAtenciones > 0
+                  ? formatCurrency(pyl.ingresosNetos / pyl.cantidadAtenciones)
+                  : '$0'}
+              </span>
             </div>
           </div>
 
@@ -4748,16 +4838,16 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
                 {/* PR2 — insumos del P&L: solo roles privilegiados */}
                 {isPrivileged && (
                   <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>📦 Insumos</span>
+                    <span className={styles.summaryLabel}>📦 Costo de insumos</span>
                     <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
                   </div>
                 )}
                 <div className={styles.summaryCard}>
-                  <span className={styles.summaryLabel}>👥 Comisiones</span>
+                  <span className={styles.summaryLabel}>👥 Comisiones de empleadas</span>
                   <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
                 </div>
                 <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.contribucion ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
-                  <span className={styles.summaryLabel}>👤 Contribución (resultado de la empleada)</span>
+                  <span className={styles.summaryLabel}>👤 Aporte de la empleada (lo que genera)</span>
                   <span className={styles.summaryValue} style={{ color: (pyl.contribucion ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
                     {formatCurrency(pyl.contribucion ?? 0)}
                   </span>
@@ -4785,16 +4875,16 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
               {/* PR2 — insumos del P&L: solo roles privilegiados */}
               {isPrivileged && (
                 <div className={styles.summaryCard}>
-                  <span className={styles.summaryLabel}>📦 Insumos</span>
+                  <span className={styles.summaryLabel}>📦 Costo de insumos</span>
                   <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
                 </div>
               )}
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>👥 Comisiones</span>
+                <span className={styles.summaryLabel}>👥 Comisiones de empleadas</span>
                 <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
               </div>
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>💸 Gastos</span>
+                <span className={styles.summaryLabel}>💸 Gastos del salón</span>
                 <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>
                   {formatCurrency((pyl.gastosFijos ?? 0) + (pyl.gastosOperativos ?? 0))}
                 </span>
@@ -4804,7 +4894,7 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
                 <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.devoluciones)}</span>
               </div>
               <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.utilidadNeta ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
-                <span className={styles.summaryLabel}>📊 Utilidad neta</span>
+                <span className={styles.summaryLabel}>📊 Ganancia neta (utilidad)</span>
                 <span className={styles.summaryValue} style={{ color: (pyl.utilidadNeta ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
                   {formatCurrency(pyl.utilidadNeta ?? 0)}
                 </span>

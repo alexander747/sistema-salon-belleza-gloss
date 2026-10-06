@@ -971,6 +971,9 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                         <span style={{ color: 'var(--text-secondary)' }}>Monto de apertura</span>
                         <span data-testid="arqueo-monto-apertura" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(montoAperturaDe(esperado, caja))}</span>
                       </div>
+                      <p style={{ ...arqueoNoteStyle, margin: '0 0 0.5rem' }}>
+                        El monto de apertura es la plata con la que abriste el cajón; se arrastra de un día al otro y <strong>no se cuenta como ganancia del negocio</strong>.
+                      </p>
                       <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Cobros en efectivo</span>
                         <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(esperado.porMetodoPago?.EFECTIVO)}</span>

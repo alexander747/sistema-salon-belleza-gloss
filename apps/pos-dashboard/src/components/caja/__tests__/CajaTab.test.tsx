@@ -319,6 +319,9 @@ describe('CajaTab', () => {
     expect(screen.getByText(/150\.000/)).toBeInTheDocument(); // EFECTIVO breakdown
     // Monto de apertura + desglose por tipo (neto) en el arqueo
     expect(await screen.findByTestId('arqueo-monto-apertura')).toHaveTextContent(/50\.000/);
+    // Nota: el monto de apertura NO es ganancia del negocio (se arrastra entre días)
+    expect(screen.getByText(/monto de apertura es la plata con la que abriste/i)).toBeInTheDocument();
+    expect(screen.getByText(/no se cuenta como ganancia del negocio/i)).toBeInTheDocument();
     expect(screen.getByTestId('arqueo-ingresos-servicios')).toHaveTextContent(/120\.000/);
     expect(screen.getByTestId('arqueo-ingresos-productos')).toHaveTextContent(/50\.000/);
 
