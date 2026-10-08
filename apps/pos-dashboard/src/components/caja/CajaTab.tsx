@@ -11,6 +11,7 @@ import {
   type CajaDTO,
 } from './CajaBanner.js';
 import MoneyInput from '../MoneyInput.js';
+import HelpTip from '../HelpTip.js';
 import PaginationBar from '../PaginationBar.js';
 
 /* ================================================================ */
@@ -965,10 +966,20 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                     <div style={{ ...arqueoGroupStyle, borderColor: 'rgba(212,168,83,0.35)' }}>
                       <div style={{ ...arqueoSectionTitleStyle, color: 'var(--accent)' }}>
                         💵 Efectivo del cajón — esto es lo que contás
+                        <HelpTip
+                          label="Efectivo del cajón"
+                          text="Solo el efectivo: es lo único que se cuenta en el arqueo. No incluye tarjeta ni transferencia."
+                        />
                       </div>
 
                       <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Monto de apertura</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Monto de apertura
+                          <HelpTip
+                            label="Monto de apertura"
+                            text="Plata con la que abriste el cajón. Se arrastra de un día al otro y no se cuenta como ganancia del negocio."
+                          />
+                        </span>
                         <span data-testid="arqueo-monto-apertura" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(montoAperturaDe(esperado, caja))}</span>
                       </div>
                       <p style={{ ...arqueoNoteStyle, margin: '0 0 0.5rem' }}>
@@ -980,7 +991,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       </div>
 
                       <div style={{ ...arqueoRowStyle, borderTop: '1px solid var(--border)', paddingTop: '0.5rem', marginTop: '0.35rem' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Efectivo esperado en el cajón</span>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                          Efectivo esperado en el cajón
+                          <HelpTip
+                            label="Efectivo esperado en el cajón"
+                            text="Efectivo que debería haber en el cajón: apertura + cobros en efectivo. Es contra esto que comparás lo que contaste."
+                          />
+                        </span>
                         <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent)' }}>{formatCurrency(esperado.montoEsperado)}</span>
                       </div>
                     </div>
@@ -1007,6 +1024,10 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.7rem 0.9rem' }}>
                         <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
                           Diferencia ({diferenciaPreview < 0 ? 'faltante' : diferenciaPreview > 0 ? 'sobrante' : 'cuadra'})
+                          <HelpTip
+                            label="Diferencia"
+                            text="Lo que contaste menos lo esperado. Negativo = faltante; positivo = sobrante; 0 = cuadra."
+                          />
                         </span>
                         <span
                           style={{
@@ -1025,6 +1046,10 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                     <div style={arqueoGroupStyle}>
                       <div style={arqueoSectionTitleStyle}>
                         🏦 Cobros que NO van al cajón
+                        <HelpTip
+                          label="Cobros que NO van al cajón"
+                          text="Cobros con tarjeta o transferencia: no están físicamente en el cajón y no se cuentan en el arqueo."
+                        />
                       </div>
                       <p style={arqueoNoteStyle}>No se cuentan en el arqueo.</p>
                       <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
@@ -1041,7 +1066,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                     <div style={{ ...arqueoGroupStyle, background: 'transparent', borderStyle: 'dashed', marginBottom: 0 }}>
                       <div style={arqueoSectionTitleStyle}>📊 Información del día (no se cuenta)</div>
                       <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Total recaudado (todos los métodos)</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Total recaudado (todos los métodos)
+                          <HelpTip
+                            label="Total recaudado"
+                            text="Todo lo recaudado en el día sumando efectivo, tarjeta y transferencia. Informativo: solo el efectivo entra al arqueo."
+                          />
+                        </span>
                         <span data-testid="arqueo-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(esperado))}</span>
                       </div>
                       <div style={{ ...arqueoRowStyle, marginBottom: '0.6rem' }}>
@@ -1051,6 +1082,10 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
 
                       <div style={{ ...arqueoSectionTitleStyle, marginTop: '0.2rem', marginBottom: '0.4rem' }}>
                         Ingresos por tipo (neto)
+                        <HelpTip
+                          label="Ingresos por tipo (neto)"
+                          text="Lo facturado neto de descuentos, separado en servicios y productos."
+                        />
                       </div>
                       <div style={{ ...arqueoRowStyle, marginBottom: '0.3rem' }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Servicios</span>
@@ -1122,7 +1157,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem', marginBottom: '0.75rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Monto de apertura</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    Monto de apertura
+                    <HelpTip
+                      label="Monto de apertura"
+                      text="Plata con la que abriste el cajón. Se arrastra de un día al otro y no se cuenta como ganancia del negocio."
+                    />
+                  </span>
                   <span data-testid="reporte-monto-apertura" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatCurrency(montoAperturaDe(reporte.reporte, reporte.caja))}</span>
                 </div>
 
@@ -1137,13 +1178,23 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                     </div>
                   ))}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
-                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Total recaudado
+                      <HelpTip
+                        label="Total recaudado"
+                        text="Todo lo recaudado en el día sumando efectivo, tarjeta y transferencia. Informativo: solo el efectivo entra al arqueo."
+                      />
+                    </span>
                     <span data-testid="reporte-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(reporte.reporte))}</span>
                   </div>
                 </div>
 
                 <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
                   Ingresos por tipo (neto)
+                  <HelpTip
+                    label="Ingresos por tipo (neto)"
+                    text="Lo facturado neto de descuentos, separado en servicios y productos."
+                  />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
@@ -1158,7 +1209,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px solid var(--border)', paddingTop: '0.9rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Efectivo esperado</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Efectivo esperado
+                      <HelpTip
+                        label="Efectivo esperado"
+                        text="Efectivo que debería haber en el cajón: apertura + cobros en efectivo. Es contra esto que comparás lo que contaste."
+                      />
+                    </span>
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(reporte.reporte.montoEsperado)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
@@ -1166,7 +1223,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatMonto(reporte.reporte.montoReal)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Diferencia</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Diferencia
+                      <HelpTip
+                        label="Diferencia"
+                        text="Lo que contaste menos lo esperado. Negativo = faltante; positivo = sobrante; 0 = cuadra."
+                      />
+                    </span>
                     <span
                       style={{
                         fontWeight: 800,
@@ -1249,13 +1312,23 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                         </div>
                       ))}
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', marginTop: '0.15rem' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Total recaudado</span>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                          Total recaudado
+                          <HelpTip
+                            label="Total recaudado"
+                            text="Todo lo recaudado en el día sumando efectivo, tarjeta y transferencia. Informativo: solo el efectivo entra al arqueo."
+                          />
+                        </span>
                         <span data-testid="detalle-total-recaudado" style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatCurrency(totalRecaudadoDe(detalleReporte))}</span>
                       </div>
                     </div>
 
                     <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
                       Ingresos por tipo (neto)
+                      <HelpTip
+                        label="Ingresos por tipo (neto)"
+                        text="Lo facturado neto de descuentos, separado en servicios y productos."
+                      />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.8rem' }}>
@@ -1270,7 +1343,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px solid var(--border)', paddingTop: '0.9rem', marginBottom: '1rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Efectivo esperado</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Efectivo esperado
+                          <HelpTip
+                            label="Efectivo esperado"
+                            text="Efectivo que debería haber en el cajón: apertura + cobros en efectivo. Es contra esto que comparás lo que contaste."
+                          />
+                        </span>
                         <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(detalleReporte.montoEsperado)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.875rem' }}>
@@ -1278,7 +1357,13 @@ const CajaTab: React.FC<CajaTabProps> = ({ salonId, user }) => {
                         <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatMonto(detalleReporte.montoReal)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9375rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Diferencia</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Diferencia
+                          <HelpTip
+                            label="Diferencia"
+                            text="Lo que contaste menos lo esperado. Negativo = faltante; positivo = sobrante; 0 = cuadra."
+                          />
+                        </span>
                         <span
                           style={{
                             fontWeight: 800,

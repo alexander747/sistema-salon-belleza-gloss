@@ -337,6 +337,14 @@ describe('CajaTab', () => {
     fireEvent.change(screen.getByLabelText(/cuánto contaste/i), { target: { value: '135000' } });
     expect(await screen.findByText(/-\$\s*5\.000/)).toBeInTheDocument();
 
+    // Los labels del arqueo incluyen ⓘ de ayuda accesible que alterna con clic
+    const diffInfo = screen.getByRole('button', { name: 'Qué significa Diferencia' });
+    fireEvent.click(diffInfo);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/Negativo = faltante/i);
+    fireEvent.click(diffInfo);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Qué significa Monto de apertura' })).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /confirmar cierre/i }));
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith('/salones/1/caja/cerrar', { montoRealEfectivo: 135000 });

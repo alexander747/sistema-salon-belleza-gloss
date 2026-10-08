@@ -268,6 +268,45 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(screen.queryByText('👤 Aporte de la empleada (lo que genera)')).toBeNull();
   });
 
+  it('muestra ⓘ de ayuda en las tarjetas del P&L y el popup alterna con clic', async () => {
+    await openReportesTab((url) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/finanzas/pyl')) return Promise.resolve({ data: pylData });
+      if (url.includes('/finanzas/roi')) {
+        return Promise.resolve({
+          data: { ingresos: 0, gastosFijos: 0, gastosOperativos: 0, nomina: 0, gananciaNeta: 0 },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    // Varias tarjetas exponen su ⓘ accesible (nombre = "Qué significa <label>")
+    const cobradoInfo = await screen.findByRole('button', { name: 'Qué significa Cobrado en el período' });
+    expect(screen.getByRole('button', { name: 'Qué significa Ventas brutas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Qué significa Ganancia neta' })).toBeInTheDocument();
+    const ticketInfo = screen.getByRole('button', { name: 'Qué significa Ticket promedio' });
+    expect(cobradoInfo).toHaveAttribute('aria-expanded', 'false');
+
+    // Un clic abre el popup con la explicación
+    fireEvent.click(ticketInfo);
+    const tip = await screen.findByRole('tooltip');
+    expect(tip).toHaveTextContent(/Venta neta promedio por atención/i);
+    expect(ticketInfo).toHaveAttribute('aria-expanded', 'true');
+
+    // Un segundo clic lo cierra
+    fireEvent.click(ticketInfo);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(ticketInfo).toHaveAttribute('aria-expanded', 'false');
+
+    // Clic afuera también cierra
+    fireEvent.click(cobradoInfo);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/Plata que efectivamente ENTRÓ/i);
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+  });
+
   it('con filtro de empleada muestra su contribución y los gastos/devoluciones del salón en un grupo aparte', async () => {
     const pylFiltrado = {
       ...pylData,
@@ -1227,6 +1266,19 @@ describe('FinanzasPage — tab Nómina (período por frecuencia de pago)', () =>
     expect(
       await screen.findByText('Período QUINCENAL · 01/08/2026 → 15/08/2026'),
     ).toBeInTheDocument();
+  });
+
+  it('las tarjetas de Nómina incluyen ⓘ de ayuda accesible', async () => {
+    mockGet.mockImplementation(nominaApiMock);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '👩‍💼 Nómina' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Qué significa Próximo pago estimado' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Qué significa Total comisiones' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Qué significa Pendientes' })).toBeInTheDocument();
   });
 
   it('filtra los pendientes por empleada (con opción "Todas")', async () => {

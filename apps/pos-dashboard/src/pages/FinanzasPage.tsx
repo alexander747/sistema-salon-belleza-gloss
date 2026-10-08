@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Tooltip } from '@mui/material';
 import { Button, Skeleton } from '@pos-final/ui';
 import { Rol, type IUser } from '@pos-final/types';
 import api from '../services/api.js';
 import SalonSwitcher from '../components/SalonSwitcher.js';
 import WalkInModal from '../components/WalkInModal.js';
+import HelpTip from '../components/HelpTip.js';
 import ClienteSearchableSelect from '../components/ClienteSearchableSelect.js';
 import EmpleadaSearchableSelect from '../components/EmpleadaSearchableSelect.js';
 import TypeaheadSelect from '../components/TypeaheadSelect.js';
@@ -968,15 +968,10 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         <motion.div variants={itemVariants} className={styles.summaryCard} data-testid="card-ventas-dia">
           <span className={styles.summaryLabel}>
             💰 Ventas del día
-            <Tooltip
-              title="Lo que facturaste en el período: servicios y productos, sin propinas. Incluye lo fiado (todavía no cobrado)."
-              describeChild
-              arrow
-            >
-              <button type="button" className={styles.infoAffix} aria-label="Qué significa Ventas del día">
-                ⓘ
-              </button>
-            </Tooltip>
+            <HelpTip
+              label="Ventas del día"
+              text="Lo que facturaste en el período: servicios y productos, sin propinas. Incluye lo fiado (todavía no cobrado)."
+            />
           </span>
           <span className={styles.summaryValueAccent}>
             {resumen ? formatCurrency(resumen.totalIngresos) : '$0'}
@@ -987,22 +982,23 @@ const RegistrosTab: React.FC<RegistrosTabProps> = ({ salonId, user, onNavigateTo
         <motion.div variants={itemVariants} className={styles.summaryCard} data-testid="card-entro-caja" style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
           <span className={styles.summaryLabel}>
             💰 Entró a caja
-            <Tooltip
-              title="La plata que realmente entró en el período: incluye propinas y cobros de deudas anteriores. No cuenta lo fiado."
-              describeChild
-              arrow
-            >
-              <button type="button" className={styles.infoAffix} aria-label="Qué significa Entró a caja">
-                ⓘ
-              </button>
-            </Tooltip>
+            <HelpTip
+              label="Entró a caja"
+              text="La plata que realmente entró en el período: incluye propinas y cobros de deudas anteriores. No cuenta lo fiado."
+            />
           </span>
           <span className={styles.summaryValue} style={{ color: '#34d399' }}>
             {resumen?.totalCobrado != null ? formatCurrency(resumen.totalCobrado) : '$0'}
           </span>
         </motion.div>
         <motion.div variants={itemVariants} className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
-          <span className={styles.summaryLabel}>🧾 Fiado del período</span>
+          <span className={styles.summaryLabel}>
+            🧾 Fiado del período
+            <HelpTip
+              label="Fiado del período"
+              text="Ventas a crédito generadas en el período que todavía NO se cobraron."
+            />
+          </span>
           <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
             {resumen?.totalFiadoDia != null ? formatCurrency(resumen.totalFiadoDia) : '$0'}
           </span>
@@ -3139,24 +3135,48 @@ const NominaTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({ s
             marginBottom: '1.25rem',
           }}>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>👩‍💼 Pendientes</span>
+              <span className={styles.summaryLabel}>
+                👩‍💼 Pendientes
+                <HelpTip
+                  label="Pendientes"
+                  text="Empleadas con comisiones pendientes de liquidar en el período."
+                />
+              </span>
               <span className={styles.summaryValue}>
                 {pendientesFiltrados.length} {pendientesFiltrados.length === 1 ? 'empleada' : 'empleadas'}
               </span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💰 Total comisiones</span>
+              <span className={styles.summaryLabel}>
+                💰 Total comisiones
+                <HelpTip
+                  label="Total comisiones"
+                  text="Suma de las comisiones pendientes de liquidar a las empleadas en el período."
+                />
+              </span>
               <span className={styles.summaryValueAccent}>{formatCurrency(totalComisiones)}</span>
             </div>
             {/* PR3 — insumo informativo: solo roles privilegiados (métrica sensible). */}
             {isPrivileged && (
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>🧴 Total insumos</span>
+                <span className={styles.summaryLabel}>
+                  🧴 Total insumos
+                  <HelpTip
+                    label="Total insumos"
+                    text="Costo de los insumos usados por las empleadas (informativo: el pago ya viene neteado de insumos)."
+                  />
+                </span>
                 <span className={styles.summaryValue}>{formatCurrency(totalInsumos)}</span>
               </div>
             )}
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>📅 Próximo pago estimado</span>
+              <span className={styles.summaryLabel}>
+                📅 Próximo pago estimado
+                <HelpTip
+                  label="Próximo pago estimado"
+                  text="Total a pagar en la próxima liquidación: comisiones pendientes ya neteadas de insumos."
+                />
+              </span>
               <span className={styles.summaryValueAccent}>{formatCurrency(totalProximoPago)}</span>
             </div>
           </div>
@@ -4747,13 +4767,25 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           </div>
           <div className={styles.summaryGrid}>
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
-              <span className={styles.summaryLabel}>💰 Cobrado en el período (lo que entró)</span>
+              <span className={styles.summaryLabel}>
+                💰 Cobrado en el período (lo que entró)
+                <HelpTip
+                  label="Cobrado en el período"
+                  text="Plata que efectivamente ENTRÓ en el período, sumando todos los métodos de pago (efectivo, tarjeta, transferencia), incluyendo cobros de deudas viejas."
+                />
+              </span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>
                 {pyl.cobrado != null ? formatCurrency(pyl.cobrado) : '$0'}
               </span>
             </div>
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(251,146,60,0.3)' }}>
-              <span className={styles.summaryLabel}>🧾 Fiado nuevo (aún sin cobrar)</span>
+              <span className={styles.summaryLabel}>
+                🧾 Fiado nuevo (aún sin cobrar)
+                <HelpTip
+                  label="Fiado nuevo"
+                  text="Ventas a crédito generadas en el período que todavía NO se cobraron."
+                />
+              </span>
               <span className={styles.summaryValue} style={{ color: '#fb923c' }}>
                 {pyl.fiadoPeriodo != null ? formatCurrency(pyl.fiadoPeriodo) : '$0'}
               </span>
@@ -4768,6 +4800,10 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(251,191,36,0.3)' }}>
               <span className={styles.summaryLabel}>
                 📌 Te deben (total acumulado al {pyl.hasta})
+                <HelpTip
+                  label="Te deben"
+                  text="Total que te deben a la fecha Hasta (foto acumulada, NO es del período; no cambia con el Desde)."
+                />
               </span>
               <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>
                 {pyl.deudasPorCobrar != null ? formatCurrency(pyl.deudasPorCobrar) : '$0'}
@@ -4781,37 +4817,85 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
           </div>
           <div className={styles.summaryGrid}>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💰 Ventas brutas (antes de descuentos)</span>
+              <span className={styles.summaryLabel}>
+                💰 Ventas brutas (antes de descuentos)
+                <HelpTip
+                  label="Ventas brutas"
+                  text="Todo lo facturado en el período antes de aplicar descuentos."
+                />
+              </span>
               <span className={styles.summaryValueAccent}>{formatCurrency(pyl.ingresosBrutos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🏷️ Descuentos aplicados</span>
+              <span className={styles.summaryLabel}>
+                🏷️ Descuentos aplicados
+                <HelpTip
+                  label="Descuentos aplicados"
+                  text="Descuentos que aplicaste en el período."
+                />
+              </span>
               <span className={styles.summaryValue}>{formatCurrency(pyl.descuentos)}</span>
             </div>
             {pyl.incrementos ? (
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>📈 Ajustes al alza</span>
+                <span className={styles.summaryLabel}>
+                  📈 Ajustes al alza
+                  <HelpTip
+                    label="Ajustes al alza"
+                    text="Ajustes que aumentaron el precio respecto del de lista."
+                  />
+                </span>
                 <span className={styles.summaryValue} style={{ color: '#fbbf24' }}>{formatCurrency(pyl.incrementos)}</span>
               </div>
             ) : null}
             <div className={styles.summaryCard} style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
-              <span className={styles.summaryLabel}>💵 Ventas netas (después de descuentos)</span>
+              <span className={styles.summaryLabel}>
+                💵 Ventas netas (después de descuentos)
+                <HelpTip
+                  label="Ventas netas"
+                  text="Lo facturado menos los descuentos (venta real del período)."
+                />
+              </span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.ingresosNetos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>💇 Ventas de servicios</span>
+              <span className={styles.summaryLabel}>
+                💇 Ventas de servicios
+                <HelpTip
+                  label="Ventas de servicios"
+                  text="Total facturado en servicios del período."
+                />
+              </span>
               <span className={styles.summaryValue} style={{ color: '#818cf8' }}>{formatCurrency(pyl.totalServicios)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🛒 Ventas de productos</span>
+              <span className={styles.summaryLabel}>
+                🛒 Ventas de productos
+                <HelpTip
+                  label="Ventas de productos"
+                  text="Total facturado en productos del período."
+                />
+              </span>
               <span className={styles.summaryValue} style={{ color: '#34d399' }}>{formatCurrency(pyl.totalProductos)}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>✂️ Atenciones</span>
+              <span className={styles.summaryLabel}>
+                ✂️ Atenciones
+                <HelpTip
+                  label="Atenciones"
+                  text="Cantidad de ventas/atenciones del período."
+                />
+              </span>
               <span className={styles.summaryValue} style={{ color: '#818cf8' }}>{pyl.cantidadAtenciones}</span>
             </div>
             <div className={styles.summaryCard}>
-              <span className={styles.summaryLabel}>🎫 Ticket promedio</span>
+              <span className={styles.summaryLabel}>
+                🎫 Ticket promedio
+                <HelpTip
+                  label="Ticket promedio"
+                  text="Venta neta promedio por atención (ventas netas ÷ atenciones)."
+                />
+              </span>
               {/* Ticket = ventas netas del período ÷ atenciones (promedio facturado por atención).
                   Se usa el neto para reflejar lo realmente facturado, no el bruto. Guard anti división por cero. */}
               <span className={styles.summaryValue}>
@@ -4833,21 +4917,43 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
                   Los gastos/devoluciones del salón NO se le descuentan (ver grupo siguiente). */}
               <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.05em', marginBottom: '0.4rem', marginTop: '0.35rem' }}>
                 👤 De la empleada
+                <HelpTip
+                  label="De la empleada"
+                  text="Métricas propias de esa empleada: insumos y comisiones que genera."
+                />
               </div>
               <div className={styles.summaryGrid}>
                 {/* PR2 — insumos del P&L: solo roles privilegiados */}
                 {isPrivileged && (
                   <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>📦 Costo de insumos</span>
+                    <span className={styles.summaryLabel}>
+                      📦 Costo de insumos
+                      <HelpTip
+                        label="Costo de insumos"
+                        text="Costo de los insumos usados en los servicios del período."
+                      />
+                    </span>
                     <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
                   </div>
                 )}
                 <div className={styles.summaryCard}>
-                  <span className={styles.summaryLabel}>👥 Comisiones de empleadas</span>
+                  <span className={styles.summaryLabel}>
+                    👥 Comisiones de empleadas
+                    <HelpTip
+                      label="Comisiones de empleadas"
+                      text="Comisiones que generan las empleadas en el período."
+                    />
+                  </span>
                   <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
                 </div>
                 <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.contribucion ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
-                  <span className={styles.summaryLabel}>👤 Aporte de la empleada (lo que genera)</span>
+                  <span className={styles.summaryLabel}>
+                    👤 Aporte de la empleada (lo que genera)
+                    <HelpTip
+                      label="Aporte de la empleada"
+                      text="Lo que genera esa empleada: cobrado − insumos − comisiones (sin los gastos del salón)."
+                    />
+                  </span>
                   <span className={styles.summaryValue} style={{ color: (pyl.contribucion ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
                     {formatCurrency(pyl.contribucion ?? 0)}
                   </span>
@@ -4858,14 +4964,30 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
                   descuentan de la contribución de la empleada. */}
               <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.05em', marginBottom: '0.4rem', marginTop: '1rem' }}>
                 🏠 Del salón (no se descuenta a la empleada)
+                <HelpTip
+                  label="Del salón"
+                  text="Gastos y devoluciones del negocio. Son informativos: NO se le descuentan al aporte de la empleada."
+                />
               </div>
               <div className={styles.summaryGrid}>
                 <div className={styles.summaryCard} style={{ borderColor: 'rgba(148,163,184,0.35)' }}>
-                  <span className={styles.summaryLabel}>💸 Gastos del salón</span>
+                  <span className={styles.summaryLabel}>
+                    💸 Gastos del salón
+                    <HelpTip
+                      label="Gastos del salón"
+                      text="Gastos del negocio (fijos + operativos) en el período. No incluye comisiones."
+                    />
+                  </span>
                   <span className={styles.summaryValue}>{formatCurrency(pyl.gastosNegocio ?? 0)}</span>
                 </div>
                 <div className={styles.summaryCard} style={{ borderColor: 'rgba(148,163,184,0.35)' }}>
-                  <span className={styles.summaryLabel}>↩️ Devoluciones del salón</span>
+                  <span className={styles.summaryLabel}>
+                    ↩️ Devoluciones del salón
+                    <HelpTip
+                      label="Devoluciones del salón"
+                      text="Plata devuelta a clientas en el período (no se le descuenta a la empleada)."
+                    />
+                  </span>
                   <span className={styles.summaryValue}>{formatCurrency(pyl.devolucionesNegocio ?? 0)}</span>
                 </div>
               </div>
@@ -4875,26 +4997,56 @@ const ReportesTab: React.FC<{ salonId: number | null; user: IUser | null }> = ({
               {/* PR2 — insumos del P&L: solo roles privilegiados */}
               {isPrivileged && (
                 <div className={styles.summaryCard}>
-                  <span className={styles.summaryLabel}>📦 Costo de insumos</span>
+                  <span className={styles.summaryLabel}>
+                    📦 Costo de insumos
+                    <HelpTip
+                      label="Costo de insumos"
+                      text="Costo de los insumos usados en los servicios del período."
+                    />
+                  </span>
                   <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.costoBaseInsumos ?? 0)}</span>
                 </div>
               )}
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>👥 Comisiones de empleadas</span>
+                <span className={styles.summaryLabel}>
+                  👥 Comisiones de empleadas
+                  <HelpTip
+                    label="Comisiones de empleadas"
+                    text="Comisiones que generan las empleadas en el período."
+                  />
+                </span>
                 <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.comisiones)}</span>
               </div>
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>💸 Gastos del salón</span>
+                <span className={styles.summaryLabel}>
+                  💸 Gastos del salón
+                  <HelpTip
+                    label="Gastos del salón"
+                    text="Gastos del negocio (fijos + operativos) en el período. No incluye comisiones."
+                  />
+                </span>
                 <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>
                   {formatCurrency((pyl.gastosFijos ?? 0) + (pyl.gastosOperativos ?? 0))}
                 </span>
               </div>
               <div className={styles.summaryCard}>
-                <span className={styles.summaryLabel}>↩️ Devoluciones</span>
+                <span className={styles.summaryLabel}>
+                  ↩️ Devoluciones
+                  <HelpTip
+                    label="Devoluciones"
+                    text="Plata devuelta a clientas en el período."
+                  />
+                </span>
                 <span className={styles.summaryValue} style={{ color: 'var(--danger)' }}>{formatCurrency(pyl.devoluciones)}</span>
               </div>
               <div className={styles.summaryCard} style={{ gridColumn: '1 / -1', borderColor: (pyl.utilidadNeta ?? 0) >= 0 ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' }}>
-                <span className={styles.summaryLabel}>📊 Ganancia neta (utilidad)</span>
+                <span className={styles.summaryLabel}>
+                  📊 Ganancia neta (utilidad)
+                  <HelpTip
+                    label="Ganancia neta"
+                    text="Lo que queda en el negocio: cobrado − insumos − comisiones − gastos − devoluciones − nómina + cobros de préstamos."
+                  />
+                </span>
                 <span className={styles.summaryValue} style={{ color: (pyl.utilidadNeta ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
                   {formatCurrency(pyl.utilidadNeta ?? 0)}
                 </span>
