@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { abrirCajaSchema, cerrarCajaSchema } from '@pos-final/validation';
+import { abrirCajaSchema, cerrarCajaSchema, updateSaldoInicialCajaSchema } from '@pos-final/validation';
 
 describe('abrirCajaSchema', () => {
   it('should accept montoInicial válido (incluye 0)', () => {
@@ -63,5 +63,25 @@ describe('cerrarCajaSchema', () => {
 
   it('should rechazar cajaId no entero', () => {
     expect(() => cerrarCajaSchema.parse({ montoRealEfectivo: 160000, cajaId: 1.5 })).toThrow();
+  });
+});
+
+describe('updateSaldoInicialCajaSchema', () => {
+  it('should accept saldo válido (incluye 0)', () => {
+    expect(updateSaldoInicialCajaSchema.parse({ saldoInicialCaja: 500000 }).saldoInicialCaja).toBe(500000);
+    expect(updateSaldoInicialCajaSchema.parse({ saldoInicialCaja: 0 }).saldoInicialCaja).toBe(0);
+  });
+
+  it('should reject saldo ausente', () => {
+    expect(() => updateSaldoInicialCajaSchema.parse({})).toThrow();
+  });
+
+  it('should reject saldo negativo', () => {
+    expect(() => updateSaldoInicialCajaSchema.parse({ saldoInicialCaja: -1 })).toThrow();
+  });
+
+  it('should reject saldo no numérico', () => {
+    expect(() => updateSaldoInicialCajaSchema.parse({ saldoInicialCaja: '100' })).toThrow();
+    expect(() => updateSaldoInicialCajaSchema.parse({ saldoInicialCaja: null })).toThrow();
   });
 });

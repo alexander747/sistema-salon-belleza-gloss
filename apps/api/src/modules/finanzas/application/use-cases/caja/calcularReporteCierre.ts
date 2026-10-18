@@ -30,7 +30,22 @@ export interface MovimientoCajaInput {
   porcentajeDescuento?: number;
   /** A qué tipo(s) aplica ese %. Nullable legacy → se asume 'AMBOS'. */
   descuentoAlcance?: DescuentoAlcanceInput | null;
+  /**
+   * Snapshot of the amount fiado when the sale was created. NULL for legacy
+   * rows → consumers MUST fall back to the current `montoPendiente`.
+   */
+  montoFiado?: number | null;
+  /** Current outstanding debt; legacy fallback for `montoFiado`. */
+  montoPendiente?: number | null;
 }
+
+/**
+ * Origin of an inflow, used only by the closing-detail chain (informative).
+ * - VENTA_DIA: payment of a sale billed on this caja's business day.
+ * - DEUDA_ANTERIOR: abono received today against a PREVIOUS day's sale.
+ * - PRESTAMO: manual loan collection (cuenta por cobrar), not a sale.
+ */
+export type OrigenPagoCaja = 'VENTA_DIA' | 'DEUDA_ANTERIOR' | 'PRESTAMO';
 
 /**
  * Dinero que ENTRA a la caja: pagos de venta/abonos (pago.cajaId = C o fallback
@@ -40,6 +55,8 @@ export interface MovimientoCajaInput {
 export interface PagoExtraCajaInput {
   monto: number;
   metodoPago: MetodoPagoCaja;
+  /** Defaults to VENTA_DIA (backwards-compatible with callers that omit it). */
+  origen?: OrigenPagoCaja;
 }
 
 /** Tipo estructural de gasto (compatible con GastoEntity). */
@@ -59,6 +76,8 @@ export interface GastoCajaInput {
 export interface EgresoCajaInput {
   monto: number;
   metodoPago?: MetodoPagoCaja;
+  /** Origen del egreso, para desglosar "Salidas" en el cierre (informativo). */
+  tipo?: 'DEVOLUCION' | 'NOMINA';
 }
 
 export interface ReporteCierre {
@@ -86,8 +105,34 @@ export interface ReporteCierre {
    * gastos/egresos. NO interviene en el arqueo (que sigue cash-only).
    */
   totalRecaudado: number;
+  /**
+   * Collections received in this caja for sales billed on this caja's business
+   * day, all methods. Together with `cobrosDeudaAnteriorDia` and
+   * `cobrosPrestamoDia` it decomposes `totalRecaudado` exactly:
+   *   totalRecaudado = cobrosVentasDia + cobrosDeudaAnteriorDia + cobrosPrestamoDia
+   */
+  cobrosVentasDia: number;
+  /**
+   * Abonos received in this caja against sales from PREVIOUS business days
+   * (money that entered today, but is not today's sales), all methods.
+   * Same period/business-date logic as `sumCobrosDeudaAnterior`: the payment
+   * belongs to this caja's date and the sale date is strictly earlier.
+   */
+  cobrosDeudaAnteriorDia: number;
+  /** Manual loan collections received in this caja, all methods. */
+  cobrosPrestamoDia: number;
   comisiones: number;
+  /**
+   * Σ fiado generado por las ventas del día (`montoFiado` snapshot; legacy
+   * NULL → current `montoPendiente`). Es lo que quedó a crédito, NO entró a la
+   * caja y no interviene en el arqueo.
+   */
+  fiadoDia: number;
   totalGastos: number;
+  /** Σ devoluciones del día (todos los métodos); informativo. */
+  totalDevoluciones: number;
+  /** Σ nómina/préstamos liquidados del día (todos los métodos); informativo. */
+  totalNominaPrestamos: number;
   montoEsperado: number;
   montoReal: number | null;
   diferencia: number | null;
@@ -111,6 +156,9 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * pero no lo tocan.
  * El breakdown por método de pago se reporta completo y `totalRecaudado` es su
  * suma (información de la recolección total del día; NO toca el arqueo).
+ * Además, cada inflow se clasifica por ORIGEN (`VENTA_DIA`, `DEUDA_ANTERIOR`,
+ * `PRESTAMO`) para que el detalle del cierre pueda mostrar "cobrado de tus
+ * ventas de hoy" vs "abonos de deudas viejas" sin recalcular ni cuadrar a mano.
  * Los registros ANULADOS se excluyen de todos los totales.
  *
  * Contabilidad de CAJA con abonos (ventas-fiado-deudas): el dinero se cuenta en
@@ -139,6 +187,14 @@ export function calcularReporteCierre(
     0,
   );
   const comisiones = activos.reduce((sum, r) => sum + Number(r.comisionCalculada), 0);
+
+  // Fiado GENERADO del día: snapshot al momento de la venta. Legacy (NULL) cae
+  // a la deuda actual como mejor aproximación. No entra a la caja.
+  const fiadoDia = activos.reduce(
+    (sum, r) =>
+      sum + (r.montoFiado != null ? Number(r.montoFiado) : Number(r.montoPendiente ?? 0)),
+    0,
+  );
 
   // Origen del ingreso por tipo, NETO de descuento (revenue real). El descuento
   // total por registro ya está en `valorOriginal − valorFinal`; acá solo se
@@ -179,8 +235,19 @@ export function calcularReporteCierre(
     TARJETA: 0,
     TRANSFERENCIA: 0,
   };
+  // Split by ORIGIN for the closing-detail chain. Every inflow falls in exactly
+  // one bucket, so the three values always add up to `totalRecaudado` (no
+  // plugging/fudging): today's sales, prior-sale abonos, manual loans.
+  const porOrigen: Record<OrigenPagoCaja, number> = {
+    VENTA_DIA: 0,
+    DEUDA_ANTERIOR: 0,
+    PRESTAMO: 0,
+  };
   for (const p of pagosExtra) {
-    porMetodoPago[p.metodoPago] = (porMetodoPago[p.metodoPago] ?? 0) + Number(p.monto);
+    const monto = Number(p.monto);
+    porMetodoPago[p.metodoPago] = (porMetodoPago[p.metodoPago] ?? 0) + monto;
+    const origen: OrigenPagoCaja = p.origen ?? 'VENTA_DIA';
+    porOrigen[origen] += monto;
   }
 
   // Total recaudado por todos los métodos (incluye NO-efectivo). Es informativo:
@@ -204,6 +271,15 @@ export function calcularReporteCierre(
     .filter((e) => (e.metodoPago ?? 'EFECTIVO') === 'EFECTIVO')
     .reduce((sum, e) => sum + Number(e.monto), 0);
 
+  // Desglose informativo de "Salidas" (todos los métodos): devoluciones vs
+  // nómina/préstamos. No altera el arqueo, que sigue siendo cash-only.
+  const totalDevoluciones = egresos
+    .filter((e) => e.tipo === 'DEVOLUCION')
+    .reduce((sum, e) => sum + Number(e.monto), 0);
+  const totalNominaPrestamos = egresos
+    .filter((e) => e.tipo === 'NOMINA')
+    .reduce((sum, e) => sum + Number(e.monto), 0);
+
   // Arqueo cash-only: el cajero cuenta el cajón completo (fondo inicial + movimientos)
   const montoEsperado = round2(
     montoInicial + porMetodoPago.EFECTIVO - gastosEfectivo - egresosEfectivo,
@@ -225,8 +301,14 @@ export function calcularReporteCierre(
       TRANSFERENCIA: round2(porMetodoPago.TRANSFERENCIA),
     },
     totalRecaudado,
+    cobrosVentasDia: round2(porOrigen.VENTA_DIA),
+    cobrosDeudaAnteriorDia: round2(porOrigen.DEUDA_ANTERIOR),
+    cobrosPrestamoDia: round2(porOrigen.PRESTAMO),
     comisiones: round2(comisiones),
+    fiadoDia: round2(fiadoDia),
     totalGastos: round2(totalGastos),
+    totalDevoluciones: round2(totalDevoluciones),
+    totalNominaPrestamos: round2(totalNominaPrestamos),
     montoEsperado,
     montoReal: montoRealEfectivo,
     diferencia,

@@ -2,7 +2,12 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 import { CajaController } from '../CajaController';
-import { CajaNoAbiertaError, CajaYaAbiertaError, NotFoundError } from '../../../../../shared/errors';
+import {
+  CajaNoAbiertaError,
+  CajaYaAbiertaError,
+  NotFoundError,
+  ValidationError,
+} from '../../../../../shared/errors';
 
 describe('CajaController', () => {
   let controller: CajaController;
@@ -13,6 +18,7 @@ describe('CajaController', () => {
   let mockEsperado: { execute: ReturnType<typeof vi.fn> };
   let mockCierres: { execute: ReturnType<typeof vi.fn> };
   let mockDetalle: { execute: ReturnType<typeof vi.fn> };
+  let mockSaldoInicial: { obtener: ReturnType<typeof vi.fn>; actualizar: ReturnType<typeof vi.fn> };
   let next: ReturnType<typeof vi.fn>;
 
   const makeRes = () => {
@@ -28,6 +34,7 @@ describe('CajaController', () => {
     mockEsperado = { execute: vi.fn() };
     mockCierres = { execute: vi.fn() };
     mockDetalle = { execute: vi.fn() };
+    mockSaldoInicial = { obtener: vi.fn(), actualizar: vi.fn() };
     next = vi.fn();
     controller = new CajaController(
       mockAbrir as never,
@@ -37,6 +44,7 @@ describe('CajaController', () => {
       mockEsperado as never,
       mockCierres as never,
       mockDetalle as never,
+      mockSaldoInicial as never,
     );
   });
 
@@ -311,6 +319,68 @@ describe('CajaController', () => {
         ok: true,
         data: { data: [], meta: { page: 1, limit: 0, total: 0, totalPages: 1 } },
       });
+    });
+  });
+
+  describe('saldoInicial', () => {
+    it('should return 200 con {ok:true, data} de saldo inicial + posición de caja', async () => {
+      mockSaldoInicial.obtener.mockResolvedValue({ saldoInicialCaja: 100000, posicionCaja: 250000 });
+
+      const req = { salonId: 3 } as unknown as Request;
+      const res = makeRes();
+
+      await controller.saldoInicial(req, res, next);
+
+      expect(mockSaldoInicial.obtener).toHaveBeenCalledWith(3);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        ok: true,
+        data: { saldoInicialCaja: 100000, posicionCaja: 250000 },
+      });
+    });
+
+    it('should pasar a next el error cuando el salón no existe (404)', async () => {
+      const err = new NotFoundError('Salón no encontrado');
+      mockSaldoInicial.obtener.mockRejectedValue(err);
+
+      const req = { salonId: 3 } as unknown as Request;
+      const res = makeRes();
+
+      await controller.saldoInicial(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(err);
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('actualizarSaldoInicial', () => {
+    it('should return 200 con {ok:true, data} y el saldo del body', async () => {
+      mockSaldoInicial.actualizar.mockResolvedValue({ saldoInicialCaja: 500000, posicionCaja: 530000 });
+
+      const req = { salonId: 3, body: { saldoInicialCaja: 500000 } } as unknown as Request;
+      const res = makeRes();
+
+      await controller.actualizarSaldoInicial(req, res, next);
+
+      expect(mockSaldoInicial.actualizar).toHaveBeenCalledWith(3, 500000);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        ok: true,
+        data: { saldoInicialCaja: 500000, posicionCaja: 530000 },
+      });
+    });
+
+    it('should pasar a next el error de validación del use case', async () => {
+      const err = new ValidationError('El saldo inicial de caja debe ser mayor o igual a 0');
+      mockSaldoInicial.actualizar.mockRejectedValue(err);
+
+      const req = { salonId: 3, body: { saldoInicialCaja: -1 } } as unknown as Request;
+      const res = makeRes();
+
+      await controller.actualizarSaldoInicial(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(err);
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 

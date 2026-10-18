@@ -176,6 +176,8 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     gastosOperativos: 80000,
     gastosPorCategoria: { ARRIENDO: 200000, SERVICIOS_PUBLICOS: 80000 },
     totalGastos: 280000,
+    comprasInventario: 125000,
+    costoProductos: 21000,
     devoluciones: 20000,
     contribucion: 42000,
     gastosNegocio: 280000,
@@ -254,6 +256,12 @@ describe('FinanzasPage — tab Reportes (P&L mensual)', () => {
     expect(screen.getByText(fmt(60000))).toBeInTheDocument(); // insumos
     expect(screen.getByText(fmt(20000))).toBeInTheDocument(); // devoluciones
     expect(screen.getByText(fmt(-93000))).toBeInTheDocument(); // utilidad neta
+    // COGS: costo de lo vendido (no la compra). Se muestra como tarjeta propia.
+    expect(screen.getByText('📦 Costo de productos vendidos')).toBeInTheDocument();
+    expect(screen.getByText(fmt(21000))).toBeInTheDocument(); // costoProductos
+    expect(
+      screen.getByRole('button', { name: 'Qué significa Costo de productos vendidos' }),
+    ).toBeInTheDocument();
     // Nuevas tarjetas informativas: atenciones y ticket promedio (neto ÷ atenciones = 315000 / 3)
     expect(screen.getByText('✂️ Atenciones')).toBeInTheDocument();
     expect(screen.getByText('🎫 Ticket promedio')).toBeInTheDocument();
@@ -486,7 +494,7 @@ describe('FinanzasPage — resumen cash del día (Cobrado / Fiado del período, 
       .format(n)
       .replace(/\u00a0/g, ' ');
 
-  it('RegistrosTab: muestra Entró a caja y Fiado del período junto a Ventas del día', async () => {
+  it('RegistrosTab: muestra Cobrado del día y Fiado del día junto a Ventas del día', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
       if (url.includes('/caja/actual')) return Promise.reject(error404);
@@ -495,7 +503,14 @@ describe('FinanzasPage — resumen cash del día (Cobrado / Fiado del período, 
       }
       if (url.includes('/finanzas/resumen')) {
         return Promise.resolve({
-          data: { totalIngresos: 100000, totalCobrado: 40000, totalFiadoDia: 60000 },
+          data: {
+            totalIngresos: 100000,
+            totalCobrado: 40000,
+            totalFiadoDia: 0,
+            fiadoGenerado: 60000,
+            fiadoPendiente: 0,
+            fiadoCobrado: 60000,
+          },
         });
       }
       if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
@@ -510,14 +525,221 @@ describe('FinanzasPage — resumen cash del día (Cobrado / Fiado del período, 
     expect(ventasCard).toHaveTextContent('Ventas del día');
     expect(ventasCard).toHaveTextContent(fmt(100000)); // totalIngresos (devengado)
     const cajaCard = screen.getByTestId('card-entro-caja');
-    expect(cajaCard).toHaveTextContent('Entró a caja');
+    expect(cajaCard).toHaveTextContent('Cobrado del día (lo que entró)');
     expect(cajaCard).toHaveTextContent(fmt(40000)); // totalCobrado
-    expect(screen.getByText('🧾 Fiado del período')).toBeInTheDocument();
+    // Card Fiado del día: monto fiado ese día + estado (cobrado/pendiente).
+    const fiadoCard = screen.getByTestId('card-fiado-dia');
+    expect(fiadoCard).toHaveTextContent('🧾 Fiado del día');
+    expect(fiadoCard).toHaveTextContent(fmt(60000)); // fiadoGenerado
+    expect(fiadoCard).toHaveTextContent(
+      `Cobrado ${fmt(60000)} · Pendiente ${fmt(0)}`,
+    );
     // La tira de reconciliación refleja los mismos valores del resumen
     await screen.findByTestId('tira-reconciliacion');
     expect(within(screen.getByTestId('tira-row-ventas')).getByText(fmt(100000))).toBeInTheDocument();
     expect(within(screen.getByTestId('tira-row-cobrado')).getByText(fmt(40000))).toBeInTheDocument();
     expect(within(screen.getByTestId('tira-row-fiado')).getByText(fmt(60000))).toBeInTheDocument();
+  });
+
+  it('Fiado del día muestra el estado parcial (cobrado y pendiente)', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/finanzas/resumen')) {
+        return Promise.resolve({
+          data: {
+            totalIngresos: 100000,
+            totalCobrado: 60000,
+            fiadoGenerado: 60000,
+            fiadoPendiente: 20000,
+            fiadoCobrado: 40000,
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+
+    const fiadoCard = await screen.findByTestId('card-fiado-dia');
+    expect(fiadoCard).toHaveTextContent(fmt(60000));
+    expect(fiadoCard).toHaveTextContent(
+      `Cobrado ${fmt(40000)} · Pendiente ${fmt(20000)}`,
+    );
+  });
+
+  it('el ⓘ de Fiado del día explica que el cobro entra al día en que se cobra', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/finanzas/resumen')) {
+        return Promise.resolve({
+          data: {
+            totalIngresos: 244000,
+            totalCobrado: 184000,
+            fiadoGenerado: 60000,
+            fiadoPendiente: 0,
+            fiadoCobrado: 60000,
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      if (url.includes('/clientes')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    renderPage();
+
+    const fiadoCard = await screen.findByTestId('card-fiado-dia');
+    fireEvent.mouseOver(
+      within(fiadoCard).getByRole('button', { name: 'Qué significa Fiado del día' }),
+    );
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent(/Plata que se fió ese día/i);
+    expect(tooltip).toHaveTextContent(/entra a la caja del día en que se cobró/i);
+    expect(tooltip).toHaveTextContent(/no al día de la venta/i);
+    // Aclaración de alcance: el fiado no se filtra por servicio/producto.
+    expect(tooltip).toHaveTextContent(/No se filtra por servicio\/producto/i);
+    expect(tooltip).toHaveTextContent(/todo el fiado generado en el período/i);
+  });
+});
+
+describe('FinanzasPage — Registros: resumen y tira reaccionan a todos los filtros', () => {
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(n)
+      .replace(/\u00a0/g, ' ');
+
+  const resumenCalls = () =>
+    mockGet.mock.calls.filter(([url]) => String(url).includes('/finanzas/resumen'));
+
+  const lastResumenParams = () => {
+    const calls = resumenCalls();
+    return (calls[calls.length - 1]?.[1]?.params ?? {}) as Record<string, unknown>;
+  };
+
+  const baseResumen = {
+    totalIngresos: 100000,
+    totalCobrado: 100000,
+    fiadoGenerado: 0,
+    fiadoPendiente: 0,
+    fiadoCobrado: 0,
+    totalPropinas: 0,
+    cobrosDeudaAnterior: 0,
+  };
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+    mockGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+      if (url.includes('/auth/me')) return Promise.resolve({ data: duena });
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/empleadas')) {
+        return Promise.resolve({ data: [{ id: 4, nombre: 'Manicurista Test' }] });
+      }
+      if (url.includes('/clientes')) {
+        return Promise.resolve({ data: [{ id: 7, nombre: 'Cliente Test' }] });
+      }
+      if (url.includes('/registros')) {
+        return Promise.resolve({ data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+      }
+      if (url.includes('/finanzas/resumen')) {
+        const params = config?.params ?? {};
+        let resumen = { ...baseResumen };
+        if (params.estado === 'ANULADOS') {
+          resumen = { ...resumen, totalIngresos: 0, totalCobrado: 0 };
+        } else if (params.usuarioId === '4') {
+          resumen = { ...resumen, totalIngresos: 40000, totalCobrado: 40000 };
+        } else if (params.clienteId === '7') {
+          resumen = { ...resumen, totalIngresos: 70000, totalCobrado: 70000 };
+        }
+        return Promise.resolve({ data: resumen });
+      }
+      return Promise.resolve({ data: {} });
+    });
+  });
+
+  it('seleccionar y limpiar la empleada cambia los params del resumen, las cards y la tira', async () => {
+    renderPage();
+
+    const ventas = await screen.findByTestId('card-ventas-dia');
+    expect(ventas).toHaveTextContent(fmt(100000));
+    expect(lastResumenParams()).toMatchObject({ estado: 'ACTIVOS' });
+
+    fireEvent.focus(screen.getByPlaceholderText('🔍 Buscar empleada...'));
+    fireEvent.click(await screen.findByRole('option', { name: /Manicurista Test/ }));
+
+    await waitFor(() => {
+      expect(lastResumenParams()).toMatchObject({ usuarioId: '4', estado: 'ACTIVOS' });
+    });
+    await waitFor(() => expect(screen.getByTestId('card-ventas-dia')).toHaveTextContent(fmt(40000)));
+    expect(within(screen.getByTestId('tira-row-ventas')).getByText(fmt(40000))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar empleada' }));
+
+    await waitFor(() => expect(lastResumenParams().usuarioId).toBeUndefined());
+    await waitFor(() => expect(screen.getByTestId('card-ventas-dia')).toHaveTextContent(fmt(100000)));
+    expect(within(screen.getByTestId('tira-row-ventas')).getByText(fmt(100000))).toBeInTheDocument();
+  });
+
+  it('seleccionar y limpiar el cliente cambia los params del resumen, las cards y la tira', async () => {
+    renderPage();
+
+    const ventas = await screen.findByTestId('card-ventas-dia');
+    expect(ventas).toHaveTextContent(fmt(100000));
+
+    fireEvent.focus(screen.getByPlaceholderText('🔍 Buscar cliente...'));
+    fireEvent.click(await screen.findByRole('option', { name: /Cliente Test/ }));
+
+    await waitFor(() => {
+      expect(lastResumenParams()).toMatchObject({ clienteId: '7', estado: 'ACTIVOS' });
+    });
+    await waitFor(() => expect(screen.getByTestId('card-ventas-dia')).toHaveTextContent(fmt(70000)));
+    expect(within(screen.getByTestId('tira-row-ventas')).getByText(fmt(70000))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar cliente' }));
+
+    await waitFor(() => expect(lastResumenParams().clienteId).toBeUndefined());
+    await waitFor(() => expect(screen.getByTestId('card-ventas-dia')).toHaveTextContent(fmt(100000)));
+  });
+
+  it('cambiar el estado del registro cambia los params del resumen, las cards y la tira', async () => {
+    renderPage();
+
+    const ventas = await screen.findByTestId('card-ventas-dia');
+    expect(ventas).toHaveTextContent(fmt(100000));
+    expect(within(screen.getByTestId('tira-row-cobrado')).getByText(fmt(100000))).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filtrar por estado de registro'), {
+      target: { value: 'ANULADOS' },
+    });
+
+    await waitFor(() => expect(lastResumenParams()).toMatchObject({ estado: 'ANULADOS' }));
+    await waitFor(() => expect(screen.getByTestId('card-ventas-dia')).toHaveTextContent(fmt(0)));
+    expect(screen.getByTestId('card-entro-caja')).toHaveTextContent(fmt(0));
+    // La tira usa el mismo resumen filtrado: "Entró a caja" también cambia.
+    expect(within(screen.getByTestId('tira-row-cobrado')).getByText(fmt(0))).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filtrar por estado de registro'), {
+      target: { value: 'TODOS' },
+    });
+
+    await waitFor(() => expect(lastResumenParams()).toMatchObject({ estado: 'TODOS' }));
   });
 });
 
@@ -2705,19 +2927,21 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     setMobileMedia(false);
   });
 
-  it('renombra las tarjetas a "Ventas del día" y "Entró a caja" y elimina las etiquetas viejas', async () => {
+  it('renombra las tarjetas a "Ventas del día" y "Cobrado del día (lo que entró)"', async () => {
     mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
 
     renderPage();
 
     const ventas = await screen.findByTestId('card-ventas-dia');
     expect(ventas).toHaveTextContent('Ventas del día');
-    expect(screen.getByTestId('card-entro-caja')).toHaveTextContent('Entró a caja');
+    expect(screen.getByTestId('card-entro-caja')).toHaveTextContent(
+      'Cobrado del día (lo que entró)',
+    );
     expect(screen.queryByText(/TOTAL INGRESOS/)).not.toBeInTheDocument();
     expect(screen.queryByText('💰 Cobrado')).not.toBeInTheDocument();
   });
 
-  it('expone un ⓘ enfocable y accesible en Ventas del día y Entró a caja', async () => {
+  it('expone un ⓘ enfocable y accesible en Ventas del día y Cobrado del día', async () => {
     mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
 
     renderPage();
@@ -2725,7 +2949,7 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     const ventas = await screen.findByTestId('card-ventas-dia');
     const caja = screen.getByTestId('card-entro-caja');
     const ventasInfo = within(ventas).getByRole('button', { name: 'Qué significa Ventas del día' });
-    const cajaInfo = within(caja).getByRole('button', { name: 'Qué significa Entró a caja' });
+    const cajaInfo = within(caja).getByRole('button', { name: 'Qué significa Cobrado del día (lo que entró)' });
 
     // Alcanzables por teclado (elementos nativos enfocables)
     cajaInfo.focus();
@@ -2748,18 +2972,25 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     expect(tooltip).toHaveTextContent(/Incluye lo fiado \(todavía no cobrado\)/i);
   });
 
-  it('el ⓘ de Entró a caja explica la caja real con propinas y deudas anteriores', async () => {
+  it('el ⓘ de Cobrado del día explica que incluye cobros de deudas viejas', async () => {
     mockResumen(duena, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
 
     renderPage();
 
     const caja = await screen.findByTestId('card-entro-caja');
-    fireEvent.mouseOver(within(caja).getByRole('button', { name: 'Qué significa Entró a caja' }));
+    fireEvent.mouseOver(
+      within(caja).getByRole('button', { name: 'Qué significa Cobrado del día (lo que entró)' }),
+    );
 
     const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip).toHaveTextContent(/La plata que realmente entró en el período/i);
-    expect(tooltip).toHaveTextContent(/propinas y cobros de deudas anteriores/i);
-    expect(tooltip).toHaveTextContent(/No cuenta lo fiado/i);
+    expect(tooltip).toHaveTextContent(/La plata que realmente entró ese día/i);
+    expect(tooltip).toHaveTextContent(/propinas y cobros de deudas viejas/i);
+    expect(tooltip).toHaveTextContent(/no tiene que ser igual a las ventas del día/i);
+    // Aclaración de alcance: los cobros no se filtran por servicio/producto.
+    expect(tooltip).toHaveTextContent(/No se filtra por servicio\/producto/i);
+    expect(tooltip).toHaveTextContent(
+      /todos los cobros del período \(un cobro cubre la venta completa\)/i,
+    );
   });
 
   it('la tira de reconciliación SIEMPRE se renderiza (aunque Cobrado === Ingresos)', async () => {
@@ -2862,7 +3093,7 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     expect(container.querySelectorAll('[class*="summaryCard"]')).toHaveLength(3);
   });
 
-  it('las tarjetas Ventas del día/Entró a caja y la tira siguen visibles para rol no privilegiado', async () => {
+  it('las tarjetas Ventas del día/Cobrado del día y la tira siguen visibles para rol no privilegiado', async () => {
     const recepcionista: IUser = { ...duena, id: 5, rol: Rol.RECEPCIONISTA };
     mockResumen(recepcionista, { totalIngresos: 935000, totalCobrado: 940000, totalPropinas: 5000 });
 
@@ -2871,7 +3102,9 @@ describe('FinanzasPage — Registros: reconciliación Ingresos vs Caja (PR6 revi
     expect(await screen.findByTestId('card-ventas-dia')).toBeInTheDocument();
     expect(screen.getByTestId('card-entro-caja')).toBeInTheDocument();
     expect(screen.getByTestId('tira-reconciliacion')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Qué significa Entró a caja' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Qué significa Cobrado del día (lo que entró)' }),
+    ).toBeInTheDocument();
     // T4: las tarjetas movidas a Reportes no se renderizan para ningún rol.
     expect(screen.queryByText('💇 Servicios')).not.toBeInTheDocument();
     expect(screen.queryByText('🧴 Productos')).not.toBeInTheDocument();

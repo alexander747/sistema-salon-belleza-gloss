@@ -4,6 +4,12 @@ import { PyLMensualUseCase } from '../PyLMensualUseCase';
 import { EstadoRegistro } from '../../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
 import { colombiaDayStartUTC, colombiaDayEndUTC } from '../../../../../../shared/colombia-date';
 
+interface MockProductoVendido {
+  cantidad: number;
+  costoUnitario?: number | null;
+  producto?: { precioCompra?: number } | null;
+}
+
 interface MockRegistro {
   estado: EstadoRegistro;
   totalServicios: number;
@@ -15,6 +21,7 @@ interface MockRegistro {
   porcentajeDescuento?: number;
   descuentoAlcance?: 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS' | null;
   serviciosItems?: { costoBaseInsumos?: number }[];
+  productosVendidos?: MockProductoVendido[];
 }
 
 interface MockGasto {
@@ -233,6 +240,8 @@ describe('PyLMensualUseCase', () => {
       gastosOperativos: 0,
       gastosPorCategoria: {},
       totalGastos: 0,
+      comprasInventario: 0,
+      costoProductos: 0,
       devoluciones: 0,
       cobrado: 0,
       fiadoPeriodo: 0,
@@ -564,6 +573,113 @@ describe('PyLMensualUseCase', () => {
       const result = await useCase.execute({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
 
       expect(result.costoBaseInsumos).toBe(150000);
+    });
+  });
+
+  describe('COGS — costo de productos vendidos', () => {
+    it('suma costoUnitario × cantidad de las líneas vendidas y lo resta del resultado', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 0,
+          totalProductos: 30000,
+          montoTotal: 30000,
+          valorFinal: 30000,
+          productosVendidos: [
+            { cantidad: 2, costoUnitario: 8000 }, // 16000
+            { cantidad: 1, costoUnitario: 5000 }, // 5000
+          ],
+        }),
+      ]);
+      mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(30000);
+
+      const result = await useCase.execute({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
+
+      expect(result.costoProductos).toBe(21000);
+      // 30000 cobrado − 0 insumos − 0 comisiones − 0 gastos − 21000 COGS − 0 dev
+      expect(result.utilidadNeta).toBe(9000);
+    });
+
+    it('legacy sin costoUnitario: cae al precioCompra ACTUAL del producto (nunca 0 por omisión)', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 0,
+          totalProductos: 20000,
+          montoTotal: 20000,
+          valorFinal: 20000,
+          productosVendidos: [
+            { cantidad: 2, costoUnitario: null, producto: { precioCompra: 4000 } },
+          ],
+        }),
+      ]);
+      mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(20000);
+
+      const result = await useCase.execute({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
+
+      expect(result.costoProductos).toBe(8000);
+      expect(result.utilidadNeta).toBe(12000);
+    });
+
+    it('legacy sin costoUnitario y sin producto cargado: cuenta 0 (no inventa costo)', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 0,
+          totalProductos: 20000,
+          montoTotal: 20000,
+          valorFinal: 20000,
+          productosVendidos: [{ cantidad: 2, costoUnitario: null, producto: null }],
+        }),
+      ]);
+      mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(20000);
+
+      const result = await useCase.execute({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
+
+      expect(result.costoProductos).toBe(0);
+      expect(result.utilidadNeta).toBe(20000);
+    });
+
+    it('excluye las compras de inventario (categoria PRODUCTOS) de los gastos operativos', async () => {
+      mockGastoRepo.search.mockResolvedValue([
+        buildGasto({ monto: 100000, esGastoFijo: false, categoria: 'PRODUCTOS' }),
+        buildGasto({ monto: 50000, esGastoFijo: false, categoria: 'MARKETING' }),
+      ]);
+      mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(200000);
+
+      const result = await useCase.execute({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
+
+      // La compra de mercadería es inventario (activo), no gasto operativo: se
+      // expone aparte y NO entra en totalGastos.
+      expect(result.comprasInventario).toBe(100000);
+      expect(result.gastosOperativos).toBe(50000);
+      expect(result.totalGastos).toBe(50000);
+      expect(result.gastosPorCategoria).toEqual({ MARKETING: 50000 });
+      // 200000 cobrado − 50000 gastos operativos − 0 COGS
+      expect(result.utilidadNeta).toBe(150000);
+    });
+
+    it('filtro por empleada: el COGS es ítem del negocio y NO se descuenta de su aporte', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 100000,
+          totalProductos: 20000,
+          montoTotal: 120000,
+          valorFinal: 120000,
+          comisionCalculada: 10000,
+          productosVendidos: [{ cantidad: 1, costoUnitario: 4000 }],
+        }),
+      ]);
+      mockRegistroRepo.sumPagosPorPeriodo.mockResolvedValue(120000);
+
+      const result = await useCase.execute({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+        usuarioId: 7,
+      });
+
+      expect(result.costoProductos).toBe(4000);
+      // Contribución = 120000 − 0 insumos − 10000 comisión (sin COGS)
+      expect(result.contribucion).toBe(110000);
+      expect(result.utilidadNeta).toBe(110000);
     });
   });
 });

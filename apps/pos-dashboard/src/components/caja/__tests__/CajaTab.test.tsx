@@ -60,6 +60,12 @@ const cierre = {
   cierreEn: '2026-08-15T22:00:00.000Z',
 };
 
+/** Reads a rendered COP amount (e.g. "$ 170.000") as a number for chain assertions. */
+function montoDe(scope: HTMLElement, testId: string): number {
+  const text = within(scope).getByTestId(testId).textContent ?? '';
+  return Number(text.replace(/[^\d-]/g, ''));
+}
+
 const reporteEsperado = {
   totalServicios: 120000,
   totalProductos: 50000,
@@ -72,7 +78,10 @@ const reporteEsperado = {
   porMetodoPago: { EFECTIVO: 150000, TARJETA: 20000, TRANSFERENCIA: 0 },
   totalRecaudado: 170000,
   comisiones: 30000,
+  fiadoDia: 30000,
   totalGastos: 10000,
+  totalDevoluciones: 5000,
+  totalNominaPrestamos: 15000,
   montoEsperado: 140000,
   montoReal: null,
   diferencia: null,
@@ -361,6 +370,9 @@ describe('CajaTab', () => {
     expect(within(reporteModal).getByTestId('reporte-monto-apertura')).toHaveTextContent(/50\.000/);
     expect(within(reporteModal).getByTestId('reporte-ingresos-servicios')).toHaveTextContent(/120\.000/);
     expect(within(reporteModal).getByTestId('reporte-ingresos-productos')).toHaveTextContent(/50\.000/);
+    // El grid del reporte etiqueta explícitamente el bruto para no confundirlo con el neto
+    expect(within(reporteModal).getByText('Servicios (bruto)')).toBeInTheDocument();
+    expect(within(reporteModal).getByText('Productos (bruto)')).toBeInTheDocument();
   });
 
   it('el cierre contempla TRANSFERENCIAS: muestra el desglose por método y el total recaudado', async () => {
@@ -722,14 +734,17 @@ describe('CajaTab', () => {
 
     // Modal con reporte del arqueo + tabla de movimientos (SERVICIO y GASTO)
     const modal = await screen.findByTestId('detalle-cierre-modal');
+    // Wider desktop panel (the mobile global rule still forces max-width:100%).
+    expect((modal.querySelector('.mobileBottomSheetContent') as HTMLElement).style.maxWidth).toBe('1120px');
     expect(within(modal).getByText(/detalle del cierre/i)).toBeInTheDocument();
-    expect(within(modal).getByText(/monto de apertura/i)).toBeInTheDocument();
+    expect(within(modal).getByTestId('detalle-monto-apertura')).toHaveTextContent(/50\.000/);
+    expect(within(modal).getByText('Ventas del día (neto)')).toBeInTheDocument();
     // 50.000 es el montoInicial de apertura (puede repetirse en el desglose)
     expect(within(modal).getAllByText(/50\.000/).length).toBeGreaterThanOrEqual(1);
-    expect(within(modal).getByText(/140\.000/)).toBeInTheDocument(); // montoEsperado
+    expect(within(modal).getAllByText(/140\.000/).length).toBeGreaterThanOrEqual(1); // montoEsperado
     // Desglose por tipo (neto) visible en el detalle
-    expect(within(modal).getByTestId('detalle-ingresos-servicios')).toHaveTextContent(/120\.000/);
-    expect(within(modal).getByTestId('detalle-ingresos-productos')).toHaveTextContent(/50\.000/);
+    expect(within(modal).getByTestId('detalle-total-servicios')).toHaveTextContent(/120\.000/);
+    expect(within(modal).getByTestId('detalle-total-productos')).toHaveTextContent(/50\.000/);
     // 170.000 aparece como ingresosBrutos y como montoReal del arqueo
     expect(within(modal).getAllByText(/170\.000/).length).toBeGreaterThanOrEqual(1);
     expect(within(modal).getByText('SERVICIO')).toBeInTheDocument();
@@ -745,6 +760,254 @@ describe('CajaTab', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('detalle-cierre-modal')).not.toBeInTheDocument();
     });
+  });
+
+  it('el detalle del cierre muestra solo los ingresos NETOS (sin el card de ingresos brutos)', async () => {
+    const reporteConDescuento = {
+      ...reporteEsperado,
+      totalServicios: 255000,
+      ingresosServicios: 235000,
+      totalProductos: 50000,
+      ingresosProductos: 50000,
+      ingresosBrutos: 305000,
+      descuentos: 20000,
+      ingresosNetos: 285000,
+      porMetodoPago: { EFECTIVO: 265000, TARJETA: 20000, TRANSFERENCIA: 0 },
+      totalRecaudado: 285000,
+      montoEsperado: 305000,
+      montoReal: 305000,
+      diferencia: 0,
+    };
+
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/1/cierre')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { caja: cierre, reporte: reporteConDescuento, movimientos: [] },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierre], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver' }));
+
+    const modal = await screen.findByTestId('detalle-cierre-modal');
+
+    // El detalle muestra el NETO por tipo (235.000), no el bruto (255.000).
+    expect(within(modal).getByTestId('detalle-total-servicios')).toHaveTextContent(/235\.000/);
+    expect(within(modal).getByTestId('detalle-total-productos')).toHaveTextContent(/50\.000/);
+    // Coherencia: Servicios neto (235.000) + Productos neto (50.000) = Ventas del día neto (285.000).
+    expect(within(modal).getByTestId('detalle-ventas-netas')).toHaveTextContent(/285\.000/);
+
+    // Etiquetas inequívocas: el detalle solo muestra cifras netas.
+    expect(within(modal).getByText('Servicios (neto)')).toBeInTheDocument();
+    expect(within(modal).getByText('Productos (neto)')).toBeInTheDocument();
+    expect(within(modal).getByText('Detalle de ventas')).toBeInTheDocument();
+    expect(within(modal).getByText('Ventas del día (neto)')).toBeInTheDocument();
+    // El card de "Ingresos brutos" ya no forma parte del Detalle del cierre.
+    expect(within(modal).queryByText('Ingresos brutos')).not.toBeInTheDocument();
+    expect(within(modal).queryByTestId('detalle-ingresos-brutos')).not.toBeInTheDocument();
+  });
+
+  it('Detalle del cierre: cadena ventas → cobrado → cuadre coherente', async () => {
+    // Coherent fixture: 200.000 sold = 170.000 collected + 30.000 fiado.
+    // Expected drawer = 50.000 opening + 120.000 cash − 30.000 cash outflows.
+    const reporteFlujo = {
+      ...reporteEsperado,
+      totalServicios: 150000,
+      ingresosServicios: 150000,
+      totalProductos: 50000,
+      ingresosProductos: 50000,
+      ingresosBrutos: 200000,
+      descuentos: 0,
+      ingresosNetos: 200000,
+      porMetodoPago: { EFECTIVO: 120000, TARJETA: 20000, TRANSFERENCIA: 30000 },
+      totalRecaudado: 170000,
+      fiadoDia: 30000,
+      montoInicial: 50000,
+      montoEsperado: 140000,
+      montoReal: 140000,
+      diferencia: 0,
+    };
+
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/1/cierre')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { caja: cierre, reporte: reporteFlujo, movimientos: [] },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierre], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver' }));
+
+    const modal = await screen.findByTestId('detalle-cierre-modal');
+
+    // Three numbered blocks in the owner's story order.
+    const blocks = Array.from(modal.querySelectorAll('[data-testid^="detalle-block-"]'));
+    expect(blocks.map((b) => b.getAttribute('data-testid'))).toEqual([
+      'detalle-block-ventas',
+      'detalle-block-cobrado',
+      'detalle-block-cuadre',
+    ]);
+
+    // 1. Sold = collected + fiado.
+    expect(within(modal).getByTestId('detalle-ventas-netas')).toHaveTextContent(/200\.000/);
+    expect(within(modal).getByTestId('detalle-ventas-cobrado')).toHaveTextContent(/170\.000/);
+    expect(within(modal).getByTestId('detalle-fiado-dia')).toHaveTextContent(/30\.000/);
+    expect(montoDe(modal, 'detalle-ventas-netas')).toBe(
+      montoDe(modal, 'detalle-ventas-cobrado') + montoDe(modal, 'detalle-fiado-dia'),
+    );
+
+    // 2. Collected = drawer cash + account (card + transfer).
+    expect(within(modal).getByTestId('detalle-caja-efectivo')).toHaveTextContent(/120\.000/);
+    expect(within(modal).getByTestId('detalle-cuenta-total')).toHaveTextContent(/50\.000/);
+    expect(within(modal).getByTestId('detalle-cobrado-tarjeta')).toHaveTextContent(/20\.000/);
+    expect(within(modal).getByTestId('detalle-cobrado-transferencia')).toHaveTextContent(/30\.000/);
+    expect(within(modal).getByTestId('detalle-total-recaudado')).toHaveTextContent(/170\.000/);
+    expect(montoDe(modal, 'detalle-ventas-cobrado')).toBe(
+      montoDe(modal, 'detalle-caja-efectivo') + montoDe(modal, 'detalle-cuenta-total'),
+    );
+    expect(montoDe(modal, 'detalle-cuenta-total')).toBe(
+      montoDe(modal, 'detalle-cobrado-tarjeta') + montoDe(modal, 'detalle-cobrado-transferencia'),
+    );
+
+    // 3. Expected = opening + cash collected − cash outflows; difference = counted − expected.
+    expect(within(modal).getByTestId('detalle-monto-apertura')).toHaveTextContent(/50\.000/);
+    expect(within(modal).getByTestId('detalle-salidas-efectivo')).toHaveTextContent(/30\.000/);
+    expect(within(modal).getByTestId('detalle-efectivo-esperado')).toHaveTextContent(/140\.000/);
+    expect(within(modal).getByTestId('detalle-monto-real')).toHaveTextContent(/140\.000/);
+    expect(within(modal).getByTestId('detalle-diferencia')).toHaveTextContent(/0/);
+    expect(within(modal).getByTestId('detalle-cuadre-etiqueta')).toHaveTextContent(/cuadra/i);
+    expect(montoDe(modal, 'detalle-efectivo-esperado')).toBe(
+      montoDe(modal, 'detalle-monto-apertura') +
+        montoDe(modal, 'detalle-caja-efectivo') -
+        montoDe(modal, 'detalle-salidas-efectivo'),
+    );
+    expect(montoDe(modal, 'detalle-diferencia')).toBe(
+      montoDe(modal, 'detalle-monto-real') - montoDe(modal, 'detalle-efectivo-esperado'),
+    );
+
+    // Secondary detail stays below the chain: all-method outflows and commissions.
+    expect(within(modal).getByTestId('detalle-gastos')).toHaveTextContent(/10\.000/);
+    expect(within(modal).getByTestId('detalle-devoluciones')).toHaveTextContent(/5\.000/);
+    expect(within(modal).getByTestId('detalle-nomina')).toHaveTextContent(/15\.000/);
+    expect(within(modal).getByTestId('detalle-total-salidas')).toHaveTextContent(/30\.000/);
+    expect(within(modal).getByTestId('detalle-comisiones')).toHaveTextContent(/30\.000/);
+  });
+
+  it('Detalle del cierre: abonos de deudas viejas reconcilian ventas, cobros y cuadre', async () => {
+    // Venta de hoy 200.000 (fiado 30.000) → cobrado de ventas de hoy 170.000.
+    // Además entró un abono de deuda vieja de 25.000 en efectivo.
+    // Cajón: 50.000 apertura + 145.000 efectivo − 30.000 salidas = 165.000.
+    const reporteConAbono = {
+      ...reporteEsperado,
+      totalServicios: 150000,
+      ingresosServicios: 150000,
+      totalProductos: 50000,
+      ingresosProductos: 50000,
+      ingresosBrutos: 200000,
+      descuentos: 0,
+      ingresosNetos: 200000,
+      porMetodoPago: { EFECTIVO: 145000, TARJETA: 20000, TRANSFERENCIA: 30000 },
+      totalRecaudado: 195000,
+      cobrosVentasDia: 170000,
+      cobrosDeudaAnteriorDia: 25000,
+      cobrosPrestamoDia: 0,
+      fiadoDia: 30000,
+      montoInicial: 50000,
+      montoEsperado: 165000,
+      montoReal: 165000,
+      diferencia: 0,
+    };
+
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/1/cierre')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { caja: cierre, reporte: reporteConAbono, movimientos: [] },
+          },
+        });
+      }
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [cierre], meta: { page: 1, limit: 12, total: 1, totalPages: 1 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver' }));
+
+    const modal = await screen.findByTestId('detalle-cierre-modal');
+
+    // 1. Ventas del día (neto) = cobrado de tus ventas de hoy + fiado del día.
+    expect(montoDe(modal, 'detalle-ventas-netas')).toBe(200000);
+    expect(montoDe(modal, 'detalle-ventas-cobrado')).toBe(170000);
+    expect(montoDe(modal, 'detalle-fiado-dia')).toBe(30000);
+    expect(montoDe(modal, 'detalle-ventas-netas')).toBe(
+      montoDe(modal, 'detalle-ventas-cobrado') + montoDe(modal, 'detalle-fiado-dia'),
+    );
+    // Abonos de deudas viejas: plata que entró, pero NO es de las ventas de hoy.
+    expect(within(modal).getByTestId('detalle-abonos-viejos')).toHaveTextContent(/25\.000/);
+    expect(within(modal).getByText(/no es de las ventas de hoy/i)).toBeInTheDocument();
+
+    // Cobrado de ventas de hoy + abonos viejos = total recobrado del día.
+    expect(
+      montoDe(modal, 'detalle-ventas-cobrado') + montoDe(modal, 'detalle-abonos-viejos'),
+    ).toBe(montoDe(modal, 'detalle-total-recaudado'));
+
+    // 2. En caja + en la cuenta = total recobrado.
+    expect(montoDe(modal, 'detalle-caja-efectivo')).toBe(145000);
+    expect(montoDe(modal, 'detalle-cuenta-total')).toBe(50000);
+    expect(
+      montoDe(modal, 'detalle-caja-efectivo') + montoDe(modal, 'detalle-cuenta-total'),
+    ).toBe(montoDe(modal, 'detalle-total-recaudado'));
+
+    // 3. Apertura + efectivo cobrado − salidas en efectivo = debería haber.
+    expect(montoDe(modal, 'detalle-efectivo-esperado')).toBe(
+      montoDe(modal, 'detalle-monto-apertura') +
+        montoDe(modal, 'detalle-caja-efectivo') -
+        montoDe(modal, 'detalle-salidas-efectivo'),
+    );
+    expect(montoDe(modal, 'detalle-efectivo-esperado')).toBe(165000);
+    expect(montoDe(modal, 'detalle-monto-real')).toBe(165000);
+    expect(montoDe(modal, 'detalle-diferencia')).toBe(0);
   });
 
   it('muestra mensaje de error cuando el detalle del cierre no se puede cargar', async () => {
@@ -1194,5 +1457,38 @@ describe('CajaTab — cerrar por id y gate de Abrir (huérfanas)', () => {
       expect(mockGet).toHaveBeenCalledWith('/salones/1/caja/5/cierre');
     });
     expect(await screen.findByText(/efectivo esperado/i)).toBeInTheDocument();
+  });
+});
+
+describe('CajaTab — saldo inicial de caja (posición informativa)', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+  });
+
+  it('muestra la tarjeta "Posición de caja" cuando el API trae el saldo inicial', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/caja/saldo-inicial')) {
+        return Promise.resolve({
+          data: { ok: true, data: { saldoInicialCaja: 100000, posicionCaja: 250000 } },
+        });
+      }
+      if (url.includes('/caja/actual')) return Promise.reject(error404);
+      if (url.includes('/caja/cierres')) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            data: { data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } },
+          },
+        });
+      }
+      if (url.includes('/empleadas')) return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: {} });
+    });
+
+    render(<CajaTab salonId={1} user={duena} />);
+
+    expect(await screen.findByTestId('posicion-caja-valor')).toHaveTextContent(/250\.000/);
+    expect(screen.getByTestId('saldo-inicial-valor')).toHaveTextContent(/100\.000/);
   });
 });

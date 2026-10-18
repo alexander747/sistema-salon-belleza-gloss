@@ -54,6 +54,14 @@ export class RegistroServicioEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   montoPendiente: number;
 
+  // Snapshot of the amount that was fiado when the sale was created: the
+  // `montoPendiente` computed at that moment. It never changes, so it answers
+  // "how much did this sale leave unpaid on the day it was billed" even after
+  // the debt is collected later. NULL for legacy rows created before this
+  // column: consumers MUST fall back to the current `montoPendiente`.
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoFiado: number | null;
+
   @Column({ type: 'boolean', default: false })
   estaPagadaEmpleada: boolean;
 

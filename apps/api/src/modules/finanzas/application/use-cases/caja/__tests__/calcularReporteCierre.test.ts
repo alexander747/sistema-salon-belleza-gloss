@@ -283,6 +283,51 @@ describe('calcularReporteCierre', () => {
     expect(reporte.ingresosBrutos).toBe(100000);
   });
 
+  it('fiadoDia: suma el snapshot montoFiado de los registros ACTIVOS', () => {
+    const registros = [
+      makeRegistro({ totalServicios: 180000, montoFiado: 50000 }),
+      makeRegistro({ totalServicios: 30000, totalProductos: 20000, montoFiado: 20000 }),
+    ];
+
+    const reporte = calcularReporteCierre(registros, [], null, 50000);
+
+    expect(reporte.fiadoDia).toBe(70000);
+    // El fiado NO entra a la caja: el esperado sigue siendo solo el fondo.
+    expect(reporte.montoEsperado).toBe(50000);
+    expect(reporte.totalRecaudado).toBe(0);
+  });
+
+  it('fiadoDia: filas legacy con montoFiado NULL caen a montoPendiente y excluye ANULADOS', () => {
+    const registros = [
+      makeRegistro({ totalServicios: 90000, montoFiado: 40000, montoPendiente: 40000 }),
+      // Legacy: sin snapshot → se usa la deuda actual.
+      makeRegistro({ totalServicios: 60000, montoFiado: null, montoPendiente: 15000 }),
+      makeRegistro({ totalServicios: 50000, montoFiado: 25000, montoPendiente: 25000, estado: EstadoRegistro.ANULADO }),
+    ];
+
+    const reporte = calcularReporteCierre(registros, [], null, 0);
+
+    expect(reporte.fiadoDia).toBe(55000);
+    expect(reporte.cantidadMovimientos).toBe(2);
+  });
+
+  it('salidas: totalDevoluciones y totalNominaPrestamos desglosan los egresos por tipo sin tocar el arqueo', () => {
+    const registros = [makeRegistro({ totalServicios: 180000 })];
+    const pagosExtra = [makePago(180000, 'EFECTIVO')];
+    const egresos: EgresoCajaInput[] = [
+      { monto: 20000, metodoPago: 'EFECTIVO', tipo: 'DEVOLUCION' },
+      { monto: 25000, metodoPago: 'EFECTIVO', tipo: 'NOMINA' },
+      { monto: 5000, metodoPago: 'TRANSFERENCIA', tipo: 'DEVOLUCION' },
+    ];
+
+    const reporte = calcularReporteCierre(registros, [], 185000, 50000, pagosExtra, egresos);
+
+    expect(reporte.totalDevoluciones).toBe(25000);
+    expect(reporte.totalNominaPrestamos).toBe(25000);
+    // El arqueo cash-only no cambia: 50000 + 180000 − 20000 − 25000 = 185000.
+    expect(reporte.montoEsperado).toBe(185000);
+  });
+
   it('no ignora las transferencias: totalRecaudado incluye efectivo+tarjeta+transferencia sin tocar el arqueo cash-only', () => {
     const registros = [makeRegistro({ totalServicios: 300000 })];
     const gastos: never[] = [];
@@ -296,5 +341,47 @@ describe('calcularReporteCierre', () => {
     expect(reporte.totalRecaudado).toBe(300000);
     expect(reporte.montoEsperado).toBe(200000);
     expect(reporte.diferencia).toBe(0);
+  });
+
+  it('chain split: separa cobros de ventas del día, abonos de deudas viejas y préstamos (exacto por construcción)', () => {
+    // Venta de hoy 200000, fiado 30000 → cobrado de la venta 170000.
+    // Además entró un abono de una deuda vieja (25000 EFECTIVO) y un cobro de
+    // préstamo (10000 TRANSFERENCIA). Todos son INFLOW de la caja.
+    const registros = [makeRegistro({ totalServicios: 200000, montoFiado: 30000 })];
+    const pagosExtra: PagoExtraCajaInput[] = [
+      makePago(170000, 'EFECTIVO'),
+      { monto: 25000, metodoPago: 'EFECTIVO', origen: 'DEUDA_ANTERIOR' },
+      { monto: 10000, metodoPago: 'TRANSFERENCIA', origen: 'PRESTAMO' },
+    ];
+
+    const reporte = calcularReporteCierre(registros, [], 245000, 50000, pagosExtra);
+
+    const cobradoHoy = reporte.ingresosNetos - reporte.fiadoDia;
+    expect(cobradoHoy).toBe(170000);
+    expect(reporte.cobrosVentasDia).toBe(170000);
+    expect(reporte.cobrosDeudaAnteriorDia).toBe(25000);
+    expect(reporte.cobrosPrestamoDia).toBe(10000);
+    // Ventas del día = cobrado de tus ventas de hoy + fiado.
+    expect(cobradoHoy + reporte.fiadoDia).toBe(reporte.ingresosNetos);
+    // El dinero que entró por ventas de hoy + abonos viejos reconcilia con lo
+    // cobrado, y los tres orígenes descomponen el total sin doble conteo.
+    expect(cobradoHoy + reporte.cobrosDeudaAnteriorDia).toBe(195000);
+    expect(
+      reporte.cobrosVentasDia + reporte.cobrosDeudaAnteriorDia + reporte.cobrosPrestamoDia,
+    ).toBe(reporte.totalRecaudado);
+    expect(reporte.totalRecaudado).toBe(205000);
+    // Drawer: apertura 50000 + efectivo cobrado (170000 + 25000) = 245000.
+    expect(reporte.porMetodoPago.EFECTIVO).toBe(195000);
+    expect(reporte.montoEsperado).toBe(245000);
+    expect(reporte.diferencia).toBe(0);
+  });
+
+  it('chain split: un pago sin origen explícito cuenta como VENTA_DIA (compatibilidad)', () => {
+    const reporte = calcularReporteCierre([], [], null, 0, [makePago(1000, 'EFECTIVO')]);
+
+    expect(reporte.cobrosVentasDia).toBe(1000);
+    expect(reporte.cobrosDeudaAnteriorDia).toBe(0);
+    expect(reporte.cobrosPrestamoDia).toBe(0);
+    expect(reporte.totalRecaudado).toBe(1000);
   });
 });

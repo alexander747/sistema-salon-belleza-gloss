@@ -8,6 +8,7 @@ import type { ILiquidacionRepository } from '../../../domain/ports/ILiquidacionR
 import type { IPagoPrestamoRepository } from '../../../../prestamos/domain/ports/IPagoPrestamoRepository';
 import { NotFoundError } from '../../../../../shared/errors';
 import { calcularReporteCierre, type MetodoPagoCaja, type ReporteCierre } from './calcularReporteCierre';
+import { clasificarPagoCaja } from './clasificarPagoCaja';
 import type { CajaDTO } from '../../dtos/CajaDTO';
 import { cajaToDTO } from '../../dtos/CajaDTO';
 import { EstadoRegistro } from '../../../../../infrastructure/persistence/entities/RegistroServicioEntity';
@@ -87,11 +88,15 @@ export class ObtenerDetalleCierreCajaUseCase {
     // devuelve). Solo EFECTIVO mueve el arqueo; transferencia solo se reporta.
     const cobrosPrestamo = pagosPrestamo
       .filter((p) => p.tipoPago === 'MANUAL')
-      .map((p) => ({ monto: Number(p.monto), metodoPago: p.metodoPago }));
+      .map((p) => ({ monto: Number(p.monto), metodoPago: p.metodoPago, origen: 'PRESTAMO' as const }));
+
+    // Clasifica los pagos de la caja por origen (venta del día vs deuda vieja)
+    // con los mismos límites de fecha de negocio que `sumCobrosDeudaAnterior`.
+    const pagosClasificados = pagosDeLaCaja.map((p) => clasificarPagoCaja(p, caja.fechaCaja));
 
     const egresos = [
-      ...devoluciones.map((d) => ({ monto: Number(d.montoDevolucion), metodoPago: d.metodoPago })),
-      ...liquidaciones.map((l) => ({ monto: Number(l.totalPagado), metodoPago: l.metodoPago })),
+      ...devoluciones.map((d) => ({ monto: Number(d.montoDevolucion), metodoPago: d.metodoPago, tipo: 'DEVOLUCION' as const })),
+      ...liquidaciones.map((l) => ({ monto: Number(l.totalPagado), metodoPago: l.metodoPago, tipo: 'NOMINA' as const })),
     ];
 
     const reporte = calcularReporteCierre(
@@ -99,7 +104,7 @@ export class ObtenerDetalleCierreCajaUseCase {
       gastos,
       montoRealEfectivo,
       Number(caja.montoInicial),
-      [...pagosDeLaCaja, ...cobrosPrestamo],
+      [...pagosClasificados, ...cobrosPrestamo],
       egresos,
     );
 

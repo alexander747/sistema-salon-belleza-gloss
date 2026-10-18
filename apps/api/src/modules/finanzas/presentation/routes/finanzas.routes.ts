@@ -11,7 +11,13 @@ import { validate } from '../../../../presentation/middleware/validate';
 import { requireRole } from '../../../../presentation/middleware/requireRole';
 import { PRIVILEGED_ROLES_LIST } from '../../../../presentation/middleware/privilegedRoles';
 import { Rol } from '@pos-final/types';
-import { createRegistroSchema, abrirCajaSchema, cerrarCajaSchema, abonarDeudaSchema } from '@pos-final/validation';
+import {
+  createRegistroSchema,
+  abrirCajaSchema,
+  cerrarCajaSchema,
+  abonarDeudaSchema,
+  updateSaldoInicialCajaSchema,
+} from '@pos-final/validation';
 
 const router = Router({ mergeParams: true });
 
@@ -155,6 +161,19 @@ router.get(
   '/caja/cierres',
   requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
   cajaController.cierres,
+);
+// Saldo inicial de caja (capital de apertura pre-sistema) + posición informativa.
+// Lectura: roles que ya ven caja. Escritura: SOLO DUEÑA/SUPERADMIN (decisión owner).
+router.get(
+  '/caja/saldo-inicial',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR),
+  cajaController.saldoInicial,
+);
+router.put(
+  '/caja/saldo-inicial',
+  requireRole(Rol.SUPERADMIN, Rol.DUEÑA),
+  validate(updateSaldoInicialCajaSchema),
+  cajaController.actualizarSaldoInicial,
 );
 // Detalle read-only de un cierre (historial): incluye CONTADOR — no modifica nada
 router.get(

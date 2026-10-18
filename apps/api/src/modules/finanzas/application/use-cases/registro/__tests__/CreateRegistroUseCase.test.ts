@@ -258,6 +258,9 @@ describe('CreateRegistroUseCase', () => {
         totalProductos: 50000,
         propina: 10000,
         comisionCalculada: 60000,
+        montoPendiente: 50000,
+        // Fiado snapshot: the unpaid amount at creation (same as montoPendiente).
+        montoFiado: 50000,
         // Price adjustment fields
         precioAjustado: false,
         porcentajeDescuento: 0,
@@ -1132,6 +1135,18 @@ describe('CreateRegistroUseCase', () => {
 
       expect(createdProducto()).toEqual(
         expect.objectContaining({ precioVentaUnitario: 0, subtotal: 0 }),
+      );
+    });
+
+    it('snapshots the catalog purchase cost (precioCompra) as costoUnitario (COGS)', async () => {
+      setupFijo(500); // catalog precioCompra = 100, precioVenta = 500
+
+      await useCase.execute({ ...validInput, productosVendidos: [{ productoId: 99, cantidad: 2 }] });
+
+      // COGS: the sale line freezes the catalog purchase cost at sale time so a
+      // later price change cannot rewrite historical profit.
+      expect(createdProducto()).toEqual(
+        expect.objectContaining({ productoId: 99, costoUnitario: 100 }),
       );
     });
   });

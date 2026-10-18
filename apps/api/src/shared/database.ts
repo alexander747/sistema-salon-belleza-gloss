@@ -57,6 +57,17 @@ export async function initializeDatabase(): Promise<void> {
     } catch (error) {
       logger.error({ component: 'database', err: error }, 'tipoPrecio backfill failed (non-fatal)');
     }
+
+    // `montoFiado` was added later as a nullable snapshot. Reconstruct it for
+    // legacy rows (only `montoFiado IS NULL`, so re-running is a no-op).
+    // Fail-safe: a backfill problem must never block boot.
+    try {
+      const { backfillMontoFiado } = await import('./montoFiadoBackfill');
+      const summary = await backfillMontoFiado(AppDataSource);
+      logger.info({ component: 'database', ...summary }, 'montoFiado backfill completed');
+    } catch (error) {
+      logger.error({ component: 'database', err: error }, 'montoFiado backfill failed (non-fatal)');
+    }
   } catch (error) {
     logger.error({ component: 'database', err: error }, 'Failed to connect to MySQL');
     process.exit(1);

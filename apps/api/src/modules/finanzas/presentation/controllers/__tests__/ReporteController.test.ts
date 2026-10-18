@@ -186,6 +186,91 @@ describe('ReporteController', () => {
         fecha: '2026-05-30',
       });
     });
+
+    it('should pass estado to the summary for privileged roles', async () => {
+      mockResumenDiaUseCase.execute.mockResolvedValue({
+        totalServicios: 0,
+        totalProductos: 0,
+        totalPropinas: 0,
+        totalComisiones: 0,
+        cantidadAtenciones: 0,
+        totalIngresos: 0,
+        totalCobrado: 0,
+        totalFiadoDia: 0,
+      });
+
+      const req = {
+        salonId: 1,
+        query: { desde: '2026-05-01', hasta: '2026-05-30', estado: 'ANULADOS' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenDia(req, res, next);
+
+      expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-30',
+        estado: 'ANULADOS',
+      });
+    });
+
+    it('should pass estado for non-privileged roles too (not person-scoped)', async () => {
+      mockResumenDiaUseCase.execute.mockResolvedValue({
+        totalServicios: 0,
+        totalProductos: 0,
+        totalPropinas: 0,
+        totalComisiones: 0,
+        cantidadAtenciones: 0,
+        totalIngresos: 0,
+        totalCobrado: 0,
+        totalFiadoDia: 0,
+      });
+
+      const req = {
+        salonId: 1,
+        query: { fecha: '2026-05-30', usuarioId: '99', estado: 'TODOS' },
+        user: { id: 4, email: 'm@t.com', rol: Rol.MANICURISTA, salonId: 1, nombre: 'Manicurista' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenDia(req, res, next);
+
+      expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        fecha: '2026-05-30',
+        usuarioId: 4,
+        estado: 'TODOS',
+      });
+    });
+
+    it('should fall back to ACTIVOS (omitted) when estado is invalid', async () => {
+      mockResumenDiaUseCase.execute.mockResolvedValue({
+        totalServicios: 0,
+        totalProductos: 0,
+        totalPropinas: 0,
+        totalComisiones: 0,
+        cantidadAtenciones: 0,
+        totalIngresos: 0,
+        totalCobrado: 0,
+        totalFiadoDia: 0,
+      });
+
+      const req = {
+        salonId: 1,
+        query: { fecha: '2026-05-30', estado: 'BOGUS' },
+        user: { id: 1, email: 'd@t.com', rol: Rol.DUEÑA, salonId: 1, nombre: 'Dueña' },
+      } as unknown as Request;
+      const res = { json: vi.fn() } as unknown as Response;
+
+      await controller.resumenDia(req, res, next);
+
+      expect(mockResumenDiaUseCase.execute).toHaveBeenCalledWith({
+        salonId: 1,
+        fecha: '2026-05-30',
+      });
+    });
   });
 
   describe('resumenDia — omisión de costo de insumos por rol', () => {

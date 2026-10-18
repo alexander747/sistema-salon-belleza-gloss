@@ -50,6 +50,20 @@ export interface PyLMensualOutput {
   gastosOperativos: number;
   gastosPorCategoria: Record<string, number>;
   totalGastos: number;
+  /**
+   * Σ montos de gastos con categoría `PRODUCTOS` = compras de inventario. Es un
+   * ACTIVO, no un gasto operativo: se excluye de `gastosFijos`/`gastosOperativos`/
+   * `totalGastos`/`gastosPorCategoria` y se expone aparte (línea no operativa).
+   * El gasto real se reconoce como COGS (`costoProductos`) al vender.
+   */
+  comprasInventario: number;
+  /**
+   * COGS (costo de los productos VENDIDOS en el período): Σ(costoUnitario ×
+   * cantidad) de las líneas de producto. El costo unitario es el snapshot de la
+   * compra al momento de la venta; para filas legacy sin snapshot cae al
+   * `precioCompra` ACTUAL del producto (join), o 0 si no hay producto cargado.
+   */
+  costoProductos: number;
   devoluciones: number;
   /** Σ totalPagado de nómina EFECTIVO del período (Rule C, cash-basis). */
   nomina: number;
@@ -67,9 +81,10 @@ export interface PyLMensualOutput {
   devolucionesNegocio: number;
   /**
    * Utilidad en base CAJA.
-   * Sin filtro de empleada: `contribucion − gastosNegocio − devolucionesNegocio
-   * − nómina + pagosPrestamo`.
-   * Con filtro de empleada: solo `contribucion` (los gastos/devoluciones del
+   * Sin filtro de empleada: `contribucion − gastosNegocio − costoProductos
+   * − devolucionesNegocio − nómina + pagosPrestamo` (los gastos son SOLO
+   * operativos: `comprasInventario` queda fuera).
+   * Con filtro de empleada: solo `contribucion` (los gastos/devoluciones/COGS del
    * salón no se le cargan; se exponen aparte como "del salón").
    */
   utilidadNeta: number;
@@ -160,6 +175,7 @@ export class PyLMensualUseCase {
     let propinas = 0;
     let comisiones = 0;
     let costoBaseInsumos = 0;
+    let costoProductos = 0;
     let cantidadAtenciones = 0;
 
     for (const r of registros) {
@@ -195,15 +211,37 @@ export class PyLMensualUseCase {
       );
       costoBaseInsumos += Math.round(costoBaseItems);
 
+      // COGS: cost of the products actually SOLD. Prefer the sale-time snapshot
+      // (`costoUnitario`); legacy rows (NULL) fall back to the CURRENT catalog
+      // `precioCompra` via the joined product, else 0 — never silently
+      // over/under count.
+      const costoProductosItems = (r.productosVendidos ?? []).reduce((sum, rp) => {
+        const costoUnitario =
+          rp.costoUnitario != null
+            ? Number(rp.costoUnitario)
+            : Number(rp.producto?.precioCompra ?? 0);
+        return sum + costoUnitario * Number(rp.cantidad ?? 0);
+      }, 0);
+      costoProductos += Math.round(costoProductosItems);
+
       if (servBruto > 0) cantidadAtenciones += 1;
     }
 
     // ── Gastos: split fijo/operativo + agrupación por categoría ──
+    // Decision (documented): a gasto tagged `PRODUCTOS` is an inventory purchase
+    // (an ASSET), not an operating expense. It is excluded from the operating
+    // expense lines and exposed separately as `comprasInventario`; the real
+    // expense is recognized as COGS (`costoProductos`) when the goods are sold.
     let gastosFijos = 0;
     let gastosOperativos = 0;
+    let comprasInventario = 0;
     const gastosPorCategoria: Record<string, number> = {};
     for (const g of gastos) {
       const monto = Number(g.monto);
+      if ((g.categoria ?? '').toUpperCase() === 'PRODUCTOS') {
+        comprasInventario += monto;
+        continue;
+      }
       if (g.esGastoFijo) gastosFijos += monto;
       else gastosOperativos += monto;
       const categoria = g.categoria || 'OTROS';
@@ -212,6 +250,7 @@ export class PyLMensualUseCase {
     const totalGastos = gastosFijos + gastosOperativos;
 
     const costoBaseInsumosRounded = round2(costoBaseInsumos);
+    const costoProductosRounded = round2(costoProductos);
     const margenBruto = round2(ingresosNetos - costoBaseInsumosRounded);
     // Contabilidad de CAJA (decisión owner): el ingreso se cuenta cuando se cobra.
     // Las líneas devengadas (ingresosBrutos/ingresosNetos/…) quedan informativas.
@@ -235,14 +274,22 @@ export class PyLMensualUseCase {
     // no modelarse, aquí no hay ingreso real. Si el negocio empieza a cobrar
     // interés: agregar el campo y exponer capital/interés por separado.
     //
-    // Filtro por empleada (decisión owner): los gastos y devoluciones son del
-    // NEGOCIO, no de la empleada. Con filtro activo NO se le descuentan: su
-    // resultado es su contribución, y el negocio se expone aparte. Sin filtro se
-    // mantiene el resultado salon-wide (gastos, devoluciones y nómina incluidos).
+    // Filtro por empleada (decisión owner): los gastos, devoluciones y el COGS
+    // son del NEGOCIO, no de la empleada. Con filtro activo NO se le descuentan:
+    // su resultado es su contribución, y el negocio se expone aparte. Sin filtro
+    // se mantiene el resultado salon-wide (gastos operativos, COGS, devoluciones
+    // y nómina incluidos).
     const esFiltroEmpleada = input.usuarioId !== undefined;
     const utilidadNeta = esFiltroEmpleada
       ? contribucion
-      : round2(contribucion - gastosNegocio - devolucionesNegocio - nomina + pagosPrestamo);
+      : round2(
+          contribucion -
+            gastosNegocio -
+            costoProductosRounded -
+            devolucionesNegocio -
+            nomina +
+            pagosPrestamo,
+        );
 
     // Semántica: el ajuste de valor puede ser hacia ABAJO (descuento real) o
     // hacia ARRIBA (incremento — p.ej. cobrar 50.000 un servicio de 40.000).
@@ -273,6 +320,8 @@ export class PyLMensualUseCase {
       gastosOperativos: round2(gastosOperativos),
       gastosPorCategoria,
       totalGastos: round2(totalGastos),
+      comprasInventario: round2(comprasInventario),
+      costoProductos: costoProductosRounded,
       devoluciones: round2(devoluciones),
       nomina: round2(nomina),
       pagosPrestamo: round2(pagosPrestamo),

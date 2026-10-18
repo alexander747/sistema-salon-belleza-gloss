@@ -159,8 +159,19 @@ describe('CerrarCajaUseCase', () => {
     // La caja de hoy no tiene registros propios (el registro fiado es de AYER)
     mockRegistroRepo.search.mockResolvedValue([]);
     mockGastoRepo.findByCajaId.mockResolvedValue([]);
-    // El abono de 25000 EFECTIVO tiene pago.cajaId = caja de HOY
-    mockPagoRepo.findByCajaConFallback.mockResolvedValue([{ id: 88, monto: 25000, metodoPago: 'EFECTIVO' }]);
+    // El abono de 25000 EFECTIVO tiene pago.cajaId = caja de HOY y su venta
+    // original es del 15/08 (anterior a la caja del 16/08).
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([
+      {
+        id: 88,
+        monto: 25000,
+        metodoPago: 'EFECTIVO',
+        registroServicio: {
+          fechaHora: new Date('2026-08-15T15:00:00.000Z'),
+          creadoEn: new Date('2026-08-15T15:00:00.000Z'),
+        },
+      },
+    ]);
     mockCajaRepo.cerrar.mockResolvedValue(true);
 
     const result = await useCase.execute({ salonId: 1, montoRealEfectivo: 75000 });
@@ -170,6 +181,11 @@ describe('CerrarCajaUseCase', () => {
     expect(result.reporte.porMetodoPago.EFECTIVO).toBe(25000);
     expect(result.reporte.montoEsperado).toBe(75000);
     expect(result.reporte.diferencia).toBe(0);
+    // El abono es de una venta anterior: no cuenta como cobro de ventas de hoy.
+    expect(result.reporte.cobrosVentasDia).toBe(0);
+    expect(result.reporte.cobrosDeudaAnteriorDia).toBe(25000);
+    expect(result.reporte.cobrosPrestamoDia).toBe(0);
+    expect(result.reporte.totalRecaudado).toBe(25000);
   });
 
   it('Rule B/C: SUMA el cobro de préstamo MANUAL (inflow) y resta devolución + nómina; excluye TRANSFERENCIA y LIQUIDACION', async () => {

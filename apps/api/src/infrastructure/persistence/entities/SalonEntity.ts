@@ -75,6 +75,14 @@ export class SalonEntity extends BaseEntity {
   @Column({ type: 'json', nullable: true })
   reglasTemporada: object;
 
+  /**
+   * Saldo inicial de caja: efectivo que el negocio ya tenía ANTES de usar el
+   * sistema. Es el punto de partida de la posición de caja, NO una ganancia y
+   * NUNCA alimenta el P&L. Aditiva/nullable (prod corre con DB_SYNCHRONIZE=true).
+   */
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0, nullable: true })
+  saldoInicialCaja: number | null;
+
   // ---- Relations ----
   @OneToMany(() => UsuarioEntity, (usuario) => usuario.salon)
   usuarios: UsuarioEntity[];

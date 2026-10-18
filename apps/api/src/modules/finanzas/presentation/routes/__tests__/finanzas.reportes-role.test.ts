@@ -51,7 +51,17 @@ vi.mock('../../controllers/ReporteController', () => ({
   },
 }));
 vi.mock('../../controllers/CajaController', () => ({
-  CajaController: class { abrir = () => {}; cerrar = () => {}; reabrir = () => {}; actual = () => {}; actualEsperado = () => {}; cierres = () => {}; detalleCierre = () => {}; },
+  CajaController: class {
+    abrir = () => {};
+    cerrar = () => {};
+    reabrir = () => {};
+    actual = () => {};
+    actualEsperado = () => {};
+    cierres = () => {};
+    detalleCierre = () => {};
+    saldoInicial = respond200;
+    actualizarSaldoInicial = respond200;
+  },
 }));
 vi.mock('../../controllers/CuentasController', () => ({
   CuentasController: class { cobrar = () => {}; pagar = () => {}; },
@@ -62,6 +72,8 @@ import { errorHandler } from '../../../../../presentation/middleware/errorHandle
 
 function buildApp(rol: Rol): express.Express {
   const app = express();
+  // La validación de body (validate) necesita el parser para los PUT.
+  app.use(express.json());
   app.use((req, _res, next) => {
     (req as unknown as { user: unknown }).user = {
       id: 7,
@@ -106,6 +118,60 @@ describe('finanzas routes — gating real de Reportes', () => {
   it('GET /finanzas/resumen sigue accesible (200) para un rol no privilegiado', async () => {
     const res = await request(buildApp(Rol.MANICURISTA)).get('/salones/1/finanzas/resumen');
     expect(res.status).toBe(200);
+  });
+});
+
+describe('finanzas routes — gating real del Saldo inicial de caja', () => {
+  it('GET /caja/saldo-inicial responde 403 a un rol no autorizado (MANICURISTA)', async () => {
+    const res = await request(buildApp(Rol.MANICURISTA)).get('/salones/1/caja/saldo-inicial');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.details.code).toBe('INSUFFICIENT_ROLE');
+  });
+
+  it('GET /caja/saldo-inicial responde 200 a DUEÑA y a ADMINISTRADOR', async () => {
+    expect((await request(buildApp(Rol.DUEÑA)).get('/salones/1/caja/saldo-inicial')).status).toBe(200);
+    expect((await request(buildApp(Rol.ADMINISTRADOR)).get('/salones/1/caja/saldo-inicial')).status).toBe(200);
+  });
+
+  it('PUT /caja/saldo-inicial responde 403 a ADMINISTRADOR (solo DUEÑA/SUPERADMIN editan)', async () => {
+    const res = await request(buildApp(Rol.ADMINISTRADOR))
+      .put('/salones/1/caja/saldo-inicial')
+      .send({ saldoInicialCaja: 100000 });
+    expect(res.status).toBe(403);
+    expect(res.body.error.details.code).toBe('INSUFFICIENT_ROLE');
+  });
+
+  it('PUT /caja/saldo-inicial responde 403 a RECEPCIONISTA', async () => {
+    const res = await request(buildApp(Rol.RECEPCIONISTA))
+      .put('/salones/1/caja/saldo-inicial')
+      .send({ saldoInicialCaja: 100000 });
+    expect(res.status).toBe(403);
+  });
+
+  it('PUT /caja/saldo-inicial responde 200 a DUEÑA y SUPERADMIN con body válido', async () => {
+    expect(
+      (
+        await request(buildApp(Rol.DUEÑA))
+          .put('/salones/1/caja/saldo-inicial')
+          .send({ saldoInicialCaja: 100000 })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(buildApp(Rol.SUPERADMIN))
+          .put('/salones/1/caja/saldo-inicial')
+          .send({ saldoInicialCaja: 0 })
+      ).status,
+    ).toBe(200);
+  });
+
+  it('PUT /caja/saldo-inicial responde 400 con body inválido (saldo negativo)', async () => {
+    const res = await request(buildApp(Rol.DUEÑA))
+      .put('/salones/1/caja/saldo-inicial')
+      .send({ saldoInicialCaja: -1 });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 });
 

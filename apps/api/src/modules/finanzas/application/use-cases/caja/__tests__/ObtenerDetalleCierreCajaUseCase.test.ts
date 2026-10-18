@@ -90,6 +90,7 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
         valorOriginal: 0,
         valorFinal: 0,
         montoTotal: 160000,
+        montoFiado: 60000,
         serviciosItems: [{ nombreServicio: 'Manicure' }],
         pagos: [{ monto: 100000, metodoPago: 'EFECTIVO' }],
         creadoEn: new Date('2026-08-15T14:00:00.000Z'),
@@ -110,6 +111,8 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
     expect(result.reporte.montoReal).toBe(160000);
     expect(result.reporte.diferencia).toBe(25000);
     expect(result.reporte.porMetodoPago.EFECTIVO).toBe(100000);
+    // El detalle expone el fiado del día (no entró a la caja).
+    expect(result.reporte.fiadoDia).toBe(60000);
     expect(result.reporte.cantidadMovimientos).toBe(2);
     expect(mockPagoRepo.findByCajaConFallback).toHaveBeenCalledWith(5);
 
@@ -132,6 +135,71 @@ describe('ObtenerDetalleCierreCajaUseCase', () => {
         metodoPago: 'EFECTIVO',
       },
     ]);
+  });
+
+  it('clasifica abonos de deudas viejas vs cobros de ventas del día (chain del cierre)', async () => {
+    mockCajaRepo.findById.mockResolvedValue({
+      ...cajaCerrada,
+      fechaCaja: '2026-08-16',
+      estado: 'ABIERTA',
+      montoEsperado: null,
+      montoRealEfectivo: null,
+      diferencia: null,
+      cierrePorId: null,
+      cierreEn: null,
+    });
+    mockRegistroRepo.search.mockResolvedValue([
+      {
+        id: 1,
+        estado: 'ACTIVO',
+        totalServicios: 200000,
+        totalProductos: 0,
+        comisionCalculada: 0,
+        precioAjustado: false,
+        valorOriginal: 0,
+        valorFinal: 0,
+        montoTotal: 200000,
+        montoFiado: 30000,
+        serviciosItems: [],
+        pagos: [],
+        creadoEn: new Date('2026-08-16T14:00:00.000Z'),
+      },
+    ]);
+    mockGastoRepo.findByCajaId.mockResolvedValue([]);
+    mockPagoRepo.findByCajaConFallback.mockResolvedValue([
+      // Cobro de la venta de HOY.
+      {
+        id: 1,
+        monto: 170000,
+        metodoPago: 'EFECTIVO',
+        registroServicio: {
+          fechaHora: new Date('2026-08-16T14:00:00.000Z'),
+          creadoEn: new Date('2026-08-16T14:00:00.000Z'),
+        },
+      },
+      // Abono de una venta de AYER (deuda vieja).
+      {
+        id: 2,
+        monto: 25000,
+        metodoPago: 'EFECTIVO',
+        registroServicio: {
+          fechaHora: new Date('2026-08-15T15:00:00.000Z'),
+          creadoEn: new Date('2026-08-15T15:00:00.000Z'),
+        },
+      },
+    ]);
+
+    const result = await useCase.execute({ salonId: 1, cajaId: 5 });
+
+    expect(result.reporte.ingresosNetos).toBe(200000);
+    expect(result.reporte.fiadoDia).toBe(30000);
+    expect(result.reporte.cobrosVentasDia).toBe(170000);
+    expect(result.reporte.cobrosDeudaAnteriorDia).toBe(25000);
+    expect(result.reporte.cobrosPrestamoDia).toBe(0);
+    expect(result.reporte.totalRecaudado).toBe(195000);
+    // Fondo 50000 + efectivo 195000 = 245000 esperado.
+    expect(result.reporte.porMetodoPago.EFECTIVO).toBe(195000);
+    expect(result.reporte.montoEsperado).toBe(245000);
   });
 
   it('should devolver la fecha del movimiento desde fechaHora (backfill) con fallback a creadoEn', async () => {

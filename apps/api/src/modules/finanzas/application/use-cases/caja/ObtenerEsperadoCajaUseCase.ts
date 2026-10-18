@@ -9,6 +9,7 @@ import type { IPagoPrestamoRepository } from '../../../../prestamos/domain/ports
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
 import { CajaNoAbiertaError } from '../../../../../shared/errors';
 import { calcularReporteCierre, type ReporteCierre } from './calcularReporteCierre';
+import { clasificarPagoCaja } from './clasificarPagoCaja';
 
 export interface ObtenerEsperadoCajaInput {
   salonId: number;
@@ -58,11 +59,15 @@ export class ObtenerEsperadoCajaUseCase {
     // devuelve). Solo EFECTIVO mueve el arqueo; transferencia solo se reporta.
     const cobrosPrestamo = pagosPrestamo
       .filter((p) => p.tipoPago === 'MANUAL')
-      .map((p) => ({ monto: Number(p.monto), metodoPago: p.metodoPago }));
+      .map((p) => ({ monto: Number(p.monto), metodoPago: p.metodoPago, origen: 'PRESTAMO' as const }));
+
+    // Clasifica los pagos de la caja por origen (venta del día vs deuda vieja)
+    // con los mismos límites de fecha de negocio que `sumCobrosDeudaAnterior`.
+    const pagosClasificados = pagosDeLaCaja.map((p) => clasificarPagoCaja(p, caja.fechaCaja));
 
     const egresos = [
-      ...devoluciones.map((d) => ({ monto: Number(d.montoDevolucion), metodoPago: d.metodoPago })),
-      ...liquidaciones.map((l) => ({ monto: Number(l.totalPagado), metodoPago: l.metodoPago })),
+      ...devoluciones.map((d) => ({ monto: Number(d.montoDevolucion), metodoPago: d.metodoPago, tipo: 'DEVOLUCION' as const })),
+      ...liquidaciones.map((l) => ({ monto: Number(l.totalPagado), metodoPago: l.metodoPago, tipo: 'NOMINA' as const })),
     ];
 
     return calcularReporteCierre(
@@ -70,7 +75,7 @@ export class ObtenerEsperadoCajaUseCase {
       gastos,
       null,
       Number(caja.montoInicial),
-      [...pagosDeLaCaja, ...cobrosPrestamo],
+      [...pagosClasificados, ...cobrosPrestamo],
       egresos,
     );
   }

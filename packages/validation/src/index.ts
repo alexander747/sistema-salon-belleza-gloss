@@ -1,7 +1,7 @@
 export { loginSchema, refreshSchema, createUsuarioSchema } from './auth.schema.js';
 export type { LoginInput, RefreshInput } from './auth.schema.js';
-export { createSalonSchema, updateSalonSchema } from './salon.schema.js';
-export type { CreateSalonInput } from './salon.schema.js';
+export { createSalonSchema, updateSalonSchema, updateSaldoInicialCajaSchema } from './salon.schema.js';
+export type { CreateSalonInput, UpdateSaldoInicialCajaInput } from './salon.schema.js';
 export { paginationSchema, idParamSchema } from './common.schema.js';
 export type { PaginationInput } from './common.schema.js';
 export {

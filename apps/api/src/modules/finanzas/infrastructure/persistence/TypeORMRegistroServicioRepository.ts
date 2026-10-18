@@ -173,6 +173,8 @@ export class TypeORMRegistroServicioRepository implements IRegistroServicioRepos
     const query = this.getRepo()
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.pagos', 'pago')
+      // Payment business date for the Excel split: the caja where it was received.
+      .leftJoinAndSelect('pago.caja', 'pcaja')
       .leftJoinAndSelect('r.divisiones', 'division')
       .leftJoinAndSelect('r.cliente', 'cliente')
       .leftJoinAndSelect('r.usuario', 'usuario')

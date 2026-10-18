@@ -29,6 +29,8 @@ export interface RegistroServicioDTO {
   totalProductos: number;
   montoTotal: number;
   montoPendiente: number;
+  /** Snapshot of the unpaid amount at sale time; null for legacy rows (fallback: montoPendiente). */
+  montoFiado: number | null;
   propina: number;
   comisionCalculada: number;
   esRetoque: boolean;
@@ -66,6 +68,7 @@ export function registroServicioToDTO(entity: RegistroServicioEntity): RegistroS
     totalProductos: Number(entity.totalProductos),
     montoTotal: Number(entity.montoTotal),
     montoPendiente: Number(entity.montoPendiente),
+    montoFiado: entity.montoFiado != null ? Number(entity.montoFiado) : null,
     propina: Number(entity.propina),
     comisionCalculada: Number(entity.comisionCalculada),
     esRetoque: entity.esRetoque,

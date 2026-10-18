@@ -13,6 +13,11 @@ import { isPrivilegedRole } from '../../../../presentation/middleware/privileged
 
 const TIPO_FILTER_VALUES = ['TODOS', 'SERVICIOS', 'PRODUCTOS'] as const;
 
+// Estado filter for the summary. `estado` is optional; an invalid value falls
+// back to ACTIVOS (same tolerant behavior as `tipo`).
+const ESTADO_FILTER_VALUES = ['ACTIVOS', 'ANULADOS', 'TODOS'] as const;
+const RESUMEN_ESTADO_QUERY_SCHEMA = z.enum(ESTADO_FILTER_VALUES);
+
 // Validación inline (sin tocar @pos-final/validation — evita el rebuild de dist).
 // desde/hasta son fechas Colombia YYYY-MM-DD; usuarioId es un entero positivo.
 const PYL_QUERY_SCHEMA = z.object({
@@ -59,12 +64,20 @@ export class ReporteController {
         ? (rawTipo as ResumenDiaInput['tipo'])
         : 'TODOS';
 
+      // Estado filter (shared with the Registros table). Invalid values fall
+      // back to ACTIVOS; ACTIVOS is the default and therefore omitted.
+      const parsedEstado = RESUMEN_ESTADO_QUERY_SCHEMA.safeParse(req.query.estado);
+      const estado: ResumenDiaInput['estado'] = parsedEstado.success
+        ? parsedEstado.data
+        : 'ACTIVOS';
+
       const result = await this.resumenDiaUseCase.execute({
         salonId: req.salonId!,
         ...(desde && hasta ? { desde, hasta } : { fecha: fecha ?? getColombiaDateString() }),
         ...(usuarioId !== undefined ? { usuarioId } : {}),
         ...(clienteId !== undefined ? { clienteId } : {}),
         ...(tipo !== 'TODOS' ? { tipo } : {}),
+        ...(estado !== 'ACTIVOS' ? { estado } : {}),
       });
 
       // Decisión owner: el Reportes es solo para roles privilegiados. Para el

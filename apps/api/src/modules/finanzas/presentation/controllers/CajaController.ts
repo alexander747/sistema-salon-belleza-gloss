@@ -7,6 +7,7 @@ import { ObtenerCajaActualUseCase } from '../../application/use-cases/caja/Obten
 import { ObtenerEsperadoCajaUseCase } from '../../application/use-cases/caja/ObtenerEsperadoCajaUseCase';
 import { ListarCierresCajaUseCase } from '../../application/use-cases/caja/ListarCierresCajaUseCase';
 import { ObtenerDetalleCierreCajaUseCase } from '../../application/use-cases/caja/ObtenerDetalleCierreCajaUseCase';
+import { SaldoInicialCajaUseCase } from '../../application/use-cases/caja/SaldoInicialCajaUseCase';
 import { paginationSchema } from '@pos-final/validation';
 import type { EstadoCaja } from '../../../../infrastructure/persistence/entities/CajaEntity';
 
@@ -20,6 +21,7 @@ export class CajaController {
     @inject(ObtenerEsperadoCajaUseCase) private readonly esperadoUseCase: ObtenerEsperadoCajaUseCase,
     @inject(ListarCierresCajaUseCase) private readonly cierresUseCase: ListarCierresCajaUseCase,
     @inject(ObtenerDetalleCierreCajaUseCase) private readonly detalleUseCase: ObtenerDetalleCierreCajaUseCase,
+    @inject(SaldoInicialCajaUseCase) private readonly saldoInicialUseCase: SaldoInicialCajaUseCase,
   ) {}
 
   /** POST /salones/:salonId/caja/abrir — auditor = req.user?.id (null en n8n). */
@@ -105,6 +107,29 @@ export class CajaController {
         estadoParam === 'ABIERTA' || estadoParam === 'CERRADA' ? estadoParam : undefined;
 
       const result = await this.cierresUseCase.execute({ salonId: req.salonId!, page, limit, estado });
+      res.status(200).json({ ok: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** GET /salones/:salonId/caja/saldo-inicial — saldo inicial + posición de caja. */
+  saldoInicial = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.saldoInicialUseCase.obtener(req.salonId!);
+      res.status(200).json({ ok: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** PUT /salones/:salonId/caja/saldo-inicial — solo DUEÑA/SUPERADMIN (guard en la ruta). */
+  actualizarSaldoInicial = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.saldoInicialUseCase.actualizar(
+        req.salonId!,
+        req.body.saldoInicialCaja,
+      );
       res.status(200).json({ ok: true, data: result });
     } catch (error) {
       next(error);

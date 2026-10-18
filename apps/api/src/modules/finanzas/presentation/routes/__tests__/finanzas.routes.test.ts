@@ -29,19 +29,19 @@ vi.mock('../../controllers/GastoController', () => ({ GastoController: class { l
 vi.mock('../../controllers/DevolucionController', () => ({ DevolucionController: class { list = stub; create = stub; } }));
 vi.mock('../../controllers/LiquidacionController', () => ({ LiquidacionController: class { nominaPendiente = stub; liquidarEmpleada = stub; historial = stub; } }));
 vi.mock('../../controllers/ReporteController', () => ({ ReporteController: class { resumenDia = stub; roiMensual = stub; pyl = stub; exportar = stub; cierreTurno = stub; resumenMensual = stub; } }));
-vi.mock('../../controllers/CajaController', () => ({ CajaController: class { abrir = stub; cerrar = stub; reabrir = stub; actual = stub; actualEsperado = stub; cierres = stub; detalleCierre = stub; } }));
+vi.mock('../../controllers/CajaController', () => ({ CajaController: class { abrir = stub; cerrar = stub; reabrir = stub; actual = stub; actualEsperado = stub; cierres = stub; detalleCierre = stub; saldoInicial = stub; actualizarSaldoInicial = stub; } }));
 vi.mock('../../controllers/CuentasController', () => ({ CuentasController: class { cobrar = stub; pagar = stub; } }));
 
 import { finanzasRouter } from '../finanzas.routes';
 import { PRIVILEGED_ROLES_LIST } from '../../../../../presentation/middleware/privilegedRoles';
 
-/** Roles exigidos por requireRole en la ruta GET dada (en orden de registro). */
-function guardsFor(path: string): Rol[][] {
+/** Roles exigidos por requireRole en la ruta dada para el método dado (orden de registro). */
+function guardsFor(path: string, method: 'get' | 'post' | 'put' = 'get'): Rol[][] {
   const router = finanzasRouter as unknown as {
     stack: { route?: { path: string; methods: Record<string, boolean>; stack: { handle: unknown }[] } }[];
   };
   const layers = router.stack.filter(
-    (l) => l.route && l.route.path === path && l.route.methods.get,
+    (l) => l.route && l.route.path === path && l.route.methods[method],
   );
   const roles: Rol[][] = [];
   for (const layer of layers) {
@@ -57,22 +57,7 @@ function guardsFor(path: string): Rol[][] {
 
 /** Roles exigidos por requireRole en la ruta POST dada. */
 function guardsForPost(path: string): Rol[][] {
-  const router = finanzasRouter as unknown as {
-    stack: { route?: { path: string; methods: Record<string, boolean>; stack: { handle: unknown }[] } }[];
-  };
-  const layers = router.stack.filter(
-    (l) => l.route && l.route.path === path && l.route.methods.post,
-  );
-  const roles: Rol[][] = [];
-  for (const layer of layers) {
-    for (const h of layer.route!.stack) {
-      const handle = h.handle as unknown as { __requireRole?: boolean; __roles?: Rol[] };
-      if (typeof h.handle === 'function' && handle.__requireRole) {
-        roles.push(handle.__roles!);
-      }
-    }
-  }
-  return roles;
+  return guardsFor(path, 'post');
 }
 
 const NOMINA_ROLES = [Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR, Rol.CONTADOR];
@@ -124,6 +109,19 @@ describe('finanzas.routes — guards de rol en GETs sensibles', () => {
       expect(guards).toContainEqual(operativos);
       expect(guards.flat()).not.toContain(Rol.RECEPCIONISTA);
     }
+  });
+
+  it('GET /caja/saldo-inicial exige SUPERADMIN/DUEÑA/ADMINISTRADOR (sin RECEPCIONISTA)', () => {
+    const guards = guardsFor('/caja/saldo-inicial');
+    expect(guards).toContainEqual([Rol.SUPERADMIN, Rol.DUEÑA, Rol.ADMINISTRADOR]);
+    expect(guards.flat()).not.toContain(Rol.RECEPCIONISTA);
+  });
+
+  it('PUT /caja/saldo-inicial exige SOLO SUPERADMIN/DUEÑA (edición del capital de apertura)', () => {
+    const guards = guardsFor('/caja/saldo-inicial', 'put');
+    expect(guards).toContainEqual([Rol.SUPERADMIN, Rol.DUEÑA]);
+    expect(guards.flat()).not.toContain(Rol.ADMINISTRADOR);
+    expect(guards.flat()).not.toContain(Rol.RECEPCIONISTA);
   });
 
   it('POST /registros/:id/pagos (abono) exige SUPERADMIN/DUEÑA/ADMINISTRADOR/RECEPCIONISTA — mismos roles que POST /registros', () => {

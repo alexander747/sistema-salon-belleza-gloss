@@ -19,6 +19,10 @@ interface MockRegistro {
   valorFinal?: number;
   cantidadProductosVendidos?: number;
   serviciosItems?: { costoBaseInsumos?: number }[];
+  /** Current outstanding debt (legacy rows fall back to this when montoFiado is NULL). */
+  montoPendiente?: number;
+  /** Snapshot of the unpaid amount at sale time. NULL for legacy rows. */
+  montoFiado?: number | null;
 }
 
 const buildRegistro = (overrides: Partial<MockRegistro> = {}): MockRegistro => ({
@@ -30,6 +34,7 @@ const buildRegistro = (overrides: Partial<MockRegistro> = {}): MockRegistro => (
   comisionCalculada: 0,
   cantidadProductosVendidos: 0,
   serviciosItems: [],
+  montoPendiente: 0,
   ...overrides,
 });
 
@@ -454,5 +459,218 @@ describe('ResumenDiaUseCase (approval — comportamiento actual)', () => {
 
     expect(result.totalDevoluciones).toBe(0);
     expect(result.balanceNeto).toBe(100000);
+  });
+
+  describe('fiadoGenerado / fiadoPendiente / fiadoCobrado (snapshot at sale time)', () => {
+    it('fiado generado y ya cobrado: generado 60000, pendiente 0, cobrado 60000', async () => {
+      mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 60000,
+          montoTotal: 60000,
+          // Snapshot: 60000 was fiado at sale time.
+          montoFiado: 60000,
+          // Current pending is 0 because the debt was collected later.
+          montoPendiente: 0,
+        }),
+        buildRegistro({
+          totalServicios: 184000,
+          montoTotal: 184000,
+          montoFiado: 0,
+          montoPendiente: 0,
+        }),
+      ]);
+      // Current pending aggregate over the same period registros.
+      mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
+
+      const result = await useCase.execute({ salonId: 1, fecha: '2026-10-01' });
+
+      expect(result.fiadoGenerado).toBe(60000);
+      expect(result.fiadoPendiente).toBe(0);
+      expect(result.fiadoCobrado).toBe(60000);
+    });
+
+    it('fiado parcial: generado 60000, pendiente 20000, cobrado 40000', async () => {
+      mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 60000,
+          montoTotal: 60000,
+          montoFiado: 60000,
+          montoPendiente: 20000,
+        }),
+      ]);
+      mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(20000);
+
+      const result = await useCase.execute({ salonId: 1, fecha: '2026-10-01' });
+
+      expect(result.fiadoGenerado).toBe(60000);
+      expect(result.fiadoPendiente).toBe(20000);
+      expect(result.fiadoCobrado).toBe(40000);
+    });
+
+    it('legacy NULL: cae al montoPendiente actual (generado 40000, pendiente 40000, cobrado 0)', async () => {
+      mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 40000,
+          montoTotal: 40000,
+          montoFiado: null,
+          montoPendiente: 40000,
+        }),
+      ]);
+      mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(40000);
+
+      const result = await useCase.execute({ salonId: 1, fecha: '2026-10-01' });
+
+      expect(result.fiadoGenerado).toBe(40000);
+      expect(result.fiadoPendiente).toBe(40000);
+      expect(result.fiadoCobrado).toBe(0);
+    });
+
+    it('clamp: fiadoCobrado nunca es negativo', async () => {
+      mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 5000,
+          montoTotal: 5000,
+          montoFiado: 0,
+          montoPendiente: 5000,
+        }),
+      ]);
+      mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(5000);
+
+      const result = await useCase.execute({ salonId: 1, fecha: '2026-10-01' });
+
+      expect(result.fiadoGenerado).toBe(0);
+      expect(result.fiadoPendiente).toBe(5000);
+      expect(result.fiadoCobrado).toBe(0);
+    });
+
+    it('excluye ANULADO del fiado generado', async () => {
+      mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+        buildRegistro({
+          estado: EstadoRegistro.ANULADO,
+          totalServicios: 90000,
+          montoTotal: 90000,
+          montoFiado: 90000,
+          montoPendiente: 90000,
+        }),
+        buildRegistro({
+          totalServicios: 10000,
+          montoTotal: 10000,
+          montoFiado: 10000,
+          montoPendiente: 0,
+        }),
+      ]);
+      mockRegistroRepo.sumMontoPendientePorPeriodo.mockResolvedValue(0);
+
+      const result = await useCase.execute({ salonId: 1, fecha: '2026-10-01' });
+
+      expect(result.fiadoGenerado).toBe(10000);
+    });
+  });
+
+  describe('estado filter (summary mirrors the Registros table)', () => {
+    it('ANULADOS reads only annulled registros and zeroes the money cards', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          estado: EstadoRegistro.ANULADO,
+          totalServicios: 999999,
+          totalProductos: 999999,
+          montoTotal: 0,
+          montoFiado: 999999,
+          montoPendiente: 0,
+        }),
+      ]);
+
+      const result = await useCase.execute({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+        estado: 'ANULADOS',
+      });
+
+      // The annulled set is read through `search` with the estado filter...
+      expect(mockRegistroRepo.search).toHaveBeenCalledWith(
+        expect.objectContaining({ salonId: 1, estado: 'ANULADOS' }),
+      );
+      expect(mockRegistroRepo.findBySalonAndDateRange).not.toHaveBeenCalled();
+      // ...and annulled rows still contribute 0 (same rule as the table).
+      expect(result.totalIngresos).toBe(0);
+      expect(result.totalServicios).toBe(0);
+      expect(result.totalProductos).toBe(0);
+      expect(result.fiadoGenerado).toBe(0);
+      expect(result.cantidadAtenciones).toBe(0);
+    });
+
+    it('TODOS reads the full set but annulled rows still contribute 0', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 100000,
+          montoTotal: 100000,
+          propina: 5000,
+        }),
+        buildRegistro({
+          estado: EstadoRegistro.ANULADO,
+          totalServicios: 999999,
+          montoTotal: 0,
+        }),
+      ]);
+
+      const result = await useCase.execute({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+        estado: 'TODOS',
+      });
+
+      expect(mockRegistroRepo.search).toHaveBeenCalledWith(
+        expect.objectContaining({ salonId: 1, estado: 'TODOS' }),
+      );
+      expect(mockRegistroRepo.findBySalonAndDateRange).not.toHaveBeenCalled();
+      expect(result.totalIngresos).toBe(100000);
+      expect(result.totalServicios).toBe(100000);
+      expect(result.totalPropinas).toBe(5000);
+      expect(result.cantidadAtenciones).toBe(1);
+    });
+
+    it('ACTIVOS reads through search excluding ANULADO', async () => {
+      mockRegistroRepo.search.mockResolvedValue([
+        buildRegistro({
+          totalServicios: 80000,
+          montoTotal: 80000,
+        }),
+      ]);
+
+      const result = await useCase.execute({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+        estado: 'ACTIVOS',
+      });
+
+      expect(mockRegistroRepo.search).toHaveBeenCalledWith(
+        expect.objectContaining({ salonId: 1, estado: 'ACTIVOS' }),
+      );
+      expect(mockRegistroRepo.findBySalonAndDateRange).not.toHaveBeenCalled();
+      expect(result.totalIngresos).toBe(80000);
+    });
+
+    it('keeps the legacy path when estado is omitted (PRESERVE)', async () => {
+      mockRegistroRepo.findBySalonAndDateRange.mockResolvedValue([
+        buildRegistro({ totalServicios: 60000, montoTotal: 60000 }),
+      ]);
+
+      const result = await useCase.execute({
+        salonId: 1,
+        desde: '2026-05-01',
+        hasta: '2026-05-31',
+      });
+
+      expect(mockRegistroRepo.search).not.toHaveBeenCalled();
+      expect(mockRegistroRepo.findBySalonAndDateRange).toHaveBeenCalledWith(
+        1,
+        expect.any(Date),
+        expect.any(Date),
+      );
+      expect(result.totalIngresos).toBe(60000);
+    });
   });
 });
