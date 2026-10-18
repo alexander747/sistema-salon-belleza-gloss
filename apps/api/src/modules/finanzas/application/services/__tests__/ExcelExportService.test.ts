@@ -266,19 +266,37 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     expect(labels).toContain('Utilidad neta');
     const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
     expect(utilidadRow.getCell(2).value).toBe(-78000);
-    const ingresosRow = rows.find((r) => r.getCell(1).value === 'Ingresos brutos')!;
-    expect(ingresosRow.getCell(2).value).toBe(350000);
+    const ingresosRow = rows.find((r) => r.getCell(1).value === 'Ingresos netos')!;
+    expect(ingresosRow.getCell(2).value).toBe(315000);
   });
 
-  it('la hoja P&L muestra las líneas cash: Cobrado, Fiado del período y Deudas por cobrar', () => {
+  it('la hoja P&L omite Fiado del período, Ingresos brutos y Descuentos', () => {
+    const wb = service.buildPyLWorkbook(pylData, movimientos, fiadoData);
+    const sheet = wb.getWorksheet('P&L')!;
+    const rows = sheet.getRows(1, sheet.rowCount)!;
+    const labels = rows.map((r) => r.getCell(1).value);
+
+    expect(labels).not.toContain('Fiado del período');
+    expect(labels).not.toContain('Ingresos brutos');
+    expect(labels).not.toContain('Descuentos');
+
+    // Net figures and the FIADO block stay.
+    const byLabel = (label: string) => rows.find((r) => r.getCell(1).value === label)!;
+    expect(byLabel('Ingresos netos').getCell(2).value).toBe(315000);
+    expect(byLabel('FIADO DEL PERÍODO')).toBeDefined();
+    expect(byLabel('Fiado generado').getCell(2).value).toBe(230000);
+    expect(byLabel('Cobrado del fiado').getCell(2).value).toBe(140000);
+    expect(byLabel('Fiado por cobrar').getCell(2).value).toBe(90000);
+    expect(byLabel('Total fiado (cobrado + por cobrar)').getCell(2).value).toBe(230000);
+  });
+
+  it('la hoja P&L muestra las líneas cash: Cobrado y Deudas por cobrar', () => {
     const wb = service.buildPyLWorkbook(pylData, movimientos, fiadoData);
     const sheet = wb.getWorksheet('P&L')!;
     const rows = sheet.getRows(1, sheet.rowCount)!;
 
     const cobradoRow = rows.find((r) => r.getCell(1).value === 'Cobrado')!;
     expect(cobradoRow.getCell(2).value).toBe(330000);
-    const fiadoRow = rows.find((r) => r.getCell(1).value === 'Fiado del período')!;
-    expect(fiadoRow.getCell(2).value).toBe(0);
     const deudasRow = rows.find((r) => r.getCell(1).value === 'Deudas por cobrar')!;
     expect(deudasRow.getCell(2).value).toBe(50000);
     // Utilidad neta es cash (cobrado − costos) y aparece después de Deudas
@@ -681,8 +699,6 @@ describe('ExcelExportService.exportar', () => {
   });
 
   it('exporta el bloque fiado y el estado por línea del período', async () => {
-    // P&L "Fiado del período" is the current pending of the period's sales, so
-    // it reconciles with the block's "Fiado por cobrar" row.
     mockPylUseCase.execute.mockResolvedValue({ ...pylData, fiadoPeriodo: 90000 });
     mockRegistroRepo.search.mockResolvedValue([
       buildRegistro({ id: 1 }),
@@ -759,10 +775,6 @@ describe('ExcelExportService.exportar', () => {
     expect(byLabel('Cobrado del fiado').getCell(2).value).toBe(140000);
     expect(byLabel('Fiado por cobrar').getCell(2).value).toBe(90000);
     expect(byLabel('Total fiado (cobrado + por cobrar)').getCell(2).value).toBe(230000);
-    expect(byLabel('Fiado del período').getCell(2).value).toBe(90000);
-    expect(byLabel('Fiado por cobrar').getCell(2).value).toBe(
-      byLabel('Fiado del período').getCell(2).value,
-    );
 
     const movSheet = wb.getWorksheet('Movimientos')!;
     const movRows = movSheet.getRows(1, movSheet.rowCount)!;

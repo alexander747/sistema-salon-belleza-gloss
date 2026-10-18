@@ -370,15 +370,12 @@ export class ExcelExportService {
 
     const conceptos: Array<[string, string | number]> = [
       ['Período', `${pyl.desde} a ${pyl.hasta}`],
-      ['Ingresos brutos', pyl.ingresosBrutos],
-      ['Descuentos', pyl.descuentos],
       ['Incrementos', pyl.incrementos ?? 0],
       ['Ingresos netos', pyl.ingresosNetos],
       ['Total servicios', pyl.totalServicios],
       ['Total productos', pyl.totalProductos],
       ['Propinas', pyl.propinas],
       ['Cobrado', pyl.cobrado],
-      ['Fiado del período', pyl.fiadoPeriodo],
       ['Deudas por cobrar', pyl.deudasPorCobrar],
       ['Insumos (costo base)', pyl.costoBaseInsumos],
       ['Costo de productos vendidos', pyl.costoProductos],
