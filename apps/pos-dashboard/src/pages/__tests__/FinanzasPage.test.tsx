@@ -3323,4 +3323,35 @@ describe('FinanzasPage — detalle del registro (rediseño T2)', () => {
     const dialog = await openDetail({ ...registroDetalle, estado: 'ANULADO' });
     expect(within(dialog).getByText('Anulado')).toBeInTheDocument();
   });
+
+  it('prorratea el precio efectivo por línea y hace que Total ítems iguale el total cobrado', async () => {
+    const dialog = await openDetail({
+      ...registroDetalle,
+      totalServicios: 80000,
+      totalProductos: 0,
+      montoTotal: 80000,
+      valorOriginal: 80000,
+      valorFinal: 60000,
+      porcentajeDescuento: 25,
+      descuentoAlcance: 'SERVICIOS',
+      productosVendidos: [],
+      serviciosItems: [
+        { id: 1, servicioId: 1, nombreServicio: 'Corte', precioServicio: 80000, costoBaseInsumos: 0 },
+      ],
+    });
+
+    const table = within(dialog).getByRole('table');
+    const lineRow = within(table).getByText('Corte').closest('tr') as HTMLElement;
+    // List 80.000 charged 60.000 → unit price and subtotal both show the effective value.
+    expect(within(lineRow).getAllByText(fmt(60000))).toHaveLength(2);
+    expect(within(lineRow).queryByText(fmt(80000))).not.toBeInTheDocument();
+
+    const totalRow = within(table).getByText('Total ítems').closest('tr') as HTMLElement;
+    expect(within(totalRow).getByText(fmt(60000))).toBeInTheDocument();
+
+    // The list → discount → actual flow stays visible.
+    expect(within(dialog).getByText('Precio original')).toBeInTheDocument();
+    expect(within(dialog).getByText('Descuento')).toBeInTheDocument();
+    expect(within(dialog).getByText('Total final')).toBeInTheDocument();
+  });
 });

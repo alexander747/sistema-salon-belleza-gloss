@@ -56,6 +56,7 @@ const fiadoData: FiadoResumen = {
 
 const movimientos: RegistroMovimiento[] = [
   {
+    registroId: 1,
     fecha: '2026-05-15',
     cliente: 'María Pérez',
     empleada: 'Ana Gómez',
@@ -74,6 +75,7 @@ const movimientos: RegistroMovimiento[] = [
     fechaUltimoCobro: null,
   },
   {
+    registroId: 2,
     fecha: '2026-05-20',
     cliente: 'Luis Torres',
     empleada: 'Ana Gómez',
@@ -92,6 +94,7 @@ const movimientos: RegistroMovimiento[] = [
     fechaUltimoCobro: '2026-05-28',
   },
   {
+    registroId: 3,
     fecha: '2026-05-25',
     cliente: 'Sofía Ruiz',
     empleada: 'Ana Gómez',
@@ -110,6 +113,7 @@ const movimientos: RegistroMovimiento[] = [
     fechaUltimoCobro: null,
   },
   {
+    registroId: 4,
     fecha: '2026-05-10',
     cliente: 'Carla Méndez',
     empleada: 'Ana Gómez',
@@ -263,11 +267,18 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     const sheet = wb.getWorksheet('P&L')!;
     const rows = sheet.getRows(1, sheet.rowCount)!;
     const labels = rows.map((r) => r.getCell(1).value);
-    expect(labels).toContain('Utilidad neta');
-    const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
+    expect(labels).toContain('Utilidad neta (ventas − costos − gastos)');
+    const utilidadRow = rows.find(
+      (r) => r.getCell(1).value === 'Utilidad neta (ventas − costos − gastos)',
+    )!;
     expect(utilidadRow.getCell(2).value).toBe(-78000);
-    const ingresosRow = rows.find((r) => r.getCell(1).value === 'Ingresos netos')!;
+    const ingresosRow = rows.find(
+      (r) => r.getCell(1).value === 'Ventas netas (servicios + productos)',
+    )!;
     expect(ingresosRow.getCell(2).value).toBe(315000);
+    // P&L keeps the NET totals from PyLMensualUseCase (never the list prices).
+    expect(rows.find((r) => r.getCell(1).value === 'Total servicios')!.getCell(2).value).toBe(270000);
+    expect(rows.find((r) => r.getCell(1).value === 'Total productos')!.getCell(2).value).toBe(45000);
   });
 
   it('la hoja P&L omite Fiado del período, Ingresos brutos y Descuentos', () => {
@@ -282,7 +293,7 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
 
     // Net figures and the FIADO block stay.
     const byLabel = (label: string) => rows.find((r) => r.getCell(1).value === label)!;
-    expect(byLabel('Ingresos netos').getCell(2).value).toBe(315000);
+    expect(byLabel('Ventas netas (servicios + productos)').getCell(2).value).toBe(315000);
     expect(byLabel('FIADO DEL PERÍODO')).toBeDefined();
     expect(byLabel('Fiado generado').getCell(2).value).toBe(230000);
     expect(byLabel('Cobrado del fiado').getCell(2).value).toBe(140000);
@@ -295,13 +306,56 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     const sheet = wb.getWorksheet('P&L')!;
     const rows = sheet.getRows(1, sheet.rowCount)!;
 
-    const cobradoRow = rows.find((r) => r.getCell(1).value === 'Cobrado')!;
+    const cobradoRow = rows.find(
+      (r) => r.getCell(1).value === 'Cobrado del período (todos los métodos)',
+    )!;
     expect(cobradoRow.getCell(2).value).toBe(330000);
-    const deudasRow = rows.find((r) => r.getCell(1).value === 'Deudas por cobrar')!;
+    const deudasRow = rows.find(
+      (r) => r.getCell(1).value === 'Deudas por cobrar (acumulado de clientes)',
+    )!;
     expect(deudasRow.getCell(2).value).toBe(50000);
     // Utilidad neta es cash (cobrado − costos) y aparece después de Deudas
-    const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
+    const utilidadRow = rows.find(
+      (r) => r.getCell(1).value === 'Utilidad neta (ventas − costos − gastos)',
+    )!;
     expect(utilidadRow.getCell(2).value).toBe(-78000);
+  });
+
+  it('la hoja P&L omite filas redundantes y usa etiquetas claras con los mismos valores', () => {
+    const wb = service.buildPyLWorkbook(pylData, movimientos, fiadoData);
+    const sheet = wb.getWorksheet('P&L')!;
+    const rows = sheet.getRows(1, sheet.rowCount)!;
+    const labels = rows.map((r) => r.getCell(1).value);
+    const byLabel = (label: string) => rows.find((r) => r.getCell(1).value === label)!;
+
+    // Redundant / always-zero rows are gone.
+    expect(labels).not.toContain('Propinas');
+    expect(labels).not.toContain('Gastos fijos');
+    expect(labels).not.toContain('Gastos operativos');
+    // Old ambiguous labels are gone.
+    expect(labels).not.toContain('Ingresos netos');
+    expect(labels).not.toContain('Cobrado');
+    expect(labels).not.toContain('Deudas por cobrar');
+    expect(labels).not.toContain('Insumos (costo base)');
+    expect(labels).not.toContain('Margen bruto');
+    expect(labels).not.toContain('Comisiones');
+    expect(labels).not.toContain('Total gastos');
+    expect(labels).not.toContain('Devoluciones');
+    expect(labels).not.toContain('Utilidad neta');
+
+    // Clear labels keep the same values and the per-category breakdown stays.
+    expect(byLabel('Ventas netas (servicios + productos)').getCell(2).value).toBe(315000);
+    expect(byLabel('Cobrado del período (todos los métodos)').getCell(2).value).toBe(330000);
+    expect(byLabel('Deudas por cobrar (acumulado de clientes)').getCell(2).value).toBe(50000);
+    expect(byLabel('Costo de insumos (servicios vendidos)').getCell(2).value).toBe(60000);
+    expect(byLabel('Margen bruto (ventas − costos)').getCell(2).value).toBe(255000);
+    expect(byLabel('Comisiones de empleadas').getCell(2).value).toBe(48000);
+    expect(byLabel('Gastos por categoría — ARRIENDO').getCell(2).value).toBe(200000);
+    expect(byLabel('Gastos por categoría — SERVICIOS_PUBLICOS').getCell(2).value).toBe(80000);
+    expect(byLabel('Total gastos del salón').getCell(2).value).toBe(280000);
+    expect(byLabel('Devoluciones del período').getCell(2).value).toBe(20000);
+    expect(byLabel('Utilidad neta (ventas − costos − gastos)').getCell(2).value).toBe(-78000);
+    expect(byLabel('Compras de inventario (no es gasto)').getCell(2).value).toBe(100000);
   });
 
   it('la hoja P&L muestra el COGS (costo de productos) y las compras de inventario', () => {
@@ -319,7 +373,9 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     const wb = service.buildPyLWorkbook(pylData, movimientos, fiadoData);
     const sheet = wb.getWorksheet('P&L')!;
     const rows = sheet.getRows(1, sheet.rowCount)!;
-    const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
+    const utilidadRow = rows.find(
+      (r) => r.getCell(1).value === 'Utilidad neta (ventas − costos − gastos)',
+    )!;
     expect(utilidadRow.getCell(2).numFmt).toBe('$#,##0');
   });
 
@@ -345,74 +401,77 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     expect(byLabel('Total fiado (cobrado + por cobrar)').font.bold).toBe(true);
   });
 
-  it('la hoja Movimientos separa pagado al vender y cobrado después por línea', () => {
+  it('la hoja Movimientos lista una fila por línea con solo dinero por línea', () => {
     const wb = service.buildPyLWorkbook(pylData, movimientos, fiadoData, cobros);
     const sheet = wb.getWorksheet('Movimientos')!;
 
     expect(sheet.getCell('A1').value).toBe('Fecha');
-    expect(sheet.getCell('B1').value).toBe('Cliente');
-    expect(sheet.getCell('C1').value).toBe('Empleada');
-    expect(sheet.getCell('D1').value).toBe('Tipo');
-    expect(sheet.getCell('E1').value).toBe('Concepto');
-    expect(sheet.getCell('F1').value).toBe('Cantidad');
-    expect(sheet.getCell('G1').value).toBe('Precio unitario');
-    expect(sheet.getCell('H1').value).toBe('Subtotal');
-    expect(sheet.getCell('I1').value).toBe('Total venta');
-    expect(sheet.getCell('J1').value).toBe('Pagado al vender');
-    expect(sheet.getCell('K1').value).toBe('Cobrado después');
-    expect(sheet.getCell('L1').value).toBe('Fiado');
-    expect(sheet.getCell('M1').value).toBe('Pendiente');
-    expect(sheet.getCell('N1').value).toBe('Estado cobro');
-    expect(sheet.getCell('O1').value).toBe('Fecha del último cobro');
+    expect(sheet.getCell('B1').value).toBe('Venta #');
+    expect(sheet.getCell('C1').value).toBe('Cliente');
+    expect(sheet.getCell('D1').value).toBe('Empleada');
+    expect(sheet.getCell('E1').value).toBe('Tipo');
+    expect(sheet.getCell('F1').value).toBe('Concepto');
+    expect(sheet.getCell('G1').value).toBe('Cantidad');
+    expect(sheet.getCell('H1').value).toBe('Precio unitario (cobrado)');
+    expect(sheet.getCell('I1').value).toBe('Subtotal (cobrado)');
+    expect(sheet.getCell('J1').value).toBe('Estado');
+    expect(sheet.getCell('K1').value).toBe('Fecha del último cobro');
     // 1 header + 4 line rows
     expect(sheet.rowCount).toBe(5);
 
+    // Sale-level money columns are gone; summing the sheet no longer inflates.
+    const headerValues = sheet.getRow(1).values as unknown[];
+    for (const removed of [
+      'Total venta',
+      'Pagado al vender',
+      'Cobrado después',
+      'Fiado',
+      'Pendiente',
+    ]) {
+      expect(headerValues).not.toContain(removed);
+    }
+
     const rows = sheet.getRows(1, sheet.rowCount)!;
     const byConcepto = (concepto: string) =>
-      rows.find((r) => r.getCell('E').value === concepto)!;
+      rows.find((r) => r.getCell('F').value === concepto)!;
 
     const pagado = byConcepto('Corte');
     expect(pagado.getCell('A').value).toBe('2026-05-15');
-    expect(pagado.getCell('B').value).toBe('María Pérez');
-    expect(pagado.getCell('C').value).toBe('Ana Gómez');
-    expect(pagado.getCell('D').value).toBe('Servicio');
-    expect(pagado.getCell('F').value).toBe(1);
-    expect(pagado.getCell('G').value).toBe(90000);
+    expect(pagado.getCell('B').value).toBe(1);
+    expect(pagado.getCell('C').value).toBe('María Pérez');
+    expect(pagado.getCell('D').value).toBe('Ana Gómez');
+    expect(pagado.getCell('E').value).toBe('Servicio');
+    expect(pagado.getCell('G').value).toBe(1);
     expect(pagado.getCell('H').value).toBe(90000);
-    expect(pagado.getCell('I').value).toBe(113000);
-    expect(pagado.getCell('J').value).toBe(113000);
-    expect(pagado.getCell('K').value).toBe(0);
-    expect(pagado.getCell('L').value).toBe(0);
-    expect(pagado.getCell('M').value).toBe(0);
-    expect(pagado.getCell('N').value).toBe('PAGADO');
-    expect(pagado.getCell('O').value).toBeNull();
+    expect(pagado.getCell('I').value).toBe(90000);
+    expect(pagado.getCell('J').value).toBe('PAGADO');
+    expect(pagado.getCell('K').value).toBeNull();
 
     const parcial = byConcepto('Manicure');
-    expect(parcial.getCell('N').value).toBe('PARCIAL');
-    expect(parcial.getCell('J').value).toBe(0);
-    expect(parcial.getCell('K').value).toBe(60000);
-    expect(parcial.getCell('L').value).toBe(100000);
-    expect(parcial.getCell('M').value).toBe(40000);
-    expect(parcial.getCell('O').value).toBe('2026-05-28');
+    expect(parcial.getCell('B').value).toBe(2);
+    expect(parcial.getCell('H').value).toBe(100000);
+    expect(parcial.getCell('I').value).toBe(100000);
+    expect(parcial.getCell('J').value).toBe('PARCIAL');
+    expect(parcial.getCell('K').value).toBe('2026-05-28');
 
     const fiado = byConcepto('Shampoo');
-    expect(fiado.getCell('D').value).toBe('Producto');
-    expect(fiado.getCell('F').value).toBe(2);
-    expect(fiado.getCell('G').value).toBe(25000);
-    expect(fiado.getCell('H').value).toBe(50000);
-    expect(fiado.getCell('J').value).toBe(0);
-    expect(fiado.getCell('K').value).toBe(0);
-    expect(fiado.getCell('N').value).toBe('FIADO');
-    expect(fiado.getCell('O').value).toBeNull();
+    expect(fiado.getCell('B').value).toBe(3);
+    expect(fiado.getCell('E').value).toBe('Producto');
+    expect(fiado.getCell('G').value).toBe(2);
+    expect(fiado.getCell('H').value).toBe(25000);
+    expect(fiado.getCell('I').value).toBe(50000);
+    expect(fiado.getCell('J').value).toBe('FIADO');
+    expect(fiado.getCell('K').value).toBeNull();
 
     const cobradoDespues = byConcepto('Tinte');
-    expect(cobradoDespues.getCell('N').value).toBe('PAGADO');
-    expect(cobradoDespues.getCell('J').value).toBe(0);
-    expect(cobradoDespues.getCell('K').value).toBe(80000);
-    expect(cobradoDespues.getCell('O').value).toBe('2026-05-30');
+    expect(cobradoDespues.getCell('B').value).toBe(4);
+    expect(cobradoDespues.getCell('H').value).toBe(80000);
+    expect(cobradoDespues.getCell('I').value).toBe(80000);
+    expect(cobradoDespues.getCell('J').value).toBe('PAGADO');
+    expect(cobradoDespues.getCell('K').value).toBe('2026-05-30');
 
-    // COP format on money columns
-    for (const col of ['G', 'H', 'I', 'J', 'K', 'L', 'M']) {
+    // COP format only on per-line money columns.
+    for (const col of ['H', 'I']) {
       expect(pagado.getCell(col).numFmt).toBe('$#,##0');
     }
   });
@@ -456,9 +515,13 @@ describe('ExcelExportService.buildPyLWorkbook', () => {
     ]);
     const pylSheet = wb.getWorksheet('P&L')!;
     const rows = pylSheet.getRows(1, pylSheet.rowCount)!;
-    const utilidadRow = rows.find((r) => r.getCell(1).value === 'Utilidad neta')!;
+    const utilidadRow = rows.find(
+      (r) => r.getCell(1).value === 'Utilidad neta (ventas − costos − gastos)',
+    )!;
     expect(utilidadRow.getCell(2).value).toBe(0);
-    const cobradoRow = rows.find((r) => r.getCell(1).value === 'Cobrado')!;
+    const cobradoRow = rows.find(
+      (r) => r.getCell(1).value === 'Cobrado del período (todos los métodos)',
+    )!;
     expect(cobradoRow.getCell(2).value).toBe(0);
     const fiadoRow = rows.find((r) => r.getCell(1).value === 'Fiado generado')!;
     expect(fiadoRow.getCell(2).value).toBe(0);
@@ -475,10 +538,12 @@ describe('registroAMovimientos', () => {
   it('agrupa los items de servicio por unidad en una sola línea con cantidad', () => {
     const rows = registroAMovimientos(
       asRegistro({
+        id: 42,
         totalServicios: 90000,
         totalProductos: 0,
         cantidadProductosVendidos: 0,
         montoTotal: 90000,
+        propina: 0,
         valorFinal: 90000,
         montoFiado: 90000,
         montoPendiente: 90000,
@@ -493,6 +558,7 @@ describe('registroAMovimientos', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
+      registroId: 42,
       tipo: 'Servicio',
       concepto: 'Corte',
       cantidad: 2,
@@ -503,6 +569,96 @@ describe('registroAMovimientos', () => {
       estadoCobro: 'FIADO',
       fechaUltimoCobro: null,
     });
+  });
+
+  it('usa el monto cobrado real, no la lista, en el precio por línea (id 197)', () => {
+    const rows = registroAMovimientos(
+      asRegistro({
+        id: 197,
+        totalServicios: 80000,
+        totalProductos: 0,
+        cantidadProductosVendidos: 0,
+        montoTotal: 80000,
+        propina: 0,
+        valorFinal: 60000,
+        precioAjustado: true,
+        porcentajeDescuento: 0,
+        montoFiado: 0,
+        montoPendiente: 0,
+        serviciosItems: [
+          { servicioId: 1, nombreServicio: 'Corte', precioServicio: 80000 },
+        ],
+        productosVendidos: [],
+        pagos: [{ monto: 60000, creadoEn: new Date('2026-05-15T15:00:00.000Z') }],
+      }),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].precioUnitario).toBe(60000);
+    expect(rows[0].subtotal).toBe(60000);
+    // Σ subtotal equals what was actually charged (valorFinal − propina).
+    expect(rows.reduce((sum, row) => sum + row.subtotal, 0)).toBe(60000);
+  });
+
+  it('prorratea el cobro entre servicios y productos y asigna el residuo a la línea mayor', () => {
+    const rows = registroAMovimientos(
+      asRegistro({
+        id: 198,
+        totalServicios: 6000,
+        totalProductos: 4000,
+        cantidadProductosVendidos: 1,
+        montoTotal: 10000,
+        propina: 0,
+        valorFinal: 9999,
+        serviciosItems: [
+          { servicioId: 1, nombreServicio: 'Corte', precioServicio: 3000 },
+          { servicioId: 2, nombreServicio: 'Peinado', precioServicio: 3000 },
+        ],
+        productosVendidos: [
+          {
+            productoId: 1,
+            cantidad: 1,
+            precioVentaUnitario: 4000,
+            subtotal: 4000,
+            producto: { nombre: 'Shampoo' },
+          },
+        ],
+        pagos: [],
+      }),
+    );
+
+    expect(rows.map((row) => [row.tipo, row.concepto, row.precioUnitario, row.subtotal])).toEqual([
+      ['Servicio', 'Corte', 3000, 3000],
+      ['Servicio', 'Peinado', 3000, 3000],
+      // Largest line (4.000 list) absorbs the −1 rounding residual.
+      ['Producto', 'Shampoo', 4000, 3999],
+    ]);
+    expect(rows.reduce((sum, row) => sum + row.subtotal, 0)).toBe(9999);
+  });
+
+  it('excluye la propina del monto prorrateado', () => {
+    const rows = registroAMovimientos(
+      asRegistro({
+        id: 199,
+        totalServicios: 100000,
+        totalProductos: 0,
+        cantidadProductosVendidos: 0,
+        montoTotal: 100000,
+        propina: 5000,
+        valorFinal: 65000,
+        montoFiado: 0,
+        montoPendiente: 0,
+        serviciosItems: [
+          { servicioId: 1, nombreServicio: 'Corte', precioServicio: 100000 },
+        ],
+        productosVendidos: [],
+        pagos: [{ monto: 65000, creadoEn: new Date('2026-05-15T15:00:00.000Z') }],
+      }),
+    );
+
+    expect(rows[0].precioUnitario).toBe(60000);
+    expect(rows[0].subtotal).toBe(60000);
+    expect(rows.reduce((sum, row) => sum + row.subtotal, 0)).toBe(65000 - 5000);
   });
 
   it('usa líneas de respaldo para registros legacy sin items', () => {
@@ -779,23 +935,20 @@ describe('ExcelExportService.exportar', () => {
     const movSheet = wb.getWorksheet('Movimientos')!;
     const movRows = movSheet.getRows(1, movSheet.rowCount)!;
     const byConcepto = (concepto: string) =>
-      movRows.find((r) => r.getCell('E').value === concepto)!;
+      movRows.find((r) => r.getCell('F').value === concepto)!;
 
-    expect(byConcepto('Corte').getCell('N').value).toBe('PAGADO');
-    expect(byConcepto('Corte').getCell('J').value).toBe(113000);
-    expect(byConcepto('Corte').getCell('K').value).toBe(0);
-    expect(byConcepto('Corte').getCell('O').value).toBeNull();
-    expect(byConcepto('Manicure').getCell('N').value).toBe('PARCIAL');
-    expect(byConcepto('Manicure').getCell('J').value).toBe(0);
-    expect(byConcepto('Manicure').getCell('K').value).toBe(60000);
-    expect(byConcepto('Manicure').getCell('O').value).toBe('2026-05-28');
-    expect(byConcepto('Tratamiento').getCell('N').value).toBe('FIADO');
-    expect(byConcepto('Tratamiento').getCell('K').value).toBe(0);
-    expect(byConcepto('Tratamiento').getCell('O').value).toBeNull();
-    expect(byConcepto('Tinte').getCell('N').value).toBe('PAGADO');
-    expect(byConcepto('Tinte').getCell('J').value).toBe(0);
-    expect(byConcepto('Tinte').getCell('K').value).toBe(80000);
-    expect(byConcepto('Tinte').getCell('O').value).toBe('2026-05-30');
+    expect(byConcepto('Corte').getCell('B').value).toBe(1);
+    expect(byConcepto('Corte').getCell('J').value).toBe('PAGADO');
+    expect(byConcepto('Corte').getCell('K').value).toBeNull();
+    expect(byConcepto('Manicure').getCell('B').value).toBe(2);
+    expect(byConcepto('Manicure').getCell('J').value).toBe('PARCIAL');
+    expect(byConcepto('Manicure').getCell('K').value).toBe('2026-05-28');
+    expect(byConcepto('Tratamiento').getCell('B').value).toBe(3);
+    expect(byConcepto('Tratamiento').getCell('J').value).toBe('FIADO');
+    expect(byConcepto('Tratamiento').getCell('K').value).toBeNull();
+    expect(byConcepto('Tinte').getCell('B').value).toBe(4);
+    expect(byConcepto('Tinte').getCell('J').value).toBe('PAGADO');
+    expect(byConcepto('Tinte').getCell('K').value).toBe('2026-05-30');
   });
 
   it('un fiado cobrado después reconcilia Movimientos con Cobros del período', async () => {
@@ -839,10 +992,12 @@ describe('ExcelExportService.exportar', () => {
     await wb.xlsx.load(result.buffer as unknown as ArrayBuffer);
 
     const movSheet = wb.getWorksheet('Movimientos')!;
-    expect(movSheet.getCell('E2').value).toBe('Corte');
-    expect(movSheet.getCell('J2').value).toBe(0); // Pagado al vender
-    expect(movSheet.getCell('K2').value).toBe(60000); // Cobrado después
-    expect(movSheet.getCell('O2').value).toBe('2026-05-28'); // último cobro
+    expect(movSheet.getCell('B2').value).toBe(1); // Venta #
+    expect(movSheet.getCell('F2').value).toBe('Corte');
+    expect(movSheet.getCell('H2').value).toBe(60000); // Precio
+    expect(movSheet.getCell('I2').value).toBe(60000); // Subtotal
+    expect(movSheet.getCell('J2').value).toBe('PAGADO');
+    expect(movSheet.getCell('K2').value).toBe('2026-05-28'); // último cobro
 
     const cobrosSheet = wb.getWorksheet('Cobros del período')!;
     expect(cobrosSheet.getCell('A2').value).toBe('2026-05-28');
@@ -853,11 +1008,11 @@ describe('ExcelExportService.exportar', () => {
     const totalRow = cobrosSheet.getRow(cobrosSheet.rowCount);
     expect(totalRow.getCell('A').value).toBe('TOTAL');
     expect(totalRow.getCell('F').value).toBe(60000);
-    // The sheet total is the period's collected income (P&L "Cobrado").
+    // The sheet total is the period's collected income (P&L "Cobrado del período").
     const pylSheet = wb.getWorksheet('P&L')!;
     const cobradoRow = pylSheet
       .getRows(1, pylSheet.rowCount)!
-      .find((r) => r.getCell(1).value === 'Cobrado')!;
+      .find((r) => r.getCell(1).value === 'Cobrado del período (todos los métodos)')!;
     expect(totalRow.getCell('F').value).toBe(cobradoRow.getCell(2).value);
   });
 
@@ -887,7 +1042,49 @@ describe('ExcelExportService.exportar', () => {
     expect(fiadoRow.getCell(2).value).toBe(0);
   });
 
-  it('sin relaciones cliente/usuario usa fallbacks con IDs y valorFinal ausente usa montoTotal', async () => {
+  it('la hoja Movimientos muestra el precio cobrado y su subtotal suma lo cobrado (id 197)', async () => {
+    mockPylUseCase.execute.mockResolvedValue(emptyPyl);
+    mockRegistroRepo.search.mockResolvedValue([
+      buildRegistro({
+        id: 197,
+        creadoEn: new Date('2026-05-15T15:00:00.000Z'),
+        totalServicios: 80000,
+        totalProductos: 0,
+        cantidadProductosVendidos: 0,
+        montoTotal: 80000,
+        propina: 0,
+        valorFinal: 60000,
+        precioAjustado: true,
+        porcentajeDescuento: 0,
+        montoFiado: 0,
+        montoPendiente: 0,
+        serviciosItems: [
+          { servicioId: 1, nombreServicio: 'Corte', precioServicio: 80000 },
+        ],
+        productosVendidos: [],
+        pagos: [{ monto: 60000, creadoEn: new Date('2026-05-15T15:00:00.000Z') }],
+      }),
+    ]);
+
+    const result = await service.exportar({ salonId: 1, desde: '2026-05-01', hasta: '2026-05-31' });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(result.buffer as unknown as ArrayBuffer);
+    const sheet = wb.getWorksheet('Movimientos')!;
+
+    expect(sheet.getCell('H1').value).toBe('Precio unitario (cobrado)');
+    expect(sheet.getCell('I1').value).toBe('Subtotal (cobrado)');
+    // Actual charged amount, never the 80.000 list price.
+    expect(sheet.getCell('H2').value).toBe(60000);
+    expect(sheet.getCell('I2').value).toBe(60000);
+
+    const subtotalSum = sheet
+      .getRows(2, sheet.rowCount - 1)!
+      .reduce((sum, row) => sum + Number(row.getCell('I').value ?? 0), 0);
+    expect(subtotalSum).toBe(60000); // valorFinal − propina
+  });
+
+  it('sin relaciones cliente/usuario usa fallbacks con IDs', async () => {
     mockPylUseCase.execute.mockResolvedValue(emptyPyl);
     mockRegistroRepo.search.mockResolvedValue([
       {
@@ -917,10 +1114,11 @@ describe('ExcelExportService.exportar', () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(result.buffer as unknown as ArrayBuffer);
     const sheet = wb.getWorksheet('Movimientos')!;
-    expect(sheet.getCell('B2').value).toBe('Cliente #7');
-    expect(sheet.getCell('C2').value).toBe('Empleada #3');
-    // valorFinal null → usa montoTotal 125000
-    expect(sheet.getCell('I2').value).toBe(125000);
+    expect(sheet.getCell('C2').value).toBe('Cliente #7');
+    expect(sheet.getCell('D2').value).toBe('Empleada #3');
+    expect(sheet.getCell('F2').value).toBe('Corte');
+    expect(sheet.getCell('H2').value).toBe(100000); // Precio
+    expect(sheet.getCell('I2').value).toBe(100000); // Subtotal
   });
 
   it('sin desde/hasta usa el mes actual de Colombia (defaults) en filename y query', async () => {
@@ -943,6 +1141,6 @@ describe('ExcelExportService.exportar', () => {
     const rows = sheet.getRows(1, sheet.rowCount)!;
     const labels = rows.map((r) => r.getCell(1).value);
     expect(labels.some((l) => String(l).startsWith('Gastos por categoría'))).toBe(false);
-    expect(labels).toContain('Total gastos');
+    expect(labels).toContain('Total gastos del salón');
   });
 });

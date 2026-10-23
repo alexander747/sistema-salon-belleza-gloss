@@ -55,8 +55,16 @@ vi.mock('../../../../../../shared/database.js', () => ({
 }));
 
 import { CreateRegistroUseCase } from '../CreateRegistroUseCase';
+import { ComisionService } from '../../../services/ComisionService';
 import { CostoInsumoService } from '../../../services/CostoInsumoService';
-import { NotFoundError, CajaCerradaError, CajaNoAbiertaEnFechaError, UnprocessableEntityError } from '../../../../../../shared/errors';
+import { calcularContribucionesRegistro } from '../../reporte/calculo-registro';
+import {
+  NotFoundError,
+  CajaCerradaError,
+  CajaNoAbiertaEnFechaError,
+  UnprocessableEntityError,
+  ValidationError,
+} from '../../../../../../shared/errors';
 import { AppDataSource } from '../../../../../../shared/database';
 import { getColombiaDateString } from '../../../../../../shared/colombia-date';
 import type { CreateRegistroInput } from '@pos-final/validation';
@@ -1244,6 +1252,447 @@ describe('CreateRegistroUseCase', () => {
         }),
         expect.anything(),
       );
+    });
+
+    it('un montoTotal igual al total derivado por % preserva el alcance elegido', async () => {
+      // El carrito SIEMPRE postea `montoTotal: finalTotal`. Cuando coincide con
+      // el total derivado del %, no es un override: el alcance y el % deben
+      // sobrevivir intactos (la comisión sigue siendo la del neto de SERVICIOS).
+      await ejecutar({
+        porcentajeDescuento: 10,
+        descuentoAlcance: 'SERVICIOS',
+        montoTotal: 140000,
+      });
+
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(90000, 50, 0);
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          valorFinal: 140000,
+          precioAjustado: true,
+          porcentajeDescuento: 10,
+          descuentoAlcance: 'SERVICIOS',
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('total ajustado por el cliente ("Ajustar valor total" = montoTotal)', () => {
+    const mockSaved = {
+      id: 1,
+      salonId: 1,
+      clienteId: 1,
+      usuarioId: 2,
+      totalServicios: 80000,
+      totalProductos: 0,
+      montoTotal: 80000,
+      propina: 0,
+      comisionCalculada: 30000,
+      esRetoque: false,
+      montoPendiente: 20000,
+      estaPagadaEmpleada: false,
+      notas: null,
+      descripcionServicio: null,
+      pagos: [],
+      divisiones: [],
+      creadoEn: new Date(),
+      actualizadoEn: new Date(),
+    };
+
+    const setup = (montoTotalLista: number, comision = 30000, pendiente = 20000) => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 5, deudaTotal: 0 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '50' });
+      mockComisionService.calcularComision.mockReturnValue(comision);
+      mockComisionService.calcularMontoTotal.mockReturnValue(montoTotalLista);
+      mockComisionService.calcularMontoPendiente.mockReturnValue(pendiente);
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      mockRegistroRepo.findById.mockResolvedValue(mockSaved);
+    };
+
+    const createArgs = () => mockRegistroRepo.create.mock.calls[0][0] as Record<string, number | string | boolean>;
+
+    it('honra un total MENOR que la lista, persiste el real y comisiona sobre el neto real', async () => {
+      setup(80000);
+      const input = {
+        ...validInput,
+        totalServicios: 80000,
+        totalProductos: 0,
+        propina: 0,
+        pagos: [{ monto: 40000, metodoPago: 'EFECTIVO' as const }],
+        montoTotal: 60000,
+      };
+
+      await useCase.execute(input);
+
+      // Comisión sobre lo que realmente se cobró por servicios (60.000), no la lista (80.000).
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(60000, 50, 0);
+      // El pendiente también se calcula sobre el valor real cobrado.
+      expect(mockComisionService.calcularMontoPendiente).toHaveBeenCalledWith(60000, 0, 40000);
+
+      const args = createArgs();
+      expect(args).toEqual(
+        expect.objectContaining({
+          // La lista se conserva como valor original (pre-ajuste).
+          montoTotal: 80000,
+          valorOriginal: 80000,
+          // El total visible/persistido es el ajustado por el cliente.
+          valorFinal: 60000,
+          precioAjustado: true,
+          porcentajeDescuento: 25,
+          descuentoAlcance: 'AMBOS',
+        }),
+      );
+
+      // Lo que ven los reportes (caja/P&L) es el total real, no la lista.
+      const contrib = calcularContribucionesRegistro({
+        totalServicios: Number(args.totalServicios),
+        totalProductos: Number(args.totalProductos),
+        propina: Number(args.propina),
+        montoTotal: Number(args.montoTotal),
+        valorFinal: Number(args.valorFinal),
+        porcentajeDescuento: Number(args.porcentajeDescuento),
+        descuentoAlcance: args.descuentoAlcance as 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS',
+      });
+      expect(contrib.servicios + contrib.productos).toBe(60000);
+    });
+
+    it('reparte proporcionalmente servicios/productos y comisiona sobre el neto real de servicios', async () => {
+      setup(80000);
+      const input = {
+        ...validInput,
+        totalServicios: 50000,
+        totalProductos: 30000,
+        propina: 0,
+        pagos: [],
+        montoTotal: 60000,
+      };
+
+      await useCase.execute(input);
+
+      // 60.000 / 80.000 = 75% → servicios 37.500 (base de comisión), productos 22.500.
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(37500, 50, 0);
+      const args = createArgs();
+      expect(args).toEqual(
+        expect.objectContaining({
+          valorFinal: 60000,
+          porcentajeDescuento: 25,
+          descuentoAlcance: 'AMBOS',
+          precioAjustado: true,
+        }),
+      );
+
+      const contrib = calcularContribucionesRegistro({
+        totalServicios: Number(args.totalServicios),
+        totalProductos: Number(args.totalProductos),
+        propina: Number(args.propina),
+        montoTotal: Number(args.montoTotal),
+        valorFinal: Number(args.valorFinal),
+        porcentajeDescuento: Number(args.porcentajeDescuento),
+        descuentoAlcance: args.descuentoAlcance as 'SERVICIOS' | 'PRODUCTOS' | 'AMBOS',
+      });
+      expect(contrib).toEqual({ servicios: 37500, productos: 22500 });
+      expect(contrib.servicios + contrib.productos).toBe(60000);
+    });
+
+    it('rechaza con 400 un total por ENCIMA de la lista y no persiste nada', async () => {
+      setup(80000);
+      const input = {
+        ...validInput,
+        totalServicios: 80000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: 80001,
+      };
+
+      await expect(useCase.execute(input)).rejects.toBeInstanceOf(ValidationError);
+      await expect(useCase.execute(input)).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(mockRegistroRepo.create).not.toHaveBeenCalled();
+      expect(mockPagoRepo.bulkCreate).not.toHaveBeenCalled();
+    });
+
+    it('rechaza con 400 un total negativo y no persiste nada', async () => {
+      setup(80000);
+      const input = {
+        ...validInput,
+        totalServicios: 80000,
+        totalProductos: 0,
+        propina: 0,
+        montoTotal: -1,
+      };
+
+      await expect(useCase.execute(input)).rejects.toBeInstanceOf(ValidationError);
+      expect(mockRegistroRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('sin montoTotal mantiene el comportamiento previo (lista = valor final)', async () => {
+      setup(80000);
+      const input = {
+        ...validInput,
+        totalServicios: 80000,
+        totalProductos: 0,
+        propina: 0,
+        pagos: [],
+      };
+
+      await useCase.execute(input);
+
+      expect(mockComisionService.calcularComision).toHaveBeenCalledWith(80000, 50, 0);
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          valorOriginal: 80000,
+          valorFinal: 80000,
+          precioAjustado: false,
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('totalProductos derivado del catálogo (anti-forgery)', () => {
+    // Real money service: the persisted total/montos must be exercised end-to-end,
+    // not stubbed, so a wrong product total cannot hide behind a mock.
+    const comisionService = new ComisionService();
+
+    // Catalog: producto 10 → 5.000, producto 20 → 3.000 (purchase costs 2.000 / 1.000).
+    const catalogo: Record<
+      number,
+      { id: number; nombre: string; precioVenta: number; precioCompra: number; cantidadStock: number }
+    > = {
+      10: { id: 10, nombre: 'Shampoo', precioVenta: 5000, precioCompra: 2000, cantidadStock: 100 },
+      20: { id: 20, nombre: 'Acondicionador', precioVenta: 3000, precioCompra: 1000, cantidadStock: 100 },
+    };
+
+    // 2 services × 70.000 = 140.000 (server-authoritative from the lines).
+    const baseInput = () => ({
+      ...validInput,
+      totalServicios: 140000,
+      propina: 0,
+      pagos: [],
+      serviciosItems: [
+        { servicioId: 1, nombreServicio: 'Corte', precioServicio: 70000, cantidad: 1 },
+        { servicioId: 2, nombreServicio: 'Tintura', precioServicio: 70000, cantidad: 1 },
+      ],
+    });
+
+    /** Legacy shape: `totalProductos` is NOT in the payload (reproduced bug report). */
+    const sinTotalProductos = (input: Record<string, unknown>) => {
+      const { totalProductos: _omitido, ...rest } = input;
+      return rest as unknown as CreateRegistroInput;
+    };
+
+    const buildUseCase = () =>
+      new CreateRegistroUseCase(
+        mockRegistroRepo as never,
+        mockPagoRepo as never,
+        mockDivisionRepo as never,
+        mockClienteRepo as never,
+        mockUsuarioRepo as never,
+        comisionService,
+        mockProductoRepo as never,
+        mockCajaRepo as never,
+        mockServicioRepo as never,
+        costoInsumoService,
+      );
+
+    const setup = () => {
+      mockClienteRepo.findBySalonAndId.mockResolvedValue({ id: 1, totalServicios: 0, deudaTotal: 0 });
+      mockUsuarioRepo.findBySalonAndId.mockResolvedValue({ id: 2, porcentajeComisionServicio: '50' });
+      mockServicioRepo.findBySalonAndId.mockResolvedValue(null);
+      mockProductoRepo.findBySalonAndId.mockImplementation(
+        async (_salonId: number, id: number) => catalogo[id] ?? null,
+      );
+      mockProductoRepo.decrementStock.mockImplementation(
+        async (id: number) => catalogo[id] ?? null,
+      );
+      mockRegistroRepo.create.mockResolvedValue({ id: 1 });
+      // The DTO is built from what was just persisted, so assertions on the result
+      // reflect the stored money, never a stubbed summary.
+      mockRegistroRepo.findById.mockImplementation(async () => ({
+        id: 1,
+        pagos: [],
+        divisiones: [],
+        creadoEn: new Date(),
+        actualizadoEn: new Date(),
+        ...(mockRegistroRepo.create.mock.calls[0]?.[0] ?? {}),
+      }));
+    };
+
+    const createArgs = () =>
+      mockRegistroRepo.create.mock.calls[0][0] as Record<string, number | string | boolean>;
+
+    const filasProducto = () =>
+      mockRepoCreate.mock.calls
+        .map(([data]) => data as Record<string, unknown>)
+        .filter((data) => data?.productoId != null);
+
+    it('derives totalProductos from Σ(catalog price × cantidad) when the payload omits it', async () => {
+      setup();
+      const input = sinTotalProductos({
+        ...baseInput(),
+        productosVendidos: [
+          { productoId: 10, cantidad: 2 }, // 5.000 × 2 = 10.000
+          { productoId: 20, cantidad: 2 }, // 3.000 × 2 = 6.000
+        ],
+      });
+
+      const result = await buildUseCase().execute(input);
+
+      // 140.000 servicios + 16.000 productos, nada pagado → fiado por el total real
+      expect(mockRegistroRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalServicios: 140000,
+          totalProductos: 16000,
+          cantidadProductosVendidos: 4,
+          montoTotal: 156000,
+          valorOriginal: 156000,
+          valorFinal: 156000,
+          montoPendiente: 156000,
+          montoFiado: 156000,
+        }),
+        expect.anything(),
+      );
+      expect(result.totalProductos).toBe(16000);
+      expect(result.valorFinal).toBe(156000);
+      expect(result.montoFiado).toBe(156000);
+
+      // Las líneas persistidas suman exactamente el total derivado (mismo resolution).
+      expect(filasProducto()).toEqual([
+        expect.objectContaining({
+          productoId: 10,
+          cantidad: 2,
+          precioVentaUnitario: 5000,
+          subtotal: 10000,
+          costoUnitario: 2000, // COGS snapshot del catálogo (sin cambios)
+        }),
+        expect.objectContaining({
+          productoId: 20,
+          cantidad: 2,
+          precioVentaUnitario: 3000,
+          subtotal: 6000,
+          costoUnitario: 1000,
+        }),
+      ]);
+
+      // Una sola resolución por línea: total y persistencia comparten el producto.
+      expect(mockProductoRepo.findBySalonAndId).toHaveBeenCalledTimes(2);
+    });
+
+    it('ignores a client-supplied totalProductos LOWER than the resolved sum', async () => {
+      setup();
+      const input = {
+        ...baseInput(),
+        totalProductos: 1000, // forjado: el valor real es 16.000
+        productosVendidos: [
+          { productoId: 10, cantidad: 2 },
+          { productoId: 20, cantidad: 2 },
+        ],
+      };
+
+      const result = await buildUseCase().execute(input);
+
+      expect(createArgs()).toEqual(
+        expect.objectContaining({
+          totalProductos: 16000,
+          montoTotal: 156000,
+          valorFinal: 156000,
+          montoFiado: 156000,
+        }),
+      );
+      expect(result.totalProductos).toBe(16000);
+      expect(result.valorFinal).toBe(156000);
+    });
+
+    it('respects a legitimate per-line precioVenta override, including 0', async () => {
+      setup();
+      const input = sinTotalProductos({
+        ...baseInput(),
+        productosVendidos: [
+          { productoId: 10, cantidad: 2, precioVenta: 4500 }, // 4.500 × 2 = 9.000
+          { productoId: 20, cantidad: 3, precioVenta: 0 }, // cortesía → 0
+        ],
+      });
+
+      await buildUseCase().execute(input);
+
+      expect(createArgs()).toEqual(
+        expect.objectContaining({
+          totalProductos: 9000,
+          montoTotal: 149000,
+          valorFinal: 149000,
+          montoFiado: 149000,
+        }),
+      );
+      expect(filasProducto()).toEqual([
+        expect.objectContaining({ productoId: 10, precioVentaUnitario: 4500, subtotal: 9000 }),
+        expect.objectContaining({ productoId: 20, precioVentaUnitario: 0, subtotal: 0 }),
+      ]);
+    });
+
+    it('keeps the payload totalProductos for a legacy registro without product lines', async () => {
+      setup();
+      const input = { ...baseInput(), totalProductos: 25000 }; // productosVendidos: []
+
+      await buildUseCase().execute(input);
+
+      expect(createArgs()).toEqual(
+        expect.objectContaining({
+          totalProductos: 25000,
+          montoTotal: 165000,
+          valorFinal: 165000,
+          montoFiado: 165000,
+        }),
+      );
+      expect(mockProductoRepo.findBySalonAndId).not.toHaveBeenCalled();
+      expect(filasProducto()).toEqual([]);
+    });
+
+    it('skips a line whose product is not in the catalog (total y líneas coinciden)', async () => {
+      setup();
+      const input = sinTotalProductos({
+        ...baseInput(),
+        productosVendidos: [
+          { productoId: 10, cantidad: 2 }, // 10.000
+          { productoId: 999, cantidad: 5 }, // no existe → se ignora
+        ],
+      });
+
+      await buildUseCase().execute(input);
+
+      expect(createArgs()).toEqual(
+        expect.objectContaining({ totalProductos: 10000, valorFinal: 150000 }),
+      );
+      expect(filasProducto()).toEqual([
+        expect.objectContaining({ productoId: 10, subtotal: 10000 }),
+      ]);
+    });
+
+    // PRESERVE: a payload whose total already matches the catalog sum keeps the
+    // exact money it persisted before this change.
+    it('persists identical money when the payload totalProductos already matches the catalog sum', async () => {
+      setup();
+      const input = {
+        ...baseInput(),
+        totalProductos: 16000,
+        productosVendidos: [
+          { productoId: 10, cantidad: 2 },
+          { productoId: 20, cantidad: 2 },
+        ],
+      };
+
+      await buildUseCase().execute(input);
+
+      expect(createArgs()).toEqual(
+        expect.objectContaining({
+          totalProductos: 16000,
+          montoTotal: 156000,
+          valorFinal: 156000,
+          montoPendiente: 156000,
+          montoFiado: 156000,
+          precioAjustado: false,
+        }),
+      );
+      expect(filasProducto()).toHaveLength(2);
     });
   });
 });

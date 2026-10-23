@@ -19,3 +19,4 @@ backups/
 
 # CodeGraph local index
 .codegraph/
+backups-bd/

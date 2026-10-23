@@ -14,10 +14,13 @@ export type EstadoCobro = 'PAGADO' | 'FIADO' | 'PARCIAL';
 
 /**
  * One sale LINE (service or product) in the "Movimientos" sheet.
- * Sale-level amounts (total venta / pagado / fiado / pendiente / estado) are
- * repeated on every line of the same sale so a row is self-contained.
+ * Only `precioUnitario` and `subtotal` are per-line money and are exported;
+ * sale-level amounts drive the collection state and are never repeated per row
+ * (summing repeated sale-level money would inflate the sheet).
  */
 export interface RegistroMovimiento {
+  /** Sale id (`registro.id`); groups the lines of the same sale. */
+  registroId: number;
   /** YYYY-MM-DD (fecha de negocio Colombia). */
   fecha: string;
   cliente: string;
@@ -26,8 +29,9 @@ export interface RegistroMovimiento {
   /** Service or product name. */
   concepto: string;
   cantidad: number;
+  /** Effective per-unit amount actually charged (after discount allocation). */
   precioUnitario: number;
-  /** Precio unitario × cantidad (gross, before sale-level discounts). */
+  /** Effective line amount actually charged. Σ over a sale equals `valorFinal − propina`. */
   subtotal: number;
   /** Actual sale total (`valorFinal`, falling back to `montoTotal`). */
   totalVenta: number;
@@ -79,19 +83,15 @@ const ESTADO_COBRO_COLOR: Record<EstadoCobro, string> = {
 const PYL_HEADER = ['Concepto', 'Valor'];
 const MOVIMIENTOS_HEADER = [
   'Fecha',
+  'Venta #',
   'Cliente',
   'Empleada',
   'Tipo',
   'Concepto',
   'Cantidad',
-  'Precio unitario',
-  'Subtotal',
-  'Total venta',
-  'Pagado al vender',
-  'Cobrado después',
-  'Fiado',
-  'Pendiente',
-  'Estado cobro',
+  'Precio unitario (cobrado)',
+  'Subtotal (cobrado)',
+  'Estado',
   'Fecha del último cobro',
 ];
 const COBROS_HEADER = [
@@ -177,6 +177,42 @@ function calcularEstadoCobro(montoPagado: number, montoPendiente: number): Estad
 }
 
 /**
+ * Rewrites each line's money to the amount actually charged, allocating the
+ * sale-level adjustment proportionally to the line's list amount:
+ *   factor = (valorFinal − propina) / Σ list line amounts
+ *   precioUnitario = round(list unit price × factor)
+ *   subtotal       = round(list line amount × factor)
+ * Rounding is per line; the residual is assigned to the largest line so that
+ * `Σ subtotal` equals the charged base EXACTLY (no cents lost or invented).
+ */
+function aplicarPrecioCobrado(rows: RegistroMovimiento[], baseCobrada: number): void {
+  if (rows.length === 0) return;
+
+  const brutoTotal = rows.reduce((sum, row) => sum + row.subtotal, 0);
+  const factor = brutoTotal > 0 ? baseCobrada / brutoTotal : 1;
+
+  let mayorIndex = 0;
+  let mayorBruto = -1;
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]!;
+    const bruto = row.subtotal;
+    row.precioUnitario = Math.round(row.precioUnitario * factor);
+    row.subtotal = Math.round(bruto * factor);
+    if (bruto > mayorBruto) {
+      mayorBruto = bruto;
+      mayorIndex = index;
+    }
+  }
+
+  const asignado = rows.reduce((sum, row) => sum + row.subtotal, 0);
+  const residuo = Math.round(baseCobrada - asignado);
+  if (residuo !== 0) {
+    const mayor = rows[mayorIndex]!;
+    mayor.subtotal += residuo;
+  }
+}
+
+/**
  * Expands one registro into its sale lines (services and products).
  * Service items are stored one row per unit, so identical per-unit rows are
  * grouped back into a single line with `cantidad`. Legacy registros without
@@ -206,6 +242,7 @@ export function registroAMovimientos(registro: RegistroServicioEntity): Registro
   const pagosDivididos = dividirPagos(registro.pagos, fecha, montoPagado);
 
   const base = {
+    registroId: registro.id,
     fecha,
     cliente: registro.cliente?.nombre ?? `Cliente #${registro.clienteId}`,
     empleada: registro.usuario?.nombre ?? `Empleada #${registro.usuarioId}`,
@@ -294,6 +331,10 @@ export function registroAMovimientos(registro: RegistroServicioEntity): Registro
     }
   }
 
+  // Export the ACTUAL charge, not the list price: prorate the sale-level
+  // discount/tip adjustment across every line (id 197: 80.000 list → 60.000 paid).
+  aplicarPrecioCobrado(rows, totalVenta - Number(registro.propina ?? 0));
+
   return rows;
 }
 
@@ -368,30 +409,30 @@ export class ExcelExportService {
     pylHeader.eachCell((cell) => estiloHeader(cell));
     pylSheet.getRow(1).height = 20;
 
+    const UTILIDAD_NETA_LABEL = 'Utilidad neta (ventas − costos − gastos)';
     const conceptos: Array<[string, string | number]> = [
       ['Período', `${pyl.desde} a ${pyl.hasta}`],
       ['Incrementos', pyl.incrementos ?? 0],
-      ['Ingresos netos', pyl.ingresosNetos],
+      ['Ventas netas (servicios + productos)', pyl.ingresosNetos],
       ['Total servicios', pyl.totalServicios],
       ['Total productos', pyl.totalProductos],
-      ['Propinas', pyl.propinas],
-      ['Cobrado', pyl.cobrado],
-      ['Deudas por cobrar', pyl.deudasPorCobrar],
-      ['Insumos (costo base)', pyl.costoBaseInsumos],
+      ['Cobrado del período (todos los métodos)', pyl.cobrado],
+      ['Deudas por cobrar (acumulado de clientes)', pyl.deudasPorCobrar],
+      ['Costo de insumos (servicios vendidos)', pyl.costoBaseInsumos],
       ['Costo de productos vendidos', pyl.costoProductos],
-      ['Margen bruto', pyl.margenBruto],
-      ['Comisiones', pyl.comisiones],
-      ['Gastos fijos', pyl.gastosFijos],
-      ['Gastos operativos', pyl.gastosOperativos],
+      ['Margen bruto (ventas − costos)', pyl.margenBruto],
+      ['Comisiones de empleadas', pyl.comisiones],
     ];
-    // Una fila por categoría de gasto, si existe
+    // Una fila por categoría de gasto, si existe. `gastosPorCategoria` already
+    // breaks down `totalGastos`, so the old fixed/operating totals are no longer
+    // exported (they only duplicated that breakdown).
     for (const [categoria, monto] of Object.entries(pyl.gastosPorCategoria ?? {})) {
       conceptos.push([`Gastos por categoría — ${categoria}`, monto]);
     }
-    conceptos.push(['Total gastos', pyl.totalGastos]);
+    conceptos.push(['Total gastos del salón', pyl.totalGastos]);
     conceptos.push(['Compras de inventario (no es gasto)', pyl.comprasInventario]);
-    conceptos.push(['Devoluciones', pyl.devoluciones]);
-    conceptos.push(['Utilidad neta', pyl.utilidadNeta]);
+    conceptos.push(['Devoluciones del período', pyl.devoluciones]);
+    conceptos.push([UTILIDAD_NETA_LABEL, pyl.utilidadNeta]);
 
     for (const [concepto, valor] of conceptos) {
       const row = pylSheet.addRow([concepto, valor]);
@@ -399,7 +440,7 @@ export class ExcelExportService {
       if (typeof valor === 'number') {
         row.getCell(2).numFmt = COP_FORMAT;
       }
-      if (concepto === 'Utilidad neta') {
+      if (concepto === UTILIDAD_NETA_LABEL) {
         row.font = { bold: true };
       }
     }
@@ -434,19 +475,15 @@ export class ExcelExportService {
     // ── Hoja Movimientos: detalle por línea de venta ──
     movSheet.columns = [
       { width: 12 }, // Fecha
+      { width: 10 }, // Venta #
       { width: 24 }, // Cliente
       { width: 22 }, // Empleada
       { width: 11 }, // Tipo
       { width: 28 }, // Concepto
       { width: 10 }, // Cantidad
-      { width: 15 }, // Precio unitario
-      { width: 15 }, // Subtotal
-      { width: 15 }, // Total venta
-      { width: 17 }, // Pagado al vender
-      { width: 16 }, // Cobrado después
-      { width: 15 }, // Fiado
-      { width: 15 }, // Pendiente
-      { width: 14 }, // Estado cobro
+      { width: 18 }, // Precio unitario (cobrado)
+      { width: 15 }, // Subtotal (cobrado)
+      { width: 14 }, // Estado
       { width: 20 }, // Fecha del último cobro
     ];
     const movHeader = movSheet.addRow(MOVIMIENTOS_HEADER);
@@ -456,6 +493,7 @@ export class ExcelExportService {
     for (const m of movimientos) {
       const row = movSheet.addRow([
         m.fecha,
+        m.registroId,
         m.cliente,
         m.empleada,
         m.tipo,
@@ -463,19 +501,14 @@ export class ExcelExportService {
         m.cantidad,
         m.precioUnitario,
         m.subtotal,
-        m.totalVenta,
-        m.montoPagadoAlVender,
-        m.montoCobradoDespues,
-        m.montoFiado,
-        m.montoPendiente,
         m.estadoCobro,
         m.fechaUltimoCobro,
       ]);
-      // COP format on price/subtotal/total/paid-at-sale/collected-later/fiado/pending.
-      for (const col of [7, 8, 9, 10, 11, 12, 13]) {
+      // COP format only on the per-line money columns (precio, subtotal).
+      for (const col of [8, 9]) {
         row.getCell(col).numFmt = COP_FORMAT;
       }
-      row.getCell(14).font = { bold: true, color: { argb: ESTADO_COBRO_COLOR[m.estadoCobro] } };
+      row.getCell(10).font = { bold: true, color: { argb: ESTADO_COBRO_COLOR[m.estadoCobro] } };
     }
 
     // ── Cobros del período sheet: one row per PAYMENT received in the period ──

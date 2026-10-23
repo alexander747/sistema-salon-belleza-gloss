@@ -12,6 +12,7 @@ import type { IDivisionRegistroRepository } from '../../../domain/ports/IDivisio
 import type { IClienteRepository } from '../../../../personas/domain/ports/IClienteRepository';
 import type { IUsuarioRepository } from '../../../../personas/domain/ports/IUsuarioRepository';
 import type { IProductoRepository } from '../../../../catalogo/domain/ports/IProductoRepository';
+import type { ProductoEntity } from '../../../../../infrastructure/persistence/entities/ProductoEntity';
 import type { IServicioRepository } from '../../../../catalogo/domain/ports/IServicioRepository';
 import { ComisionService } from '../../services/ComisionService';
 import { CostoInsumoService } from '../../services/CostoInsumoService';
@@ -20,7 +21,11 @@ import type { ICajaRepository } from '../../../domain/ports/ICajaRepository';
 import type { RegistroServicioDTO } from '../../dtos/RegistroServicioDTO';
 import { registroServicioToDTO } from '../../dtos/RegistroServicioDTO';
 import { getColombiaDateString } from '../../../../../shared/colombia-date';
-import { NotFoundError, UnprocessableEntityError } from '../../../../../shared/errors';
+import {
+  NotFoundError,
+  UnprocessableEntityError,
+  ValidationError,
+} from '../../../../../shared/errors';
 
 /**
  * Input extendido: además del payload validado por HTTP, permite fijar
@@ -38,6 +43,19 @@ interface LineaServicioResuelta {
   costoUnitario: number;
   gramosUsados: number | null;
   precioPorGramo: number | null;
+}
+
+/**
+ * A product line resolved against the catalog. Resolved once per line so the
+ * server-derived product total and the persisted `registro_productos` rows can
+ * never disagree (the same resolution feeds both).
+ */
+interface LineaProductoResuelta {
+  productoId: number;
+  producto: ProductoEntity;
+  cantidad: number;
+  precioVentaUnitario: number;
+  subtotal: number;
 }
 
 @injectable()
@@ -148,7 +166,37 @@ export class CreateRegistroUseCase {
         ? lineasResueltas.reduce((sum, l) => sum + l.precioServicio * l.cantidad, 0)
         : Number(input.totalServicios);
 
-    const totalProductosBruto = Number(input.totalProductos ?? 0);
+    // ── Resolve product lines (server-authoritative resale price) ──
+    // Each product line is resolved ONCE, before the transaction: the same
+    // resolution feeds the product total and the persisted rows, so the money
+    // and the stored lines can never disagree. A line whose product is not in
+    // the catalog is skipped exactly like the persistence loop does.
+    const lineasProductoResueltas: LineaProductoResuelta[] = [];
+    for (const pv of input.productosVendidos ?? []) {
+      const producto = await this.productoRepo.findBySalonAndId(input.salonId, pv.productoId);
+      if (!producto) continue;
+
+      // Precio editado por el usuario si viene; si no, el del catálogo.
+      // `??` (no `||`) para respetar un 0 legítimo (cortesía/regalo).
+      const precioVentaUnitario = Number(pv.precioVenta ?? producto.precioVenta);
+      const cantidad = pv.cantidad ?? 1;
+      lineasProductoResueltas.push({
+        productoId: pv.productoId,
+        producto,
+        cantidad,
+        precioVentaUnitario,
+        subtotal: precioVentaUnitario * cantidad,
+      });
+    }
+
+    // Server-authoritative product income: Σ(precio × cantidad) from the resolved
+    // lines whenever the payload carries product lines (a client-supplied total is
+    // ignored, same anti-forgery rule as services). Only a legacy registro without
+    // product lines keeps the payload value.
+    const totalProductosBruto =
+      (input.productosVendidos?.length ?? 0) > 0
+        ? lineasProductoResueltas.reduce((sum, l) => sum + l.subtotal, 0)
+        : Number(input.totalProductos ?? 0);
     const propina = Number(input.propina ?? 0);
 
     const montoTotal = this.comisionService.calcularMontoTotal(
@@ -158,9 +206,9 @@ export class CreateRegistroUseCase {
     );
 
     // ── 4a. Descuento % con ALCANCE (fuente de verdad) ────────
-    // Un único % aplicado a SERVICIOS / PRODUCTOS / AMBOS. Reemplaza el antiguo
-    // ajuste de "valor total" (totalPersonalizado): el precio se ajusta por línea
-    // (E1) + este %; el valor final se deriva server-side (nunca del cliente).
+    // Un único % aplicado a SERVICIOS / PRODUCTOS / AMBOS. El precio se ajusta
+    // por línea (E1) + este %; el valor final se deriva server-side. El override
+    // opcional de "Ajustar valor total" se resuelve en 4a-bis.
     const porcentajeDescuento = Number(input.porcentajeDescuento ?? 0);
     const descuentoAlcance: DescuentoAlcance = input.descuentoAlcance ?? 'AMBOS';
     const pctServ =
@@ -172,11 +220,63 @@ export class CreateRegistroUseCase {
         ? porcentajeDescuento
         : 0;
 
-    const servNeto = Math.round(totalServiciosEfectivo * (1 - pctServ / 100));
+    let servNeto = Math.round(totalServiciosEfectivo * (1 - pctServ / 100));
     const prodNeto = Math.round(totalProductosBruto * (1 - pctProd / 100));
     const valorOriginal = montoTotal; // total bruto pre-descuento (incluye propina)
-    const valorFinal = Number((servNeto + prodNeto + propina).toFixed(2));
-    const precioAjustado = pctServ > 0 || pctProd > 0;
+    let valorFinal = Number((servNeto + prodNeto + propina).toFixed(2));
+    let precioAjustado = pctServ > 0 || pctProd > 0;
+    let porcentajeDescuentoPersistido = porcentajeDescuento;
+    let descuentoAlcancePersistido: DescuentoAlcance = descuentoAlcance;
+
+    // ── 4a-bis. Total ajustado por el cliente ("Ajustar valor total") ──
+    // The POS always posts its computed `montoTotal`; only a value that differs
+    // from the %-derived total is an actual override (an equal amount must not
+    // reallocate a scoped discount). When supplied:
+    //   - never above the list total, never below 0 nor below the tip;
+    //   - `valorFinal` is the client amount, `valorOriginal` stays the list;
+    //   - the discount is allocated proportionally to services/products and a
+    //     matching %/scope is persisted so caja/P&L (`calculo-registro`) reconcile;
+    //   - the commission base is the ACTUAL net services amount, not the list.
+    const totalSolicitadoCrudo =
+      input.montoTotal != null ? Number(input.montoTotal) : null;
+    if (
+      totalSolicitadoCrudo != null &&
+      (!Number.isFinite(totalSolicitadoCrudo) || totalSolicitadoCrudo < 0)
+    ) {
+      throw new ValidationError('El total ajustado debe ser un número mayor o igual a 0');
+    }
+    const totalSolicitado =
+      totalSolicitadoCrudo != null ? Number(totalSolicitadoCrudo.toFixed(2)) : null;
+
+    if (totalSolicitado != null && totalSolicitado > montoTotal) {
+      throw new ValidationError('El total ajustado no puede superar el valor de la venta');
+    }
+    if (totalSolicitado != null && totalSolicitado < propina) {
+      throw new ValidationError('El total ajustado no puede ser menor que la propina');
+    }
+
+    const esOverride =
+      totalSolicitado != null && Math.abs(totalSolicitado - valorFinal) > 0.005;
+    if (esOverride) {
+      const netoReal = Number((totalSolicitado - propina).toFixed(2));
+      const baseBrutaServProd = totalServiciosEfectivo + totalProductosBruto;
+      const proporcion =
+        baseBrutaServProd > 0 ? netoReal / baseBrutaServProd : 1;
+
+      servNeto = Math.round(totalServiciosEfectivo * proporcion);
+      valorFinal = totalSolicitado;
+      precioAjustado = true;
+      descuentoAlcancePersistido = 'AMBOS';
+      porcentajeDescuentoPersistido =
+        baseBrutaServProd > 0
+          ? Number(
+              Math.min(
+                100,
+                Math.max(0, (1 - netoReal / baseBrutaServProd) * 100),
+              ).toFixed(2),
+            )
+          : 0;
+    }
 
     // ── 4b. Comisión sobre servicios NETOS ───────────────────
     // La comisión se calcula sobre lo que el cliente pagó por SERVICIOS (post
@@ -240,10 +340,10 @@ export class CreateRegistroUseCase {
           registradoPorId: input.registradoPorId,
           // Fecha de negocio (backfill): se persiste SIEMPRE (default = ahora)
           fechaHora,
-          // Price adjustment fields (server-derived)
+          // Price adjustment fields (server-derived, including client total override)
           precioAjustado,
-          porcentajeDescuento,
-          descuentoAlcance,
+          porcentajeDescuento: porcentajeDescuentoPersistido,
+          descuentoAlcance: descuentoAlcancePersistido,
           valorOriginal,
           valorFinal,
         },
@@ -288,31 +388,21 @@ export class CreateRegistroUseCase {
       });
 
       // ── 10. Save product lines & decrement stock ─────────────
-      if (input.productosVendidos && input.productosVendidos.length > 0) {
-        for (const pv of input.productosVendidos) {
-          // Fetch product to get current price
-          const producto = await this.productoRepo.findBySalonAndId(
-            input.salonId,
-            pv.productoId,
-          );
-          if (!producto) continue;
-
-          // Precio editado por el usuario si viene; si no, el del catálogo.
-          // `??` (no `||`) para respetar un 0 legítimo (cortesía/regalo).
-          const precioVentaUnitario = Number(pv.precioVenta ?? producto.precioVenta);
-          const subtotal = precioVentaUnitario * pv.cantidad;
-
+      // Uses the lines already resolved before the transaction: the persisted
+      // rows are exactly the ones that fed `totalProductosBruto`.
+      if (lineasProductoResueltas.length > 0) {
+        for (const linea of lineasProductoResueltas) {
           const registroProducto = qr.manager
             .getRepository(RegistroProductoEntity)
             .create({
               registroServicioId: registro.id,
-              productoId: pv.productoId,
-              cantidad: pv.cantidad,
-              precioVentaUnitario,
+              productoId: linea.productoId,
+              cantidad: linea.cantidad,
+              precioVentaUnitario: linea.precioVentaUnitario,
               // COGS snapshot: freeze the catalog purchase cost at sale time so a
               // later price change cannot rewrite historical profit.
-              costoUnitario: Number(producto.precioCompra ?? 0),
-              subtotal,
+              costoUnitario: Number(linea.producto.precioCompra ?? 0),
+              subtotal: linea.subtotal,
             });
           await qr.manager
             .getRepository(RegistroProductoEntity)
@@ -323,13 +413,13 @@ export class CreateRegistroUseCase {
           // venta se rechaza con 422 y el error dentro de la transacción
           // hace rollback (no queda nada persistido a medias).
           const stockActualizado = await this.productoRepo.decrementStock(
-            pv.productoId,
-            pv.cantidad,
+            linea.productoId,
+            linea.cantidad,
             qr,
           );
           if (!stockActualizado) {
             throw new UnprocessableEntityError(
-              `Stock insuficiente para el producto ${producto.nombre}`,
+              `Stock insuficiente para el producto ${linea.producto.nombre}`,
             );
           }
         }

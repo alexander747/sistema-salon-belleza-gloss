@@ -30,6 +30,14 @@ export const createRegistroSchema = z.object({
   totalServicios: z.number().min(0, 'El total de servicios debe ser mayor o igual a 0').default(0),
   totalProductos: z.number().min(0, 'El total de productos debe ser mayor o igual a 0').default(0),
   propina: z.number().min(0).default(0),
+  // Client-supplied desired final amount ("Ajustar valor total"). Optional:
+  // when present and different from the server-derived total, the use case
+  // charges this amount instead of the list/% total. Shape validation only;
+  // "cannot exceed the list total" is enforced there (it needs the resolved lines).
+  montoTotal: z
+    .number()
+    .min(0, 'El total ajustado debe ser mayor o igual a 0')
+    .optional(),
   descripcionServicio: z.string().max(200).optional(),
   esRetoque: z.boolean().default(false),
   // Fecha de negocio (ISO datetime). Default = ahora en CreateRegistroUseCase;

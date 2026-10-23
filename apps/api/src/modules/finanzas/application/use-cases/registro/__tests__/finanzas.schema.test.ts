@@ -180,6 +180,43 @@ describe('createRegistroSchema — serviciosItems', () => {
   });
 });
 
+describe('createRegistroSchema — montoTotal ajustado (opcional)', () => {
+  const baseValid = {
+    salonId: 1,
+    clienteId: 1,
+    usuarioId: 1,
+    totalServicios: 50000,
+    totalProductos: 0,
+    propina: 0,
+    pagos: [{ monto: 50000, metodoPago: 'EFECTIVO' }],
+  };
+
+  it('should keep the field undefined when the client sends no total override', () => {
+    const result = createRegistroSchema.parse(baseValid);
+    expect(result.montoTotal).toBeUndefined();
+  });
+
+  it('should accept and preserve a non-negative client total', () => {
+    const result = createRegistroSchema.parse({ ...baseValid, montoTotal: 40000 });
+    expect(result.montoTotal).toBe(40000);
+  });
+
+  it('should accept 0 (full courtesy sale)', () => {
+    const result = createRegistroSchema.parse({ ...baseValid, montoTotal: 0 });
+    expect(result.montoTotal).toBe(0);
+  });
+
+  it('should reject a negative client total', () => {
+    expect(() => createRegistroSchema.parse({ ...baseValid, montoTotal: -1 })).toThrow();
+  });
+
+  it('should reject a non-numeric client total', () => {
+    expect(() =>
+      createRegistroSchema.parse({ ...baseValid, montoTotal: '40000' }),
+    ).toThrow();
+  });
+});
+
 describe('completarCitaSchema', () => {
   const validRegistro = {
     salonId: 1,

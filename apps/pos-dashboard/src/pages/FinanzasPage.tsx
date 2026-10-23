@@ -18,6 +18,7 @@ import TableSkeleton from '../components/TableSkeleton.js';
 import { extractApiErrorMessage } from '../utils/apiErrors.js';
 import { isPrivilegedRole } from '../utils/roles.js';
 import { alcanceLabel, type DescuentoAlcance } from '../utils/reparto.js';
+import { allocateRegistroItems } from '../utils/registroItems.js';
 import { buildTiraReconciliacion } from '../utils/tiraReconciliacion.js';
 import { formatCalendarDate, formatCurrency } from '../utils/format.js';
 import type { ReciboSalon } from '../utils/recibo.js';
@@ -1535,8 +1536,19 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
   const divisiones = registro.divisiones ?? [];
   const pagos = registro.pagos ?? [];
   const descuentoMonto = originalTotal > totalFinal ? originalTotal - totalFinal : 0;
-  // Gross line-item total (subtotals kept for the items table footer).
-  const totalItems = registro.totalServicios + registro.totalProductos;
+  // Prorate the charged amount over the list prices so the items table
+  // reconciles with the header (and the discount flow above explains the gap).
+  const allocation = allocateRegistroItems({
+    servicios,
+    productos,
+    totalServicios: registro.totalServicios,
+    totalProductos: registro.totalProductos,
+    valorFinal: registro.valorFinal,
+    propina: registro.propina,
+  });
+  const totalItems = allocation.total;
+  const subtotalServiciosEfectivo = allocation.servicios.reduce((sum, amount) => sum + amount, 0);
+  const subtotalProductosEfectivo = allocation.productos.reduce((sum, amount) => sum + amount, 0);
   // The discount flow (original → discount → final) only applies to adjusted sales.
   const tieneDescuento =
     Boolean(registro.precioAjustado) || Number(registro.porcentajeDescuento ?? 0) > 0;
@@ -1648,8 +1660,9 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
                       </tr>
                     </thead>
                     <tbody>
-                      {servicios.map((si) => {
+                      {servicios.map((si, index) => {
                         const insumos = detalleInsumos(si);
+                        const precioEfectivo = allocation.servicios[index] ?? 0;
                         return (
                           <tr key={`servicio-${si.id}`}>
                             <td>
@@ -1666,40 +1679,45 @@ const RenderRegistroDetail: React.FC<RegistroDetailProps> = ({ registro, calcTot
                             {/* Services carry no per-line quantity in the DTO:
                                 the server expands `cantidad` into N unit rows. */}
                             <td className={styles.detailItemsColNum}>1</td>
-                            <td className={styles.detailItemsColPrice}>{formatCurrency(si.precioServicio)}</td>
-                            <td className={styles.detailItemPrice}>{formatCurrency(si.precioServicio)}</td>
+                            <td className={styles.detailItemsColPrice}>{formatCurrency(precioEfectivo)}</td>
+                            <td className={styles.detailItemPrice}>{formatCurrency(precioEfectivo)}</td>
                           </tr>
                         );
                       })}
-                      {productos.map((pv) => (
-                        <tr key={`producto-${pv.id}`}>
-                          <td>
-                            <div className={styles.detailItemMain}>
-                              <span className={styles.detailItemName}>{pv.nombre}</span>
-                              <div className={styles.detailItemTags}>
-                                <span className={`${styles.detailTypeChip} ${styles.detailTypeProducto}`}>
-                                  Producto
-                                </span>
+                      {productos.map((pv, index) => {
+                        const subtotalEfectivo = allocation.productos[index] ?? 0;
+                        const cantidad = Number(pv.cantidad) || 1;
+                        const precioUnitarioEfectivo = Math.round(subtotalEfectivo / cantidad);
+                        return (
+                          <tr key={`producto-${pv.id}`}>
+                            <td>
+                              <div className={styles.detailItemMain}>
+                                <span className={styles.detailItemName}>{pv.nombre}</span>
+                                <div className={styles.detailItemTags}>
+                                  <span className={`${styles.detailTypeChip} ${styles.detailTypeProducto}`}>
+                                    Producto
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className={styles.detailItemsColNum}>{pv.cantidad}</td>
-                          <td className={styles.detailItemsColPrice}>{formatCurrency(pv.precioVentaUnitario)}</td>
-                          <td className={styles.detailItemPrice}>{formatCurrency(pv.subtotal)}</td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className={styles.detailItemsColNum}>{pv.cantidad}</td>
+                            <td className={styles.detailItemsColPrice}>{formatCurrency(precioUnitarioEfectivo)}</td>
+                            <td className={styles.detailItemPrice}>{formatCurrency(subtotalEfectivo)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       {servicios.length > 0 && (
                         <tr>
                           <td colSpan={3}>Subtotal servicios</td>
-                          <td className={styles.detailItemPrice}>{formatCurrency(registro.totalServicios)}</td>
+                          <td className={styles.detailItemPrice}>{formatCurrency(subtotalServiciosEfectivo)}</td>
                         </tr>
                       )}
                       {productos.length > 0 && (
                         <tr>
                           <td colSpan={3}>Subtotal productos</td>
-                          <td className={styles.detailItemPrice}>{formatCurrency(registro.totalProductos)}</td>
+                          <td className={styles.detailItemPrice}>{formatCurrency(subtotalProductosEfectivo)}</td>
                         </tr>
                       )}
                       <tr className={styles.detailItemsTotalRow}>
